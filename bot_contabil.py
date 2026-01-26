@@ -16,14 +16,13 @@ from threading import Thread
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# --- CONFIGURARE CREDENTIALE RENDER (OBLIGATORIU) ---
+# --- CREDENTIALE RENDER ---
 CREDENTIALS_FILE = "credentials.json"
 GOOGLE_JSON_CONTENT = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
 if GOOGLE_JSON_CONTENT:
     with open(CREDENTIALS_FILE, "w") as f:
         f.write(GOOGLE_JSON_CONTENT)
-    print("✅ Credentialele Google au fost configurate pentru Render.")
 else:
     print("⚠️ ATENTIE: Variabila GOOGLE_CREDENTIALS_JSON lipseste!")
 
@@ -36,11 +35,11 @@ LUNI_RO = {
     9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie"
 }
 
-# --- SERVER WEB (PENTRU RENDER) ---
+# --- SERVER WEB ---
 app = Flask('')
 @app.route('/')
 def home():
-    return "Botul Contabil 2026 (TVA 21%) este ONLINE!"
+    return "Botul Contabil este ONLINE (Mode: JSON Strict)"
 
 def run_http():
     port_render = int(os.environ.get("PORT", 8080))
@@ -54,24 +53,19 @@ def keep_alive():
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 client_openai = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- FUNCTII EXCEL ---
+# --- EXCEL ---
 def get_monthly_sheet_name():
     now = datetime.now()
-    nume_luna = LUNI_RO[now.month]
-    an = now.year
-    return f"{nume_luna} {an}" # Ex: "Ianuarie 2026"
+    return f"{LUNI_RO[now.month]} {now.year}"
 
 def ensure_sheet_exists(client, sheet_name):
-    """Creeaza foaia lunara daca nu exista."""
     spreadsheet = client.open(SHEET_NAME)
     try:
-        worksheet = spreadsheet.worksheet(sheet_name)
-        return worksheet
+        return spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
-        header = ['Data', 'Platforma', 'Tip', 'Brut', 'Comision', 'TVA (21%)', 'Net', 'Cash', 'Banca', 'Detalii']
-        worksheet.append_row(header)
-        return worksheet
+        ws = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=10)
+        ws.append_row(['Data', 'Platforma', 'Tip', 'Brut', 'Comision', 'TVA (21%)', 'Net', 'Cash', 'Banca', 'Detalii'])
+        return ws
 
 def write_to_sheet(row_data):
     try:
@@ -79,183 +73,159 @@ def write_to_sheet(row_data):
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
         client = gspread.authorize(creds)
         
-        # 1. Scriere in Foaia Lunara (Siguranta maxima)
-        nume_luna = get_monthly_sheet_name()
-        ws_luna = ensure_sheet_exists(client, nume_luna)
+        ws_luna = ensure_sheet_exists(client, get_monthly_sheet_name())
         ws_luna.append_row(row_data)
         
-        # 2. Scriere in GENERAL (Optional)
         try:
-            spreadsheet = client.open(SHEET_NAME)
-            ws_general = spreadsheet.worksheet("GENERAL")
-            ws_general.append_row(row_data)
+            client.open(SHEET_NAME).worksheet("GENERAL").append_row(row_data)
         except:
-            pass 
+            pass
             
     except Exception as e:
-        logging.error(f"Eroare critica Excel: {e}")
+        logging.error(f"Eroare Excel: {e}")
 
-# --- CREIERUL AI (LOGICA 2026 + TVA 21%) ---
+# --- AI LOGIC (STRICT MODE) ---
 def ask_gpt_logic(user_input, image_base64=None):
     today = datetime.now().strftime("%d.%m.%Y")
     
+    # Prompt optimizat pentru structura {"inregistrari": [...]}
     system_prompt = f"""
-    Esti contabil AI expert PFA 2026. DATA: {today}.
-
-    REGULI 2026 (TVA 21%):
-    1. FACTURA COMISION (Bolt/Uber):
-       - Tip: "FACTURA_COMISION"
-       - Comision: Valoarea TOTALA factura.
-       - TVA: 21% din Comision.
-       - Imp. Nerezidenti: 2% din Comision.
-       - Net: -Valoarea facturii.
-
-    2. RAPORT APLICATIE:
-       - Tip: "VENIT_ESTIMAT"
-       - Brut: Venit App + Numerar.
-       - Comision: Taxa retinuta.
-       - TVA: 21% din Comision.
-       - Net: Brut - Comision.
-
-    3. BON FISCAL:
-       - Tip: "CHELTUIALA"
-       - Brut: Total bon.
-
-    OUTPUT JSON STRICT (Format Array):
-    [
-      {{
-        "data": "DD.MM.YYYY",
-        "platforma": "Bolt",
-        "tip": "VENIT_ESTIMAT",
-        "brut": 100.0,
-        "comision": 20.0,
-        "tva": 4.2,
-        "net": 80.0,
-        "cash": 0.0,
-        "detalii": "Raport"
-      }}
-    ]
-    DOAR JSON. Fara ```json.
+    Esti un sistem OCR contabil. Data: {today}.
+    Analizeaza imaginea si extrage datele pentru PFA (TVA 21%).
+    
+    REGULI:
+    1. Bolt/Uber (Raport Activitate):
+       - Tip: VENIT_ESTIMAT
+       - Brut = Venit Brut (Total).
+       - Comision = Taxa Bolt/Uber.
+       - TVA = 21% din Comision.
+       - Net = Brut - Comision.
+       
+    2. Factura Comision (PDF/Poza factura):
+       - Tip: FACTURA_COMISION
+       - Comision = Total Factura.
+       - TVA = 21% din Comision.
+    
+    Raspunde STRICT in format JSON care contine o cheie "inregistrari".
+    Exemplu:
+    {{
+      "inregistrari": [
+        {{
+            "data": "DD.MM.YYYY",
+            "platforma": "Bolt",
+            "tip": "VENIT_ESTIMAT",
+            "brut": 100.0,
+            "comision": 20.0,
+            "tva": 4.2,
+            "net": 80.0,
+            "cash": 10.0,
+            "detalii": "Saptamana curenta"
+        }}
+      ]
+    }}
     """
 
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # REPARATIE: Initializare lista goala
-    content_payload = [] 
-    content_payload.append({"type": "text", "text": user_input if user_input else "Analizeaza documentul"})
+    content_payload = [{"type": "text", "text": user_input if user_input else "Extrage datele"}]
     
     if image_base64:
         content_payload.append({
             "type": "image_url", 
             "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
         })
-        
-    messages.append({"role": "user", "content": content_payload})
 
     try:
         response = client_openai.chat.completions.create(
-            model="gpt-4o", 
-            messages=messages, 
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content_payload}
+            ],
+            response_format={"type": "json_object"}, # <--- CHEIA SUCCESULUI
             max_tokens=800,
             temperature=0.1
         )
         return response.choices.message.content
     except Exception as e:
-        return "EROARE_AI"
+        logging.error(f"Eroare OpenAI: {e}")
+        return None
 
 # --- PROCESARE ---
 async def process_entry(update, context, text_input=None, image_file=None):
-    loading_msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="📊 Analizez (TVA 21%)...")
+    msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Procesez (Mod Strict)...")
 
     try:
         image_base64 = None
-        prompt_text = text_input
-        
         if image_file:
             file_byte = await image_file.download_as_bytearray()
             image_base64 = base64.b64encode(file_byte).decode('utf-8')
 
-        ai_response = ask_gpt_logic(prompt_text, image_base64)
-        clean_json = ai_response.replace("```json", "").replace("```", "").strip()
+        json_str = ask_gpt_logic(text_input, image_base64)
         
-        try:
-            data_list = json.loads(clean_json)
-        except:
-            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=loading_msg.message_id, text="⚠️ Eroare: Nu am inteles documentul.")
+        if not json_str:
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text="⚠️ Eroare conexiune AI.")
             return
 
-        msg_confirm = "✅ **Inregistrat (2026):**\n"
+        try:
+            data = json.loads(json_str)
+            lista_inregistrari = data.get("inregistrari", [])
+        except Exception as e:
+            logging.error(f"Eroare JSON Raw: {json_str}") # Vedem in loguri ce a gresit
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"⚠️ Format necunoscut. AI a raspuns: {json_str[:50]}...")
+            return
 
-        for item in data_list:
-            net = float(item.get('net', 0))
+        if not lista_inregistrari:
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text="⚠️ Nu am gasit date financiare clare in imagine.")
+            return
+
+        report_msg = "✅ **Salvat:**\n"
+        for item in lista_inregistrari:
+            # Calcul preventiv daca AI-ul a omis campuri
+            brut = float(item.get('brut', 0))
+            comision = float(item.get('comision', 0))
+            # Recalculam TVA local pentru siguranta
+            tva = comision * 0.21
+            net = brut - comision
             cash = float(item.get('cash', 0))
-            tva = float(item.get('tva', 0))
-            tip = item.get('tip')
-            
-            banca = 0
-            if tip == 'VENIT_ESTIMAT':
-                banca = net - cash
+            banca = net - cash
             
             row = [
-                item.get('data'),
-                item.get('platforma'),
-                tip,
-                item.get('brut', 0),
-                item.get('comision', 0),
-                tva,
-                net,
-                cash,
-                banca, 
-                item.get('detalii')
+                item.get('data', datetime.now().strftime("%d.%m.%Y")),
+                item.get('platforma', 'Necunoscut'),
+                item.get('tip', 'GENERIC'),
+                brut, comision, tva, net, cash, banca,
+                item.get('detalii', '-')
             ]
-
+            
             write_to_sheet(row)
-
-            if tip == 'FACTURA_COMISION':
-                impozit_nerezidenti = float(item.get('comision', 0)) * 0.02
-                msg_confirm += (f"📄 **FACTURA {item['platforma']}**\n"
-                                f"💵 Baza: {item['comision']} RON\n"
-                                f"🇷🇴 TVA (21%): {tva:.2f} RON\n"
-                                f"🇪🇪 Imp. Nerezidenti (2%): {impozit_nerezidenti:.2f} RON\n")
             
-            elif tip == 'CHELTUIALA':
-                msg_confirm += (f"🛒 **{item['detalii']}**\n"
-                                f"💸 Total: {item['brut']} RON\n")
-            
-            else:
-                msg_confirm += (f"🚖 **{item['platforma']}**\n"
-                                f"💰 Net: {net} RON | 🏦 TVA (21%): {tva:.2f} RON\n")
+            report_msg += f"📌 {item.get('platforma')}: Net {net:.2f} RON | TVA {tva:.2f} RON\n"
 
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=loading_msg.message_id, text=msg_confirm)
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=report_msg)
 
     except Exception as e:
-        logging.error(f"Eroare: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ A aparut o eroare interna.")
+        logging.error(f"Eroare generala: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Eroare interna. Verifica logurile Render.")
 
-# --- WRAPPERS ---
-async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_file = await update.message.photo[-1].get_file()
-    caption = update.message.caption 
-    await process_entry(update, context, text_input=caption, image_file=new_file)
+# --- HANDLERS ---
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.photo[-1].get_file()
+    await process_entry(update, context, update.message.caption, file)
 
-async def handle_document_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # SUPORT PENTRU IMAGINI CLARE TRIMISE CA FILE
+async def handle_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc = update.message.document
     if 'image' in doc.mime_type or 'pdf' in doc.mime_type:
-        new_file = await doc.get_file()
-        caption = update.message.caption
-        await process_entry(update, context, text_input=caption, image_file=new_file)
+        file = await doc.get_file()
+        await process_entry(update, context, update.message.caption, file)
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Trimite doar imagini sau PDF.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Trimite o poza sau PDF.")
 
-async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await process_entry(update, context, text_input=update.message.text)
 
 if __name__ == '__main__':
     keep_alive()
     app_bot = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
-    app_bot.add_handler(MessageHandler(filters.Document.ALL, handle_document_wrapper)) # IMPORTANT PENTRU POZE CLARE
-    app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
-    print("🤖 Botul Contabil 2026 este ONLINE!")
+    app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app_bot.add_handler(MessageHandler(filters.Document.ALL, handle_doc))
+    app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
     app_bot.run_polling()
