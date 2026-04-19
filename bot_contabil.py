@@ -1,3 +1,4 @@
+from config import settings
 import logging
 import base64
 import json
