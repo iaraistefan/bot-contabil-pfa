@@ -9,7 +9,9 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -35,6 +37,7 @@ class User(Base):
 
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")
+    transactions = relationship("Transaction", back_populates="user")
 
     def __repr__(self):
         return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
@@ -68,15 +71,12 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
-    # Legături
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    # NEW: legătura cu fișierul sursă (NULL pentru mesajele text)
     source_file_id = Column(Integer, ForeignKey("source_files.id"), nullable=True, index=True)
 
-    # Info de bază
-    data_doc = Column(String(20), index=True)        # "DD.MM.YYYY"
-    platforma = Column(String(50), index=True)       # Bolt, Uber, Petrom, Lukoil etc.
-    tip = Column(String(30), index=True)             # VENIT, CHELTUIALA, FACTURA_COMISION
+    data_doc = Column(String(20), index=True)
+    platforma = Column(String(50), index=True)
+    tip = Column(String(30), index=True)
 
     brut = Column(Float, default=0.0)
     comision = Column(Float, default=0.0)
@@ -86,20 +86,85 @@ class Document(Base):
     banca = Column(Float, default=0.0)
 
     detalii = Column(Text, default="")
-    raw_json = Column(Text, default="")              # răspunsul brut AI pentru audit
-    image_id = Column(String(200), default="")       # legacy field, păstrat
+    raw_json = Column(Text, default="")
+    image_id = Column(String(200), default="")
     confidence = Column(Float, default=1.0)
-
-    # NEW: status + prompt version
     status = Column(String(20), nullable=False, default="posted", index=True)
     prompt_version = Column(String(50), nullable=True)
 
-    # Relații
     user = relationship("User", back_populates="documents")
     source_file = relationship("SourceFile", back_populates="documents")
+    transactions = relationship("Transaction", back_populates="document")
 
     def __repr__(self):
         return f"<Document id={self.id} tip={self.tip} brut={self.brut} status={self.status}>"
+
+
+class Transaction(Base):
+    """
+    Ledger contabil. O singură înregistrare = o mișcare de bani.
+    Un Document poate genera 1-3 Transaction-uri (ex: comision + TVA reverse charge).
+    Acesta este stratul pe care se construiesc rapoartele și exporturile fiscale.
+    """
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Legături
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+
+    # Tipul mișcării
+    tx_type = Column(String(20), nullable=False, index=True)
+    # INCOME | EXPENSE | VAT_OUT | VAT_IN | ADJUSTMENT
+
+    # Categoria contabilă
+    category = Column(String(50), nullable=False, index=True)
+    # ride_revenue | tip_revenue | platform_commission | fuel | maintenance
+    # registration | other_expense | reverse_charge_vat
+
+    # Sume
+    amount_brut = Column(Float, nullable=False, default=0.0)
+    amount_vat = Column(Float, nullable=False, default=0.0)
+    amount_net = Column(Float, nullable=False, default=0.0)
+    currency = Column(String(5), nullable=False, default="RON")
+
+    # Deductibilitate fiscală (100 = integral, 50 = jumătate, 0 = nedeductibil)
+    deductibility_pct = Column(Integer, nullable=False, default=100)
+
+    # Modalitate de plată
+    payment_method = Column(String(20), nullable=True)
+    # CASH | CARD | BANK | APP | UNKNOWN
+
+    # Partener (furnizor sau platformă)
+    counterparty = Column(String(200), nullable=True)
+
+    # Tratament TVA
+    vat_treatment = Column(String(30), nullable=True, default="NA")
+    # STANDARD | REVERSE_CHARGE | EXEMPT | NA
+
+    # Când s-a produs (data de pe document, nu data inserării)
+    occurred_on = Column(Date, nullable=True, index=True)
+
+    # Indexare pentru rollup-uri lunare rapide
+    period_year = Column(Integer, nullable=True, index=True)
+    period_month = Column(Integer, nullable=True, index=True)
+
+    # Blocat (perioada fiscală închisă → nu se mai modifică)
+    locked = Column(Boolean, nullable=False, default=False)
+
+    posted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relații
+    user = relationship("User", back_populates="transactions")
+    document = relationship("Document", back_populates="transactions")
+
+    def __repr__(self):
+        return (
+            f"<Transaction id={self.id} type={self.tx_type} "
+            f"cat={self.category} amount={self.amount_brut} {self.currency}>"
+        )
 
 
 class AuditLog(Base):
