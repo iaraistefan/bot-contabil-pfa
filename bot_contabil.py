@@ -1,4 +1,5 @@
 from config import settings
+from app.enums import DocType
 import logging
 import base64
 import json
@@ -48,18 +49,15 @@ def write_to_sheet(row_data, date_str):
         client = gspread.authorize(creds)
         spreadsheet = client.open(SHEET_NAME)
 
-        # 1. Determinam numele Foii (Tab-ului) pe baza datei
-        # Format asteptat date_str: DD.MM.YYYY
         try:
             parts = date_str.split('.')
             luna_cifra = parts[1]
             anul = parts[2]
             nume_luna = LUNI_RO.get(luna_cifra, "General")
-            tab_name = f"{nume_luna} {anul}"  # Ex: "Februarie 2026"
+            tab_name = f"{nume_luna} {anul}"
         except:
             tab_name = "General"
 
-        # 2. Verificam daca Tab-ul exista, daca nu il cream
         try:
             worksheet = spreadsheet.worksheet(tab_name)
         except gspread.WorksheetNotFound:
@@ -67,7 +65,6 @@ def write_to_sheet(row_data, date_str):
             header = ["Data", "Platforma", "Tip", "Brut", "Comision", "TVA (21%)", "Net", "Cash", "Banca", "Detalii"]
             worksheet.append_row(header)
 
-        # 3. Scriem datele
         worksheet.append_row(row_data)
         return tab_name
 
@@ -169,7 +166,7 @@ async def process_entry(update, context, text_input=None, image_file=None):
             tva = float(item.get('tva', 0))
 
             banca = 0
-            if tip == 'VENIT':
+            if tip == DocType.VENIT:
                 banca = net - cash
 
             row = [
@@ -187,13 +184,13 @@ async def process_entry(update, context, text_input=None, image_file=None):
 
             sheet_used = write_to_sheet(row, data_doc)
 
-            if tip == 'FACTURA_COMISION':
+            if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
                                 f"📄 **FACTURA {item['platforma']}**\n"
                                 f"📅 Data: {data_doc}\n"
                                 f"💵 Baza: {item['comision']} RON\n"
                                 f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
-            elif tip == 'CHELTUIALA':
+            elif tip == DocType.CHELTUIALA:
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
                                 f"🛒 **{item['detalii']}** ({item['brut']} RON)\n")
             else:
