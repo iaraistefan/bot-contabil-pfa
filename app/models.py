@@ -95,68 +95,41 @@ class Document(Base):
     user = relationship("User", back_populates="documents")
     source_file = relationship("SourceFile", back_populates="documents")
     transactions = relationship("Transaction", back_populates="document")
+    export_logs = relationship("ExportLog", back_populates="document")
 
     def __repr__(self):
         return f"<Document id={self.id} tip={self.tip} brut={self.brut} status={self.status}>"
 
 
 class Transaction(Base):
-    """
-    Ledger contabil. O singură înregistrare = o mișcare de bani.
-    Un Document poate genera 1-3 Transaction-uri (ex: comision + TVA reverse charge).
-    Acesta este stratul pe care se construiesc rapoartele și exporturile fiscale.
-    """
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Legături
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
 
-    # Tipul mișcării
     tx_type = Column(String(20), nullable=False, index=True)
-    # INCOME | EXPENSE | VAT_OUT | VAT_IN | ADJUSTMENT
-
-    # Categoria contabilă
     category = Column(String(50), nullable=False, index=True)
-    # ride_revenue | tip_revenue | platform_commission | fuel | maintenance
-    # registration | other_expense | reverse_charge_vat
 
-    # Sume
     amount_brut = Column(Float, nullable=False, default=0.0)
     amount_vat = Column(Float, nullable=False, default=0.0)
     amount_net = Column(Float, nullable=False, default=0.0)
     currency = Column(String(5), nullable=False, default="RON")
 
-    # Deductibilitate fiscală (100 = integral, 50 = jumătate, 0 = nedeductibil)
     deductibility_pct = Column(Integer, nullable=False, default=100)
-
-    # Modalitate de plată
     payment_method = Column(String(20), nullable=True)
-    # CASH | CARD | BANK | APP | UNKNOWN
-
-    # Partener (furnizor sau platformă)
     counterparty = Column(String(200), nullable=True)
-
-    # Tratament TVA
     vat_treatment = Column(String(30), nullable=True, default="NA")
-    # STANDARD | REVERSE_CHARGE | EXEMPT | NA
 
-    # Când s-a produs (data de pe document, nu data inserării)
     occurred_on = Column(Date, nullable=True, index=True)
-
-    # Indexare pentru rollup-uri lunare rapide
     period_year = Column(Integer, nullable=True, index=True)
     period_month = Column(Integer, nullable=True, index=True)
 
-    # Blocat (perioada fiscală închisă → nu se mai modifică)
     locked = Column(Boolean, nullable=False, default=False)
-
     posted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relații
     user = relationship("User", back_populates="transactions")
     document = relationship("Document", back_populates="transactions")
 
@@ -165,6 +138,39 @@ class Transaction(Base):
             f"<Transaction id={self.id} type={self.tx_type} "
             f"cat={self.category} amount={self.amount_brut} {self.currency}>"
         )
+
+
+class ExportLog(Base):
+    """
+    Log al fiecărei tentative de export extern (Sheets, CSV, D301, etc.).
+    Idempotent prin (target, entity_type, entity_id) — știm dacă un document
+    a fost deja exportat și dacă exportul a reușit.
+    """
+    __tablename__ = "export_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    target = Column(String(30), nullable=False, index=True)
+    # 'sheets' | 'csv' | 'd301' | 'd390' | 'du'
+
+    entity_type = Column(String(30), nullable=False, default="document")
+    entity_id = Column(Integer, nullable=False, index=True)
+
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
+
+    external_ref = Column(String(500), nullable=True)
+    # Ex: "Aprilie 2026" (tab name), "exports/raport_04_2026.csv"
+
+    status = Column(String(10), nullable=False, default="ok")
+    # 'ok' | 'failed'
+
+    response_msg = Column(Text, nullable=True)
+
+    document = relationship("Document", back_populates="export_logs")
+
+    def __repr__(self):
+        return f"<ExportLog {self.target}:{self.entity_id} {self.status}>"
 
 
 class AuditLog(Base):
