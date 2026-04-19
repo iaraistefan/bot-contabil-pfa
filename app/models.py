@@ -7,9 +7,40 @@ Import Base from db.py so all models register on the same declarative registry.
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
 
 from db import Base
+
+
+class User(Base):
+    """
+    Un user e identificat prin telegram_id.
+    Câmpurile de config (cui, regim_tva, etc.) vin la pași viitori.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    name = Column(String(200), nullable=True)
+
+    # Relații (reverse)
+    documents = relationship("Document", back_populates="user")
+
+    def __repr__(self):
+        return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
 
 
 class Document(Base):
@@ -17,6 +48,9 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # NEW: legătura cu User-ul. Nullable ca să nu spargem rândurile existente.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Info de bază
     data_doc = Column(String(20), index=True)        # "DD.MM.YYYY"
@@ -31,12 +65,9 @@ class Document(Base):
     banca = Column(Float, default=0.0)
 
     detalii = Column(Text, default="")
-
-    # JSON brut returnat de AI (pentru audit)
     raw_json = Column(Text, default="")
-
-    # Imagine / fișier – deocamdată doar un identificator
     image_id = Column(String(200), default="")
-
-    # Încredere internă (la început punem 1.0)
     confidence = Column(Float, default=1.0)
+
+    # Relații
+    user = relationship("User", back_populates="documents")
