@@ -5,16 +5,13 @@ from app.repositories import users as users_repo
 from app.repositories import source_files as source_files_repo
 from app.repositories import audit as audit_repo
 from app import storage
+from app.ai import client as ai_client
 import logging
-import base64
-import json
 import gspread
-import asyncio
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from openai import OpenAI
 from flask import Flask
 from threading import Thread
 
@@ -38,13 +35,12 @@ def keep_alive():
 # --- INITIALIZARE ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
-client_openai = OpenAI(api_key=settings.openai_api_key)
 
 # --- HELPER: înregistrează user-ul din Telegram în DB ---
 def ensure_user(update: Update):
     """
     Garantează că user-ul din Telegram există în DB.
-    Întoarce user.id (int) sau None dacă operația DB eșuează (nu blocăm bot-ul).
+    Întoarce user.id (int) sau None dacă operația DB eșuează.
     """
     try:
         tg_user = update.effective_user
@@ -72,7 +68,7 @@ def ensure_user(update: Update):
                     note="auto-created from first Telegram message",
                 )
 
-            user_id = user.id  # extract before commit/close
+            user_id = user.id
             session.commit()
             return user_id
         except Exception as e:
@@ -96,9 +92,7 @@ def register_source_file(
 ):
     """
     Verifică dedup prin SHA256.
-    Întoarce un dict cu câmpurile necesare (nu obiect ORM — sesiunea se închide la final):
-        {"id": int, "sha256": str, "created_at": datetime, "is_duplicate": bool}
-    sau None în caz de eroare DB.
+    Întoarce un dict: {"id", "sha256", "created_at", "is_duplicate"} sau None.
     """
     sha = storage.compute_sha256(file_bytes)
     session = get_session()
@@ -106,7 +100,6 @@ def register_source_file(
         existing = source_files_repo.get_by_sha256(session, user_id, sha)
         if existing is not None:
             logger.info(f"Dedup HIT sha={sha[:8]}... sf_id={existing.id}")
-            # Extragem câmpurile înainte să închidem sesiunea!
             result = {
                 "id": existing.id,
                 "sha256": existing.sha256,
@@ -125,7 +118,6 @@ def register_source_file(
             session.commit()
             return result
 
-        # Fișier nou — salvăm pe disk + DB
         ext = "jpg" if kind == "photo" else "bin"
         path = storage.save_bytes(file_bytes, sha, ext=ext)
         new_sf = source_files_repo.create(
@@ -152,7 +144,6 @@ def register_source_file(
                 "storage_path": new_sf.storage_path,
             },
         )
-        # Extragem câmpurile înainte să închidem sesiunea!
         result = {
             "id": new_sf.id,
             "sha256": new_sf.sha256,
@@ -208,93 +199,33 @@ def write_to_sheet(row_data, date_str):
         logger.error(f"Eroare scriere Excel: {e}")
         return None
 
-# --- CREIERUL AI (LOGICA 2026 - TVA 21%) ---
-def ask_gpt_logic(user_input, image_base64=None):
-    today = datetime.now().strftime("%d.%m.%Y")
-
-    system_prompt = f"""
-    Esti contabil AI expert pentru PFA Ridesharing in Romania.
-    DATA CURENTA: {today}.
-    COTA TVA STANDARD: 21% (Actualizat 2026).
-
-    REGULI ANALIZA:
-    1. FACTURA COMISION (Bolt/Uber):
-       - Cauta data pe factura.
-       - Comision = Total Factura.
-       - TVA Datorat = Comision * 0.21 (Taxare Inversa).
-       - Impozit Nerezidenti = Comision * 0.02 (Calcul informativ).
-
-    2. BON FISCAL (Combustibil/Piese):
-       - Cauta data bonului.
-       - Brut = Total Bon.
-
-    3. RAPORT VENITURI (Screenshot aplicatie):
-       - Brut = Venit Total (App + Cash).
-       - Comision = Taxa aplicatiei.
-       - Net = Brut - Comision.
-
-    OUTPUT JSON OBLIGATORIU:
-    [
-      {{
-        "data": "DD.MM.YYYY", (Data de pe document sau data curenta daca nu e vizibila)
-        "platforma": "Bolt/Uber/Petrom...",
-        "tip": "FACTURA_COMISION" sau "CHELTUIALA" sau "VENIT",
-        "brut": 0.00,
-        "comision": 0.00,
-        "tva": 0.00, (Doar pt comision, calculat cu 21%)
-        "net": 0.00,
-        "cash": 0.00,
-        "detalii": "Scurta descriere"
-      }}
-    ]
-    """
-
-    messages = [{"role": "system", "content": system_prompt}]
-
-    content_payload = []
-    content_payload.append({"type": "text", "text": user_input if user_input else "Analizeaza imaginea"})
-
-    if image_base64:
-        content_payload.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
-        })
-
-    messages.append({"role": "user", "content": content_payload})
-
-    try:
-        response = client_openai.chat.completions.create(
-            model=settings.openai_model,
-            messages=messages,
-            max_tokens=800,
-            temperature=0.1
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return "EROARE_AI"
 
 # --- PROCESARE MESAJ ---
-async def process_entry(update, context, text_input=None, image_file=None, image_bytes=None):
+async def process_entry(update, context, text_input=None, image_bytes=None):
     user_id = ensure_user(update)
     if user_id:
         logger.info(f"Processing entry for user_id={user_id}")
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Analizez documentul (TVA 21%)...")
 
+    # --- Chemare AI ---
+    extraction = ai_client.extract_document(
+        user_input=text_input,
+        image_bytes=image_bytes,
+    )
+
+    if not extraction["ok"]:
+        logger.error(f"AI extraction failed: {extraction['error']}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="⚠️ Nu am putut citi datele. Incearca o poza mai clara.",
+        )
+        return
+
+    data_list = extraction["data"]
+
+    # --- Procesare items ---
     try:
-        image_base64 = None
-        if image_bytes:
-            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-
-        ai_response = ask_gpt_logic(text_input, image_base64)
-        clean_json = ai_response.replace("```json", "").replace("```", "").strip()
-
-        try:
-            data_list = json.loads(clean_json)
-        except:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Nu am putut citi datele. Incearca o poza mai clara.")
-            return
-
         msg_confirm = "✅ **Salvat:**\n"
 
         for item in data_list:
@@ -339,7 +270,9 @@ async def process_entry(update, context, text_input=None, image_file=None, image
         await context.bot.send_message(chat_id=update.effective_chat.id, text=msg_confirm)
 
     except Exception as e:
+        logger.error(f"Error while processing items: {e}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Eroare sistem: {str(e)}")
+
 
 # --- HANDLERS ---
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -373,6 +306,7 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await process_entry(update, context, text_input=update.message.text)
+
 
 if __name__ == '__main__':
     try:
