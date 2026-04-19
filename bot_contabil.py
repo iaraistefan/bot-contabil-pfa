@@ -72,8 +72,9 @@ def ensure_user(update: Update):
                     note="auto-created from first Telegram message",
                 )
 
+            user_id = user.id  # extract before commit/close
             session.commit()
-            return user.id
+            return user_id
         except Exception as e:
             session.rollback()
             logger.error(f"DB error in ensure_user: {e}")
@@ -94,9 +95,10 @@ def register_source_file(
     mime: str = "image/jpeg",
 ):
     """
-    Verifică dedup prin SHA256. Dacă e duplicat, întoarce (existing_sf, True).
-    Altfel salvează și întoarce (new_sf, False).
-    În caz de eroare DB, întoarce (None, False) și logăm — bot-ul continuă.
+    Verifică dedup prin SHA256.
+    Întoarce un dict cu câmpurile necesare (nu obiect ORM — sesiunea se închide la final):
+        {"id": int, "sha256": str, "created_at": datetime, "is_duplicate": bool}
+    sau None în caz de eroare DB.
     """
     sha = storage.compute_sha256(file_bytes)
     session = get_session()
@@ -104,6 +106,13 @@ def register_source_file(
         existing = source_files_repo.get_by_sha256(session, user_id, sha)
         if existing is not None:
             logger.info(f"Dedup HIT sha={sha[:8]}... sf_id={existing.id}")
+            # Extragem câmpurile înainte să închidem sesiunea!
+            result = {
+                "id": existing.id,
+                "sha256": existing.sha256,
+                "created_at": existing.created_at,
+                "is_duplicate": True,
+            }
             audit_repo.write(
                 session,
                 entity_type="source_file",
@@ -114,7 +123,7 @@ def register_source_file(
                 note=f"duplicate upload; original created at {existing.created_at.isoformat()}",
             )
             session.commit()
-            return existing, True
+            return result
 
         # Fișier nou — salvăm pe disk + DB
         ext = "jpg" if kind == "photo" else "bin"
@@ -143,13 +152,20 @@ def register_source_file(
                 "storage_path": new_sf.storage_path,
             },
         )
+        # Extragem câmpurile înainte să închidem sesiunea!
+        result = {
+            "id": new_sf.id,
+            "sha256": new_sf.sha256,
+            "created_at": new_sf.created_at,
+            "is_duplicate": False,
+        }
         session.commit()
-        logger.info(f"New SourceFile id={new_sf.id} sha={sha[:8]}...")
-        return new_sf, False
+        logger.info(f"New SourceFile id={result['id']} sha={sha[:8]}...")
+        return result
     except Exception as e:
         session.rollback()
         logger.error(f"DB error in register_source_file: {e}")
-        return None, False
+        return None
     finally:
         session.close()
 
@@ -333,22 +349,21 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
     user_id = ensure_user(update)
 
-    is_duplicate = False
     if user_id:
-        sf, is_duplicate = register_source_file(
+        sf_info = register_source_file(
             user_id=user_id,
             file_bytes=file_bytes,
             telegram_file_id=tg_file.file_id,
             kind="photo",
             mime="image/jpeg",
         )
-        if is_duplicate:
+        if sf_info and sf_info["is_duplicate"]:
+            created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=(
                     f"⚠️ Această imagine a fost deja înregistrată "
-                    f"pe {sf.created_at.strftime('%d.%m.%Y la %H:%M')}. "
-                    f"Nu o procesez din nou."
+                    f"pe {created_at_str}. Nu o procesez din nou."
                 ),
             )
             return
