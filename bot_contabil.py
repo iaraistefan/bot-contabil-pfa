@@ -2,6 +2,8 @@ from config import settings
 from app.enums import DocType
 from db import init_db, get_session
 from app.repositories import users as users_repo
+from app.repositories import source_files as source_files_repo
+from app import storage
 import logging
 import base64
 import json
@@ -64,6 +66,52 @@ def ensure_user(update: Update):
     except Exception as e:
         logger.error(f"Unexpected error in ensure_user: {e}")
         return None
+
+
+# --- HELPER: dedup + salvare fișier sursă ---
+def register_source_file(
+    user_id: int,
+    file_bytes: bytes,
+    telegram_file_id: str,
+    kind: str = "photo",
+    mime: str = "image/jpeg",
+):
+    """
+    Verifică dedup prin SHA256. Dacă e duplicat, întoarce (existing_sf, True).
+    Altfel salvează și întoarce (new_sf, False).
+    În caz de eroare DB, întoarce (None, False) și logăm — bot-ul continuă.
+    """
+    sha = storage.compute_sha256(file_bytes)
+    session = get_session()
+    try:
+        existing = source_files_repo.get_by_sha256(session, user_id, sha)
+        if existing is not None:
+            logger.info(f"Dedup HIT sha={sha[:8]}... sf_id={existing.id}")
+            return existing, True
+
+        # Fișier nou — salvăm pe disk + DB
+        ext = "jpg" if kind == "photo" else "bin"
+        path = storage.save_bytes(file_bytes, sha, ext=ext)
+        new_sf = source_files_repo.create(
+            session,
+            user_id=user_id,
+            kind=kind,
+            sha256=sha,
+            telegram_file_id=telegram_file_id,
+            mime=mime,
+            bytes_size=len(file_bytes),
+            storage_path=path,
+        )
+        session.commit()
+        logger.info(f"New SourceFile id={new_sf.id} sha={sha[:8]}...")
+        return new_sf, False
+    except Exception as e:
+        session.rollback()
+        logger.error(f"DB error in register_source_file: {e}")
+        return None, False
+    finally:
+        session.close()
+
 
 # --- MAPARE LUNI (RO) ---
 LUNI_RO = {
@@ -169,7 +217,7 @@ def ask_gpt_logic(user_input, image_base64=None):
         return "EROARE_AI"
 
 # --- PROCESARE MESAJ ---
-async def process_entry(update, context, text_input=None, image_file=None):
+async def process_entry(update, context, text_input=None, image_file=None, image_bytes=None):
     # Înregistrăm user-ul în DB (silent fail dacă DB e indisponibil)
     user_id = ensure_user(update)
     if user_id:
@@ -179,9 +227,8 @@ async def process_entry(update, context, text_input=None, image_file=None):
 
     try:
         image_base64 = None
-        if image_file:
-            file_byte = await image_file.download_as_bytearray()
-            image_base64 = base64.b64encode(file_byte).decode('utf-8')
+        if image_bytes:
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
 
         ai_response = ask_gpt_logic(text_input, image_base64)
         clean_json = ai_response.replace("```json", "").replace("```", "").strip()
@@ -240,9 +287,38 @@ async def process_entry(update, context, text_input=None, image_file=None):
 
 # --- HANDLERS ---
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_file = await update.message.photo[-1].get_file()
+    # 1. Download bytes
+    tg_file = await update.message.photo[-1].get_file()
+    file_bytes = bytes(await tg_file.download_as_bytearray())
     caption = update.message.caption
-    await process_entry(update, context, text_input=caption, image_file=new_file)
+
+    # 2. User în DB
+    user_id = ensure_user(update)
+
+    # 3. Dedup check — doar dacă avem user_id (DB disponibil)
+    is_duplicate = False
+    if user_id:
+        sf, is_duplicate = register_source_file(
+            user_id=user_id,
+            file_bytes=file_bytes,
+            telegram_file_id=tg_file.file_id,
+            kind="photo",
+            mime="image/jpeg",
+        )
+        if is_duplicate:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=(
+                    f"⚠️ Această imagine a fost deja înregistrată "
+                    f"pe {sf.created_at.strftime('%d.%m.%Y la %H:%M')}. "
+                    f"Nu o procesez din nou."
+                ),
+            )
+            return
+
+    # 4. Procesare normală cu bytes deja încărcați
+    await process_entry(update, context, text_input=caption, image_bytes=file_bytes)
+
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await process_entry(update, context, text_input=update.message.text)
@@ -254,7 +330,13 @@ if __name__ == '__main__':
         logger.info("✅ DB init OK")
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
-        # Nu oprim bot-ul — continuă fără DB; user-urile nu se vor salva.
+
+    # Crează folderul de storage (idempotent)
+    try:
+        storage.ensure_storage_dir()
+        logger.info("✅ Storage dir OK")
+    except Exception as e:
+        logger.error(f"❌ Storage dir FAILED: {e}")
 
     keep_alive()
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
