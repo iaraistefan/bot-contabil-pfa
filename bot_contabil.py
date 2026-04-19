@@ -9,6 +9,7 @@ from app.repositories import audit as audit_repo
 from app import storage
 from app.ai import client as ai_client
 from app.services import posting
+from app.integrations import sheets
 import logging
 import gspread
 from datetime import datetime
@@ -160,7 +161,6 @@ def persist_document(
     raw_response: str,
     prompt_version: Optional[str],
 ):
-    """Inserează Document în DB + audit. Întoarce doc_id sau None."""
     session = get_session()
     try:
         doc = documents_repo.create(
@@ -210,11 +210,6 @@ def persist_transactions(
     item,
     banca: float,
 ):
-    """
-    Derivă și inserează tranzacțiile contabile din document.
-    Întoarce lista de tx_id-uri sau [] în caz de eroare.
-    Silent fail — nu blocăm bot-ul dacă transactions nu se creează.
-    """
     session = get_session()
     try:
         tx_ids = posting.post_document(
@@ -244,39 +239,34 @@ def persist_transactions(
         session.close()
 
 
-# --- MAPARE LUNI (RO) ---
-LUNI_RO = {
-    "01": "Ianuarie", "02": "Februarie", "03": "Martie", "04": "Aprilie",
-    "05": "Mai", "06": "Iunie", "07": "Iulie", "08": "August",
-    "09": "Septembrie", "10": "Octombrie", "11": "Noiembrie", "12": "Decembrie"
-}
-
-
-def write_to_sheet(row_data, date_str):
+def sync_to_sheets(
+    doc_id: int,
+    row_data: list,
+    date_str: Optional[str],
+):
+    """
+    Scrie documentul în Google Sheets + loghează în export_logs.
+    Silent fail — nu blocăm bot-ul dacă Sheets e indisponibil.
+    Întoarce tab_name sau None.
+    """
+    session = get_session()
     try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(creds)
-        spreadsheet = client.open(SHEET_NAME)
-        try:
-            parts = date_str.split('.')
-            luna_cifra = parts[1]
-            anul = parts[2]
-            nume_luna = LUNI_RO.get(luna_cifra, "General")
-            tab_name = f"{nume_luna} {anul}"
-        except:
-            tab_name = "General"
-        try:
-            worksheet = spreadsheet.worksheet(tab_name)
-        except gspread.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet(title=tab_name, rows=100, cols=10)
-            header = ["Data", "Platforma", "Tip", "Brut", "Comision", "TVA (21%)", "Net", "Cash", "Banca", "Detalii"]
-            worksheet.append_row(header)
-        worksheet.append_row(row_data)
+        tab_name = sheets.upsert_document(
+            session,
+            doc_id=doc_id,
+            row_data=row_data,
+            date_str=date_str,
+            sheet_name=SHEET_NAME,
+            credentials_file=CREDENTIALS_FILE,
+        )
+        session.commit()
         return tab_name
     except Exception as e:
-        logger.error(f"Eroare scriere Excel: {e}")
+        session.rollback()
+        logger.error(f"sync_to_sheets failed for doc_id={doc_id}: {e}")
         return None
+    finally:
+        session.close()
 
 
 # --- PROCESARE MESAJ ---
@@ -324,7 +314,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
             if tip == DocType.VENIT:
                 banca = item.net - item.cash
 
-            # 1. Persistăm Document în DB
+            # 1. Document în DB
             doc_id = None
             if user_id:
                 doc_id = persist_document(
@@ -336,7 +326,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                     prompt_version=extraction["prompt_version"],
                 )
 
-            # 2. Derivăm Transactions (silent fail)
+            # 2. Transactions în DB
             tx_ids = []
             if user_id and doc_id:
                 tx_ids = persist_transactions(
@@ -346,7 +336,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                     banca=banca,
                 )
 
-            # 3. Google Sheets (replica)
+            # 3. Google Sheets — cu export log
             row = [
                 data_doc,
                 item.platforma or "",
@@ -359,7 +349,22 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                 banca,
                 item.detalii or "",
             ]
-            sheet_used = write_to_sheet(row, data_doc)
+            if doc_id:
+                sheet_used = sync_to_sheets(
+                    doc_id=doc_id,
+                    row_data=row,
+                    date_str=data_doc,
+                )
+            else:
+                # Fallback dacă DB nu era disponibil: scriem direct (fără export log)
+                sheet_used = sheets.upsert_document(
+                    get_session(),
+                    doc_id=0,
+                    row_data=row,
+                    date_str=data_doc,
+                    sheet_name=SHEET_NAME,
+                    credentials_file=CREDENTIALS_FILE,
+                )
 
             # 4. Mesaj user
             doc_tag = f" #{doc_id}" if doc_id else ""
