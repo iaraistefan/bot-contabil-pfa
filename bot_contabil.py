@@ -3,6 +3,7 @@ from app.enums import DocType
 from db import init_db, get_session
 from app.repositories import users as users_repo
 from app.repositories import source_files as source_files_repo
+from app.repositories import audit as audit_repo
 from app import storage
 import logging
 import base64
@@ -52,9 +53,25 @@ def ensure_user(update: Update):
         display_name = tg_user.full_name or tg_user.username or None
         session = get_session()
         try:
+            existing = users_repo.get_by_telegram_id(session, telegram_id=tg_user.id)
+            is_new = existing is None
+
             user = users_repo.get_or_create_by_telegram_id(
                 session, telegram_id=tg_user.id, name=display_name
             )
+
+            if is_new:
+                audit_repo.write(
+                    session,
+                    entity_type="user",
+                    entity_id=user.id,
+                    action="create",
+                    user_id=user.id,
+                    source="user",
+                    after={"telegram_id": user.telegram_id, "name": user.name},
+                    note="auto-created from first Telegram message",
+                )
+
             session.commit()
             return user.id
         except Exception as e:
@@ -87,6 +104,16 @@ def register_source_file(
         existing = source_files_repo.get_by_sha256(session, user_id, sha)
         if existing is not None:
             logger.info(f"Dedup HIT sha={sha[:8]}... sf_id={existing.id}")
+            audit_repo.write(
+                session,
+                entity_type="source_file",
+                entity_id=existing.id,
+                action="dedup_hit",
+                user_id=user_id,
+                source="system",
+                note=f"duplicate upload; original created at {existing.created_at.isoformat()}",
+            )
+            session.commit()
             return existing, True
 
         # Fișier nou — salvăm pe disk + DB
@@ -101,6 +128,20 @@ def register_source_file(
             mime=mime,
             bytes_size=len(file_bytes),
             storage_path=path,
+        )
+        audit_repo.write(
+            session,
+            entity_type="source_file",
+            entity_id=new_sf.id,
+            action="create",
+            user_id=user_id,
+            source="user",
+            after={
+                "kind": new_sf.kind,
+                "sha256": new_sf.sha256,
+                "bytes_size": new_sf.bytes_size,
+                "storage_path": new_sf.storage_path,
+            },
         )
         session.commit()
         logger.info(f"New SourceFile id={new_sf.id} sha={sha[:8]}...")
@@ -218,7 +259,6 @@ def ask_gpt_logic(user_input, image_base64=None):
 
 # --- PROCESARE MESAJ ---
 async def process_entry(update, context, text_input=None, image_file=None, image_bytes=None):
-    # Înregistrăm user-ul în DB (silent fail dacă DB e indisponibil)
     user_id = ensure_user(update)
     if user_id:
         logger.info(f"Processing entry for user_id={user_id}")
@@ -287,15 +327,12 @@ async def process_entry(update, context, text_input=None, image_file=None, image
 
 # --- HANDLERS ---
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Download bytes
     tg_file = await update.message.photo[-1].get_file()
     file_bytes = bytes(await tg_file.download_as_bytearray())
     caption = update.message.caption
 
-    # 2. User în DB
     user_id = ensure_user(update)
 
-    # 3. Dedup check — doar dacă avem user_id (DB disponibil)
     is_duplicate = False
     if user_id:
         sf, is_duplicate = register_source_file(
@@ -316,7 +353,6 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
 
-    # 4. Procesare normală cu bytes deja încărcați
     await process_entry(update, context, text_input=caption, image_bytes=file_bytes)
 
 
@@ -324,14 +360,12 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
     await process_entry(update, context, text_input=update.message.text)
 
 if __name__ == '__main__':
-    # Crează tabelele (idempotent — safe la fiecare pornire)
     try:
         init_db()
         logger.info("✅ DB init OK")
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
 
-    # Crează folderul de storage (idempotent)
     try:
         storage.ensure_storage_dir()
         logger.info("✅ Storage dir OK")
