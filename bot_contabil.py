@@ -10,6 +10,7 @@ from app.ai import client as ai_client
 import logging
 import gspread
 from datetime import datetime
+from typing import Optional
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
@@ -157,20 +158,12 @@ def register_source_file(
 
 # --- HELPER: persistă Document în DB ---
 def persist_document(
-    user_id: Optional_int := None,  # noqa — placeholder, see real signature below
-    **_: object,
-):
-    pass  # suprascris mai jos
-
-
-def persist_document(
-    *,
-    user_id: int | None,
-    source_file_id: int | None,
-    item,                     # ExtractionItem (Pydantic)
+    user_id: Optional[int],
+    source_file_id: Optional[int],
+    item,
     banca: float,
     raw_response: str,
-    prompt_version: str | None,
+    prompt_version: Optional[str],
 ):
     """
     Inserează un Document în DB + audit.
@@ -192,7 +185,7 @@ def persist_document(
             cash=item.cash,
             banca=banca,
             detalii=item.detalii or "",
-            raw_json=raw_response[:10000],  # cap la 10k chars, pentru siguranță
+            raw_json=raw_response[:10000] if raw_response else "",
             prompt_version=prompt_version,
             status="posted",
             confidence=1.0,
@@ -397,7 +390,6 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # text-only: nu avem source_file_id
     await process_entry(update, context, text_input=update.message.text)
 
 
