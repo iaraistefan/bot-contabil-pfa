@@ -1,3 +1,4 @@
+from config import settings
 import os
 from datetime import datetime
 from sqlalchemy import (
@@ -8,7 +9,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # URL de conexiune – îl vei seta ca env var în Render:
 # DATABASE_URL = postgres://user:pass@host:port/dbname
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = settings.database_url
 
 if not DATABASE_URL:
     # Fallback la SQLite local (pentru teste sau dacă DB nu e setată)
