@@ -3,6 +3,7 @@ from app.enums import DocType
 from db import init_db, get_session
 from app.repositories import users as users_repo
 from app.repositories import source_files as source_files_repo
+from app.repositories import documents as documents_repo
 from app.repositories import audit as audit_repo
 from app import storage
 from app.ai import client as ai_client
@@ -39,10 +40,6 @@ logger = logging.getLogger(__name__)
 
 # --- HELPER: înregistrează user-ul din Telegram în DB ---
 def ensure_user(update: Update):
-    """
-    Garantează că user-ul din Telegram există în DB.
-    Întoarce user.id (int) sau None dacă operația DB eșuează.
-    """
     try:
         tg_user = update.effective_user
         if tg_user is None:
@@ -91,10 +88,6 @@ def register_source_file(
     kind: str = "photo",
     mime: str = "image/jpeg",
 ):
-    """
-    Verifică dedup prin SHA256.
-    Întoarce un dict: {"id", "sha256", "created_at", "is_duplicate"} sau None în caz de eroare.
-    """
     sha = storage.compute_sha256(file_bytes)
     session = get_session()
     try:
@@ -162,6 +155,70 @@ def register_source_file(
         session.close()
 
 
+# --- HELPER: persistă Document în DB ---
+def persist_document(
+    user_id: Optional_int := None,  # noqa — placeholder, see real signature below
+    **_: object,
+):
+    pass  # suprascris mai jos
+
+
+def persist_document(
+    *,
+    user_id: int | None,
+    source_file_id: int | None,
+    item,                     # ExtractionItem (Pydantic)
+    banca: float,
+    raw_response: str,
+    prompt_version: str | None,
+):
+    """
+    Inserează un Document în DB + audit.
+    Întoarce doc_id (int) sau None în caz de eroare.
+    """
+    session = get_session()
+    try:
+        doc = documents_repo.create(
+            session,
+            user_id=user_id,
+            source_file_id=source_file_id,
+            data_doc=item.data,
+            platforma=item.platforma,
+            tip=item.tip,
+            brut=item.brut,
+            comision=item.comision,
+            tva=item.tva,
+            net=item.net,
+            cash=item.cash,
+            banca=banca,
+            detalii=item.detalii or "",
+            raw_json=raw_response[:10000],  # cap la 10k chars, pentru siguranță
+            prompt_version=prompt_version,
+            status="posted",
+            confidence=1.0,
+        )
+        doc_id = doc.id
+        audit_repo.write(
+            session,
+            entity_type="document",
+            entity_id=doc_id,
+            action="create",
+            user_id=user_id,
+            source="ai",
+            after=documents_repo.to_dict(doc),
+            note=f"posted via AI extraction (prompt={prompt_version})",
+        )
+        session.commit()
+        logger.info(f"New Document id={doc_id} tip={item.tip} brut={item.brut}")
+        return doc_id
+    except Exception as e:
+        session.rollback()
+        logger.error(f"DB error in persist_document: {e}")
+        return None
+    finally:
+        session.close()
+
+
 # --- MAPARE LUNI (RO) ---
 LUNI_RO = {
     "01": "Ianuarie", "02": "Februarie", "03": "Martie", "04": "Aprilie",
@@ -202,21 +259,19 @@ def write_to_sheet(row_data, date_str):
 
 
 # --- PROCESARE MESAJ ---
-async def process_entry(update, context, text_input=None, image_bytes=None):
+async def process_entry(update, context, text_input=None, image_bytes=None, source_file_id=None):
     user_id = ensure_user(update)
     if user_id:
-        logger.info(f"Processing entry for user_id={user_id}")
+        logger.info(f"Processing entry for user_id={user_id} source_file_id={source_file_id}")
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Analizez documentul (TVA 21%)...")
 
-    # --- Chemare AI (include validare Pydantic) ---
     extraction = ai_client.extract_document(
         user_input=text_input,
         image_bytes=image_bytes,
     )
 
-    # Caz 1: AI a răspuns, dar Pydantic a respins toate item-urile.
-    # Verificat ÎNAINTEA erorii globale — altfel mesajul generic ar înghiți feedback-ul util.
+    # Caz 1: Pydantic a respins toate item-urile.
     if not extraction["items"] and extraction["validation_errors"]:
         err_preview = "\n• ".join(extraction["validation_errors"][:3])
         logger.error(f"No valid items. Errors: {extraction['validation_errors']}")
@@ -229,7 +284,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
         )
         return
 
-    # Caz 2: eroare globală (OpenAI down, JSON corrupt, nimic extras).
+    # Caz 2: eroare globală (OpenAI down, JSON corrupt, lista goală).
     if not extraction["items"]:
         logger.error(f"AI extraction failed: {extraction.get('error')}")
         await context.bot.send_message(
@@ -238,7 +293,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
         )
         return
 
-    # Caz 3 (happy): avem item-uri valide; poate ne-au scăpat câteva pe drum.
+    # Caz 3 (happy): avem item-uri valide.
     try:
         msg_confirm = "✅ **Salvat:**\n"
 
@@ -251,6 +306,19 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
             if tip == DocType.VENIT:
                 banca = item.net - item.cash
 
+            # --- Persistăm în DB ÎNAINTE de Sheets (DB = sursa de adevăr) ---
+            doc_id = None
+            if user_id:
+                doc_id = persist_document(
+                    user_id=user_id,
+                    source_file_id=source_file_id,
+                    item=item,
+                    banca=banca,
+                    raw_response=extraction["raw_response"],
+                    prompt_version=extraction["prompt_version"],
+                )
+
+            # --- Scriem în Sheets (replica) ---
             row = [
                 data_doc,
                 item.platforma or "",
@@ -263,20 +331,21 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
                 banca,
                 item.detalii or "",
             ]
-
             sheet_used = write_to_sheet(row, data_doc)
 
+            # --- Mesaj user ---
+            doc_tag = f" #{doc_id}" if doc_id else ""
             if tip == DocType.FACTURA_COMISION:
-                msg_confirm += (f"📂 Dosar: {sheet_used}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
                                 f"📄 **FACTURA {item.platforma}**\n"
                                 f"📅 Data: {data_doc}\n"
                                 f"💵 Baza: {item.comision} RON\n"
                                 f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
             elif tip == DocType.CHELTUIALA:
-                msg_confirm += (f"📂 Dosar: {sheet_used}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
                                 f"🛒 **{item.detalii}** ({item.brut} RON)\n")
             else:
-                msg_confirm += (f"📂 Dosar: {sheet_used}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
                                 f"💰 Incasare: {item.brut} RON\n")
 
         if extraction["validation_errors"]:
@@ -296,6 +365,7 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
     caption = update.message.caption
 
     user_id = ensure_user(update)
+    source_file_id = None
 
     if user_id:
         sf_info = register_source_file(
@@ -305,21 +375,29 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
             kind="photo",
             mime="image/jpeg",
         )
-        if sf_info and sf_info["is_duplicate"]:
-            created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=(
-                    f"⚠️ Această imagine a fost deja înregistrată "
-                    f"pe {created_at_str}. Nu o procesez din nou."
-                ),
-            )
-            return
+        if sf_info:
+            if sf_info["is_duplicate"]:
+                created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=(
+                        f"⚠️ Această imagine a fost deja înregistrată "
+                        f"pe {created_at_str}. Nu o procesez din nou."
+                    ),
+                )
+                return
+            source_file_id = sf_info["id"]
 
-    await process_entry(update, context, text_input=caption, image_bytes=file_bytes)
+    await process_entry(
+        update, context,
+        text_input=caption,
+        image_bytes=file_bytes,
+        source_file_id=source_file_id,
+    )
 
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # text-only: nu avem source_file_id
     await process_entry(update, context, text_input=update.message.text)
 
 
