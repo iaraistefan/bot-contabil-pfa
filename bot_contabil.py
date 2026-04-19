@@ -4,9 +4,11 @@ from db import init_db, get_session
 from app.repositories import users as users_repo
 from app.repositories import source_files as source_files_repo
 from app.repositories import documents as documents_repo
+from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
 from app import storage
 from app.ai import client as ai_client
+from app.services import posting
 import logging
 import gspread
 from datetime import datetime
@@ -39,7 +41,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 
-# --- HELPER: înregistrează user-ul din Telegram în DB ---
 def ensure_user(update: Update):
     try:
         tg_user = update.effective_user
@@ -50,11 +51,9 @@ def ensure_user(update: Update):
         try:
             existing = users_repo.get_by_telegram_id(session, telegram_id=tg_user.id)
             is_new = existing is None
-
             user = users_repo.get_or_create_by_telegram_id(
                 session, telegram_id=tg_user.id, name=display_name
             )
-
             if is_new:
                 audit_repo.write(
                     session,
@@ -66,7 +65,6 @@ def ensure_user(update: Update):
                     after={"telegram_id": user.telegram_id, "name": user.name},
                     note="auto-created from first Telegram message",
                 )
-
             user_id = user.id
             session.commit()
             return user_id
@@ -81,7 +79,6 @@ def ensure_user(update: Update):
         return None
 
 
-# --- HELPER: dedup + salvare fișier sursă ---
 def register_source_file(
     user_id: int,
     file_bytes: bytes,
@@ -112,7 +109,6 @@ def register_source_file(
             )
             session.commit()
             return result
-
         ext = "jpg" if kind == "photo" else "bin"
         path = storage.save_bytes(file_bytes, sha, ext=ext)
         new_sf = source_files_repo.create(
@@ -156,7 +152,6 @@ def register_source_file(
         session.close()
 
 
-# --- HELPER: persistă Document în DB ---
 def persist_document(
     user_id: Optional[int],
     source_file_id: Optional[int],
@@ -165,10 +160,7 @@ def persist_document(
     raw_response: str,
     prompt_version: Optional[str],
 ):
-    """
-    Inserează un Document în DB + audit.
-    Întoarce doc_id (int) sau None în caz de eroare.
-    """
+    """Inserează Document în DB + audit. Întoarce doc_id sau None."""
     session = get_session()
     try:
         doc = documents_repo.create(
@@ -212,6 +204,46 @@ def persist_document(
         session.close()
 
 
+def persist_transactions(
+    user_id: int,
+    doc_id: int,
+    item,
+    banca: float,
+):
+    """
+    Derivă și inserează tranzacțiile contabile din document.
+    Întoarce lista de tx_id-uri sau [] în caz de eroare.
+    Silent fail — nu blocăm bot-ul dacă transactions nu se creează.
+    """
+    session = get_session()
+    try:
+        tx_ids = posting.post_document(
+            session,
+            user_id=user_id,
+            document_id=doc_id,
+            tip=item.tip,
+            platforma=item.platforma,
+            detalii=item.detalii,
+            brut=item.brut,
+            comision=item.comision,
+            tva=item.tva,
+            net=item.net,
+            cash=item.cash,
+            banca=banca,
+            data_doc=item.data,
+        )
+        session.commit()
+        if tx_ids:
+            logger.info(f"Posted {len(tx_ids)} transaction(s) for doc_id={doc_id}: {tx_ids}")
+        return tx_ids
+    except Exception as e:
+        session.rollback()
+        logger.error(f"DB error in persist_transactions for doc_id={doc_id}: {e}")
+        return []
+    finally:
+        session.close()
+
+
 # --- MAPARE LUNI (RO) ---
 LUNI_RO = {
     "01": "Ianuarie", "02": "Februarie", "03": "Martie", "04": "Aprilie",
@@ -226,7 +258,6 @@ def write_to_sheet(row_data, date_str):
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
         client = gspread.authorize(creds)
         spreadsheet = client.open(SHEET_NAME)
-
         try:
             parts = date_str.split('.')
             luna_cifra = parts[1]
@@ -235,17 +266,14 @@ def write_to_sheet(row_data, date_str):
             tab_name = f"{nume_luna} {anul}"
         except:
             tab_name = "General"
-
         try:
             worksheet = spreadsheet.worksheet(tab_name)
         except gspread.WorksheetNotFound:
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows=100, cols=10)
             header = ["Data", "Platforma", "Tip", "Brut", "Comision", "TVA (21%)", "Net", "Cash", "Banca", "Detalii"]
             worksheet.append_row(header)
-
         worksheet.append_row(row_data)
         return tab_name
-
     except Exception as e:
         logger.error(f"Eroare scriere Excel: {e}")
         return None
@@ -264,7 +292,6 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
         image_bytes=image_bytes,
     )
 
-    # Caz 1: Pydantic a respins toate item-urile.
     if not extraction["items"] and extraction["validation_errors"]:
         err_preview = "\n• ".join(extraction["validation_errors"][:3])
         logger.error(f"No valid items. Errors: {extraction['validation_errors']}")
@@ -277,7 +304,6 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
         )
         return
 
-    # Caz 2: eroare globală (OpenAI down, JSON corrupt, lista goală).
     if not extraction["items"]:
         logger.error(f"AI extraction failed: {extraction.get('error')}")
         await context.bot.send_message(
@@ -286,7 +312,6 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
         )
         return
 
-    # Caz 3 (happy): avem item-uri valide.
     try:
         msg_confirm = "✅ **Salvat:**\n"
 
@@ -299,7 +324,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
             if tip == DocType.VENIT:
                 banca = item.net - item.cash
 
-            # --- Persistăm în DB ÎNAINTE de Sheets (DB = sursa de adevăr) ---
+            # 1. Persistăm Document în DB
             doc_id = None
             if user_id:
                 doc_id = persist_document(
@@ -311,7 +336,17 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                     prompt_version=extraction["prompt_version"],
                 )
 
-            # --- Scriem în Sheets (replica) ---
+            # 2. Derivăm Transactions (silent fail)
+            tx_ids = []
+            if user_id and doc_id:
+                tx_ids = persist_transactions(
+                    user_id=user_id,
+                    doc_id=doc_id,
+                    item=item,
+                    banca=banca,
+                )
+
+            # 3. Google Sheets (replica)
             row = [
                 data_doc,
                 item.platforma or "",
@@ -326,19 +361,20 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
             ]
             sheet_used = write_to_sheet(row, data_doc)
 
-            # --- Mesaj user ---
+            # 4. Mesaj user
             doc_tag = f" #{doc_id}" if doc_id else ""
+            tx_tag = f" ({len(tx_ids)} tx)" if tx_ids else ""
             if tip == DocType.FACTURA_COMISION:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
                                 f"📄 **FACTURA {item.platforma}**\n"
                                 f"📅 Data: {data_doc}\n"
                                 f"💵 Baza: {item.comision} RON\n"
                                 f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
             elif tip == DocType.CHELTUIALA:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
                                 f"🛒 **{item.detalii}** ({item.brut} RON)\n")
             else:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}\n"
+                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
                                 f"💰 Incasare: {item.brut} RON\n")
 
         if extraction["validation_errors"]:
@@ -356,7 +392,6 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
     tg_file = await update.message.photo[-1].get_file()
     file_bytes = bytes(await tg_file.download_as_bytearray())
     caption = update.message.caption
-
     user_id = ensure_user(update)
     source_file_id = None
 
