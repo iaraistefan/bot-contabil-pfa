@@ -1,3 +1,4 @@
-﻿credentials.json
+credentials.json
 __pycache__
 .env
+storage/
