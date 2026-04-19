@@ -48,17 +48,19 @@ def ensure_user(update: Update):
         if tg_user is None:
             return None
         display_name = tg_user.full_name or tg_user.username or None
-        with get_session() as session:
-            try:
-                user = users_repo.get_or_create_by_telegram_id(
-                    session, telegram_id=tg_user.id, name=display_name
-                )
-                session.commit()
-                return user.id
-            except Exception as e:
-                session.rollback()
-                logger.error(f"DB error in ensure_user: {e}")
-                return None
+        session = get_session()
+        try:
+            user = users_repo.get_or_create_by_telegram_id(
+                session, telegram_id=tg_user.id, name=display_name
+            )
+            session.commit()
+            return user.id
+        except Exception as e:
+            session.rollback()
+            logger.error(f"DB error in ensure_user: {e}")
+            return None
+        finally:
+            session.close()
     except Exception as e:
         logger.error(f"Unexpected error in ensure_user: {e}")
         return None
