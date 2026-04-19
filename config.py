@@ -27,10 +27,11 @@ class Settings(BaseSettings):
     openai_api_key: str
 
     # --- Optional with sensible defaults ---
-    database_url: str = "sqlite:///./data.db"   # Postgres on Render in prod
+    database_url: str = "sqlite:///./data.db"
     openai_model: str = "gpt-4o"
     log_level: str = "INFO"
-    env: str = "production"                     # 'production' | 'development'
+    env: str = "production"
+    port: int = 8080                         # Render sets PORT at runtime
 
     # --- Google Sheets (optional — bot starts fine without them) ---
     google_credentials_json: Optional[str] = None
