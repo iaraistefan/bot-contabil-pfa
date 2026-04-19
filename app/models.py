@@ -56,6 +56,7 @@ class SourceFile(Base):
     storage_path = Column(String(500), nullable=True)
 
     user = relationship("User", back_populates="source_files")
+    documents = relationship("Document", back_populates="source_file")
 
     def __repr__(self):
         return f"<SourceFile id={self.id} sha={self.sha256[:8]}... user_id={self.user_id}>"
@@ -67,11 +68,15 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+    # Legături
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # NEW: legătura cu fișierul sursă (NULL pentru mesajele text)
+    source_file_id = Column(Integer, ForeignKey("source_files.id"), nullable=True, index=True)
 
-    data_doc = Column(String(20), index=True)
-    platforma = Column(String(50), index=True)
-    tip = Column(String(30), index=True)
+    # Info de bază
+    data_doc = Column(String(20), index=True)        # "DD.MM.YYYY"
+    platforma = Column(String(50), index=True)       # Bolt, Uber, Petrom, Lukoil etc.
+    tip = Column(String(30), index=True)             # VENIT, CHELTUIALA, FACTURA_COMISION
 
     brut = Column(Float, default=0.0)
     comision = Column(Float, default=0.0)
@@ -81,29 +86,33 @@ class Document(Base):
     banca = Column(Float, default=0.0)
 
     detalii = Column(Text, default="")
-    raw_json = Column(Text, default="")
-    image_id = Column(String(200), default="")
+    raw_json = Column(Text, default="")              # răspunsul brut AI pentru audit
+    image_id = Column(String(200), default="")       # legacy field, păstrat
     confidence = Column(Float, default=1.0)
 
+    # NEW: status + prompt version
+    status = Column(String(20), nullable=False, default="posted", index=True)
+    prompt_version = Column(String(50), nullable=True)
+
+    # Relații
     user = relationship("User", back_populates="documents")
+    source_file = relationship("SourceFile", back_populates="documents")
+
+    def __repr__(self):
+        return f"<Document id={self.id} tip={self.tip} brut={self.brut} status={self.status}>"
 
 
 class AuditLog(Base):
-    """
-    Log imuabil al fiecărei modificări semnificative în DB.
-    Nu există UPDATE — doar INSERT. Întrebarea "ce s-a întâmplat?" se răspunde
-    cu SELECT pe coloanele entity_type + entity_id.
-    """
     __tablename__ = "audit_logs"
 
     id = Column(BigInteger, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    entity_type = Column(String(50), nullable=False, index=True)    # 'user' / 'source_file' / 'document'
+    entity_type = Column(String(50), nullable=False, index=True)
     entity_id = Column(Integer, nullable=False, index=True)
-    action = Column(String(50), nullable=False)                     # 'create' / 'dedup_hit' / 'update' / 'delete' / 'error'
-    source = Column(String(20), nullable=False, default="system")   # 'user' / 'ai' / 'system'
+    action = Column(String(50), nullable=False)
+    source = Column(String(20), nullable=False, default="system")
 
     before_json = Column(JSON, nullable=True)
     after_json = Column(JSON, nullable=True)
