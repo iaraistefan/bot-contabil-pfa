@@ -38,9 +38,36 @@ class User(Base):
 
     # Relații (reverse)
     documents = relationship("Document", back_populates="user")
+    source_files = relationship("SourceFile", back_populates="user")
 
     def __repr__(self):
         return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
+
+
+class SourceFile(Base):
+    """
+    Un fișier primit de la user (poză, PDF, etc.).
+    sha256 UNIQUE per user — blochează procesarea dublă a aceleași imagini.
+    """
+    __tablename__ = "source_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    kind = Column(String(20), nullable=False, default="photo")  # photo / pdf / text
+    telegram_file_id = Column(String(300), nullable=True)       # pentru re-fetch de pe Telegram
+    sha256 = Column(String(64), nullable=False, index=True)     # hex digest, 64 char
+    mime = Column(String(100), nullable=True)
+    bytes_size = Column(Integer, nullable=True)
+    storage_path = Column(String(500), nullable=True)           # calea locală sau cheie S3
+
+    # Relații
+    user = relationship("User", back_populates="source_files")
+
+    def __repr__(self):
+        return f"<SourceFile id={self.id} sha={self.sha256[:8]}... user_id={self.user_id}>"
 
 
 class Document(Base):
@@ -49,7 +76,7 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
-    # NEW: legătura cu User-ul. Nullable ca să nu spargem rândurile existente.
+    # Legătura cu User-ul
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Info de bază
