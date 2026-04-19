@@ -1,5 +1,7 @@
 from config import settings
 from app.enums import DocType
+from db import init_db, get_session
+from app.repositories import users as users_repo
 import logging
 import base64
 import json
@@ -14,7 +16,7 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURARE ---
-SHEET_NAME = "Contabilitate PFA 2025"  # Numele fisierului Google Sheet
+SHEET_NAME = "Contabilitate PFA 2025"
 CREDENTIALS_FILE = "credentials.json"
 
 # --- SERVER WEB (PENTRU RENDER) ---
@@ -32,7 +34,34 @@ def keep_alive():
 
 # --- INITIALIZARE ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 client_openai = OpenAI(api_key=settings.openai_api_key)
+
+# --- HELPER: înregistrează user-ul din Telegram în DB ---
+def ensure_user(update: Update):
+    """
+    Garantează că user-ul din Telegram există în DB.
+    Întoarce user.id (int) sau None dacă operația DB eșuează (nu blocăm bot-ul).
+    """
+    try:
+        tg_user = update.effective_user
+        if tg_user is None:
+            return None
+        display_name = tg_user.full_name or tg_user.username or None
+        with get_session() as session:
+            try:
+                user = users_repo.get_or_create_by_telegram_id(
+                    session, telegram_id=tg_user.id, name=display_name
+                )
+                session.commit()
+                return user.id
+            except Exception as e:
+                session.rollback()
+                logger.error(f"DB error in ensure_user: {e}")
+                return None
+    except Exception as e:
+        logger.error(f"Unexpected error in ensure_user: {e}")
+        return None
 
 # --- MAPARE LUNI (RO) ---
 LUNI_RO = {
@@ -69,7 +98,7 @@ def write_to_sheet(row_data, date_str):
         return tab_name
 
     except Exception as e:
-        logging.error(f"Eroare scriere Excel: {e}")
+        logger.error(f"Eroare scriere Excel: {e}")
         return None
 
 # --- CREIERUL AI (LOGICA 2026 - TVA 21%) ---
@@ -139,6 +168,11 @@ def ask_gpt_logic(user_input, image_base64=None):
 
 # --- PROCESARE MESAJ ---
 async def process_entry(update, context, text_input=None, image_file=None):
+    # Înregistrăm user-ul în DB (silent fail dacă DB e indisponibil)
+    user_id = ensure_user(update)
+    if user_id:
+        logger.info(f"Processing entry for user_id={user_id}")
+
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Analizez documentul (TVA 21%)...")
 
     try:
@@ -212,6 +246,14 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
     await process_entry(update, context, text_input=update.message.text)
 
 if __name__ == '__main__':
+    # Crează tabelele (idempotent — safe la fiecare pornire)
+    try:
+        init_db()
+        logger.info("✅ DB init OK")
+    except Exception as e:
+        logger.error(f"❌ DB init FAILED: {e}")
+        # Nu oprim bot-ul — continuă fără DB; user-urile nu se vor salva.
+
     keep_alive()
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
