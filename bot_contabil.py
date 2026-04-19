@@ -38,10 +38,6 @@ logger = logging.getLogger(__name__)
 
 # --- HELPER: înregistrează user-ul din Telegram în DB ---
 def ensure_user(update: Update):
-    """
-    Garantează că user-ul din Telegram există în DB.
-    Întoarce user.id (int) sau None dacă operația DB eșuează.
-    """
     try:
         tg_user = update.effective_user
         if tg_user is None:
@@ -90,10 +86,6 @@ def register_source_file(
     kind: str = "photo",
     mime: str = "image/jpeg",
 ):
-    """
-    Verifică dedup prin SHA256.
-    Întoarce un dict: {"id", "sha256", "created_at", "is_duplicate"} sau None.
-    """
     sha = storage.compute_sha256(file_bytes)
     session = get_session()
     try:
@@ -168,7 +160,6 @@ LUNI_RO = {
     "09": "Septembrie", "10": "Octombrie", "11": "Noiembrie", "12": "Decembrie"
 }
 
-# --- FUNCTIE SCRIERE EXCEL (DINAMIC PE LUNI) ---
 def write_to_sheet(row_data, date_str):
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -208,13 +199,14 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Analizez documentul (TVA 21%)...")
 
-    # --- Chemare AI ---
+    # --- Chemare AI (include validare Pydantic) ---
     extraction = ai_client.extract_document(
         user_input=text_input,
         image_bytes=image_bytes,
     )
 
-    if not extraction["ok"]:
+    # Caz 1: eroare globală (OpenAI down, JSON corrupt)
+    if extraction["error"] and not extraction["items"]:
         logger.error(f"AI extraction failed: {extraction['error']}")
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -222,50 +214,63 @@ async def process_entry(update, context, text_input=None, image_bytes=None):
         )
         return
 
-    data_list = extraction["data"]
+    # Caz 2: avem erori de validare, dar NU avem item-uri valide
+    if not extraction["items"]:
+        err_preview = "\n• ".join(extraction["validation_errors"][:3])
+        logger.error(f"No valid items. Errors: {extraction['validation_errors']}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"⚠️ Documentul nu a putut fi înregistrat — datele extrase nu sunt valide:\n"
+                f"• {err_preview}"
+            ),
+        )
+        return
 
-    # --- Procesare items ---
+    # Caz 3 (happy + warning): avem item-uri valide; poate ne-au scăpat câteva pe drum
     try:
         msg_confirm = "✅ **Salvat:**\n"
 
-        for item in data_list:
-            data_doc = item.get('data', datetime.now().strftime("%d.%m.%Y"))
-            net = float(item.get('net', 0))
-            cash = float(item.get('cash', 0))
-            tip = item.get('tip')
-            tva = float(item.get('tva', 0))
+        for item in extraction["items"]:
+            data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
+            tip = item.tip
+            tva = item.tva
 
-            banca = 0
+            banca = 0.0
             if tip == DocType.VENIT:
-                banca = net - cash
+                banca = item.net - item.cash
 
             row = [
                 data_doc,
-                item.get('platforma'),
+                item.platforma or "",
                 tip,
-                item.get('brut', 0),
-                item.get('comision', 0),
+                item.brut,
+                item.comision,
                 tva,
-                net,
-                cash,
+                item.net,
+                item.cash,
                 banca,
-                item.get('detalii')
+                item.detalii or "",
             ]
 
             sheet_used = write_to_sheet(row, data_doc)
 
             if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
-                                f"📄 **FACTURA {item['platforma']}**\n"
+                                f"📄 **FACTURA {item.platforma}**\n"
                                 f"📅 Data: {data_doc}\n"
-                                f"💵 Baza: {item['comision']} RON\n"
+                                f"💵 Baza: {item.comision} RON\n"
                                 f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
             elif tip == DocType.CHELTUIALA:
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
-                                f"🛒 **{item['detalii']}** ({item['brut']} RON)\n")
+                                f"🛒 **{item.detalii}** ({item.brut} RON)\n")
             else:
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
-                                f"💰 Incasare: {item['brut']} RON\n")
+                                f"💰 Incasare: {item.brut} RON\n")
+
+        # Dacă avem și erori parțiale, le semnalăm la final
+        if extraction["validation_errors"]:
+            msg_confirm += f"\n⚠️ {len(extraction['validation_errors'])} item(e) respinse la validare."
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=msg_confirm)
 
