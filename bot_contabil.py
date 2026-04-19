@@ -4,7 +4,6 @@ import base64
 import json
 import gspread
 import asyncio
-import os
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
@@ -14,9 +13,7 @@ from flask import Flask
 from threading import Thread
 
 # --- CONFIGURARE ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "TOKEN_LIPSA")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "CHEIE_LIPSA")
-SHEET_NAME = "Contabilitate PFA 2025" # Numele fisierului Google Sheet
+SHEET_NAME = "Contabilitate PFA 2025"  # Numele fisierului Google Sheet
 CREDENTIALS_FILE = "credentials.json"
 
 # --- SERVER WEB (PENTRU RENDER) ---
@@ -26,8 +23,7 @@ def home():
     return "Bot Fiscal (TVA 21% + Taburi Lunare) ONLINE"
 
 def run_http():
-    port_render = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port_render)
+    app.run(host='0.0.0.0', port=settings.port)
 
 def keep_alive():
     t = Thread(target=run_http)
@@ -35,7 +31,7 @@ def keep_alive():
 
 # --- INITIALIZARE ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-client_openai = OpenAI(api_key=OPENAI_API_KEY)
+client_openai = OpenAI(api_key=settings.openai_api_key)
 
 # --- MAPARE LUNI (RO) ---
 LUNI_RO = {
@@ -51,7 +47,7 @@ def write_to_sheet(row_data, date_str):
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
         client = gspread.authorize(creds)
         spreadsheet = client.open(SHEET_NAME)
-        
+
         # 1. Determinam numele Foii (Tab-ului) pe baza datei
         # Format asteptat date_str: DD.MM.YYYY
         try:
@@ -59,7 +55,7 @@ def write_to_sheet(row_data, date_str):
             luna_cifra = parts[1]
             anul = parts[2]
             nume_luna = LUNI_RO.get(luna_cifra, "General")
-            tab_name = f"{nume_luna} {anul}" # Ex: "Februarie 2026"
+            tab_name = f"{nume_luna} {anul}"  # Ex: "Februarie 2026"
         except:
             tab_name = "General"
 
@@ -67,16 +63,14 @@ def write_to_sheet(row_data, date_str):
         try:
             worksheet = spreadsheet.worksheet(tab_name)
         except gspread.WorksheetNotFound:
-            # Cream foaie noua
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows=100, cols=10)
-            # Adaugam capul de tabel
             header = ["Data", "Platforma", "Tip", "Brut", "Comision", "TVA (21%)", "Net", "Cash", "Banca", "Detalii"]
             worksheet.append_row(header)
-        
+
         # 3. Scriem datele
         worksheet.append_row(row_data)
         return tab_name
-            
+
     except Exception as e:
         logging.error(f"Eroare scriere Excel: {e}")
         return None
@@ -84,7 +78,7 @@ def write_to_sheet(row_data, date_str):
 # --- CREIERUL AI (LOGICA 2026 - TVA 21%) ---
 def ask_gpt_logic(user_input, image_base64=None):
     today = datetime.now().strftime("%d.%m.%Y")
-    
+
     system_prompt = f"""
     Esti contabil AI expert pentru PFA Ridesharing in Romania.
     DATA CURENTA: {today}.
@@ -96,11 +90,11 @@ def ask_gpt_logic(user_input, image_base64=None):
        - Comision = Total Factura.
        - TVA Datorat = Comision * 0.21 (Taxare Inversa).
        - Impozit Nerezidenti = Comision * 0.02 (Calcul informativ).
-    
+
     2. BON FISCAL (Combustibil/Piese):
        - Cauta data bonului.
        - Brut = Total Bon.
-    
+
     3. RAPORT VENITURI (Screenshot aplicatie):
        - Brut = Venit Total (App + Cash).
        - Comision = Taxa aplicatiei.
@@ -123,22 +117,22 @@ def ask_gpt_logic(user_input, image_base64=None):
     """
 
     messages = [{"role": "system", "content": system_prompt}]
-    
+
     content_payload = []
     content_payload.append({"type": "text", "text": user_input if user_input else "Analizeaza imaginea"})
-    
+
     if image_base64:
         content_payload.append({
-            "type": "image_url", 
+            "type": "image_url",
             "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
         })
-        
+
     messages.append({"role": "user", "content": content_payload})
 
     try:
         response = client_openai.chat.completions.create(
-            model="gpt-4o", 
-            messages=messages, 
+            model=settings.openai_model,
+            messages=messages,
             max_tokens=800,
             temperature=0.1
         )
@@ -158,7 +152,7 @@ async def process_entry(update, context, text_input=None, image_file=None):
 
         ai_response = ask_gpt_logic(text_input, image_base64)
         clean_json = ai_response.replace("```json", "").replace("```", "").strip()
-        
+
         try:
             data_list = json.loads(clean_json)
         except:
@@ -168,18 +162,16 @@ async def process_entry(update, context, text_input=None, image_file=None):
         msg_confirm = "✅ **Salvat:**\n"
 
         for item in data_list:
-            # Pregatire date
             data_doc = item.get('data', datetime.now().strftime("%d.%m.%Y"))
             net = float(item.get('net', 0))
             cash = float(item.get('cash', 0))
             tip = item.get('tip')
             tva = float(item.get('tva', 0))
-            
+
             banca = 0
             if tip == 'VENIT':
                 banca = net - cash
-            
-            # Structura rand Excel
+
             row = [
                 data_doc,
                 item.get('platforma'),
@@ -189,14 +181,12 @@ async def process_entry(update, context, text_input=None, image_file=None):
                 tva,
                 net,
                 cash,
-                banca, 
+                banca,
                 item.get('detalii')
             ]
 
-            # Scriere in Tab-ul specific LUNII
             sheet_used = write_to_sheet(row, data_doc)
 
-            # Mesaj confirmare catre tine
             if tip == 'FACTURA_COMISION':
                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
                                 f"📄 **FACTURA {item['platforma']}**\n"
@@ -204,11 +194,11 @@ async def process_entry(update, context, text_input=None, image_file=None):
                                 f"💵 Baza: {item['comision']} RON\n"
                                 f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
             elif tip == 'CHELTUIALA':
-                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
-                                 f"🛒 **{item['detalii']}** ({item['brut']} RON)\n")
+                msg_confirm += (f"📂 Dosar: {sheet_used}\n"
+                                f"🛒 **{item['detalii']}** ({item['brut']} RON)\n")
             else:
-                 msg_confirm += (f"📂 Dosar: {sheet_used}\n"
-                                 f"💰 Incasare: {item['brut']} RON\n")
+                msg_confirm += (f"📂 Dosar: {sheet_used}\n"
+                                f"💰 Incasare: {item['brut']} RON\n")
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=msg_confirm)
 
@@ -218,7 +208,7 @@ async def process_entry(update, context, text_input=None, image_file=None):
 # --- HANDLERS ---
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_file = await update.message.photo[-1].get_file()
-    caption = update.message.caption 
+    caption = update.message.caption
     await process_entry(update, context, text_input=caption, image_file=new_file)
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -226,7 +216,7 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 if __name__ == '__main__':
     keep_alive()
-    app_bot = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app_bot = ApplicationBuilder().token(settings.telegram_token).build()
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
     print("🤖 Bot Contabil v4 (2026/TVA 21%) ONLINE!")
