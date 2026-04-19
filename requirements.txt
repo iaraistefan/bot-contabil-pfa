@@ -5,3 +5,4 @@ oauth2client
 flask
 sqlalchemy
 psycopg2-binary
+pydantic-settings>=2.0,<3.0
