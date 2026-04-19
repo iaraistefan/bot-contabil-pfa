@@ -3,11 +3,12 @@ Wrapper subțire peste OpenAI pentru extragere documente.
 
 Responsabilități:
 - Construire messages (system + user, cu sau fără imagine).
-- Apel cu retry simplu și timeout implicit din SDK.
+- Apel cu timeout implicit din SDK.
 - Curățare markdown fences din răspuns.
 - Parsare JSON cu tratament explicit al erorilor.
+- Validare Pydantic a item-urilor extrase.
 
-NU decide politici de business. Doar extrage.
+NU decide politici de business. Doar extrage și validează forma.
 """
 
 import base64
@@ -20,6 +21,7 @@ from openai import OpenAI
 
 from config import settings
 from app.ai.prompts import PROMPT_VERSION, build_extraction_system_prompt
+from app.ai.schemas import validate_items, ValidationReport
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +40,15 @@ def extract_document(
     today_str: Optional[str] = None,
 ) -> dict:
     """
-    Rulează extragerea pe text și/sau imagine.
+    Rulează extragerea pe text și/sau imagine, apoi validează.
 
     Returns dict cu:
-        - "ok": bool — True dacă JSON-ul e parsabil
-        - "data": list | None — lista de items extrași (dacă ok)
-        - "raw_response": str — răspunsul brut de la model (pentru audit)
+        - "ok": bool — True dacă am ≥1 item valid după validare
+        - "items": list[ExtractionItem] — item-urile care au trecut validarea
+        - "validation_errors": list[str] — erori per item (dacă există)
+        - "raw_response": str — răspunsul brut de la model
         - "prompt_version": str
-        - "error": str | None — descrierea erorii dacă ok=False
+        - "error": str | None — eroare globală (OpenAI fail, JSON parse fail)
     """
     today_str = today_str or datetime.now().strftime("%d.%m.%Y")
     system_prompt = build_extraction_system_prompt(today_str)
@@ -79,7 +82,8 @@ def extract_document(
         logger.error(f"OpenAI call failed: {e}")
         return {
             "ok": False,
-            "data": None,
+            "items": [],
+            "validation_errors": [],
             "raw_response": "",
             "prompt_version": PROMPT_VERSION,
             "error": f"openai_error: {e}",
@@ -89,7 +93,6 @@ def extract_document(
     cleaned = _clean_json_response(raw_response)
     try:
         data = json.loads(cleaned)
-        # Garantăm că e listă — prompt-ul cere listă, dar uneori modelul întoarce un singur dict.
         if isinstance(data, dict):
             data = [data]
         if not isinstance(data, list):
@@ -98,16 +101,24 @@ def extract_document(
         logger.error(f"JSON parse failed: {e} | raw: {raw_response[:200]}")
         return {
             "ok": False,
-            "data": None,
+            "items": [],
+            "validation_errors": [],
             "raw_response": raw_response,
             "prompt_version": PROMPT_VERSION,
             "error": f"json_parse_error: {e}",
         }
 
+    # Validare Pydantic
+    report: ValidationReport = validate_items(data)
+
+    if report.has_errors:
+        logger.warning(f"Validation errors: {report.errors}")
+
     return {
-        "ok": True,
-        "data": data,
+        "ok": report.has_valid,
+        "items": report.valid_items,
+        "validation_errors": report.errors,
         "raw_response": raw_response,
         "prompt_version": PROMPT_VERSION,
-        "error": None,
+        "error": None if report.has_valid else "no_valid_items",
     }
