@@ -2,8 +2,8 @@
 Repository pentru Transaction.
 """
 
-from typing import Any, Dict, List, Optional
 from datetime import date
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -70,8 +70,32 @@ def list_for_period(
     return q.order_by(Transaction.occurred_on).all()
 
 
+def delete_for_document(
+    session: Session,
+    document_id: int,
+) -> int:
+    """
+    Șterge fizic tranzacțiile unui document (dacă nu sunt locked).
+    Returnează numărul de tranzacții șterse.
+    Folosit la /delete — documentul e în 'rejected', tranzacțiile dispar.
+    Nu ștergem tranzacțiile locked (perioadă fiscală închisă).
+    """
+    txs = (
+        session.query(Transaction)
+        .filter(
+            Transaction.document_id == document_id,
+            Transaction.locked == False,
+        )
+        .all()
+    )
+    count = len(txs)
+    for tx in txs:
+        session.delete(tx)
+    return count
+
+
 def to_dict(tx: Transaction) -> Dict[str, Any]:
-    """Serializare pentru audit. Apelat înainte de session.close()."""
+    """Serializare pentru audit."""
     return {
         "id": tx.id,
         "tx_type": tx.tx_type,
