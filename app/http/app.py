@@ -2,8 +2,7 @@
 Flask HTTP API pentru Bot Contabil PFA.
 """
 
-import csv
-import io
+import os as _os
 import logging
 from datetime import datetime
 from threading import Thread
@@ -20,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 flask_app = Flask(
     "bot_contabil_api",
-    template_folder="templates",
+    template_folder=_os.path.join(_os.path.dirname(__file__), "templates"),
+    static_folder=_os.path.join(_os.path.dirname(__file__), "static"),
 )
 
 if settings.env == "production":
@@ -108,7 +108,12 @@ def transactions_list(year: int, month: int):
             "period_month": tx.period_month,
             "document_id": tx.document_id,
         } for tx in txs]
-        return jsonify({"year": year, "month": month, "count": len(data), "transactions": data})
+        return jsonify({
+            "year": year,
+            "month": month,
+            "count": len(data),
+            "transactions": data,
+        })
     except Exception as e:
         logger.error(f"API transactions error {year}/{month}: {e}")
         return jsonify({"error": "internal error"}), 500
