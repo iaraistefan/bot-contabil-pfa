@@ -12,6 +12,7 @@ from app.ai import client as ai_client
 from app.services import posting
 from app.services import tax_engine
 from app.integrations import sheets
+from app.integrations.exports import csv_export
 import logging
 from datetime import datetime
 from typing import Optional
@@ -61,12 +62,8 @@ def ensure_user(update: Update):
             )
             if is_new:
                 audit_repo.write(
-                    session,
-                    entity_type="user",
-                    entity_id=user.id,
-                    action="create",
-                    user_id=user.id,
-                    source="user",
+                    session, entity_type="user", entity_id=user.id,
+                    action="create", user_id=user.id, source="user",
                     after={"telegram_id": user.telegram_id, "name": user.name},
                     note="auto-created from first Telegram message",
                 )
@@ -95,9 +92,11 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
                 "id": existing.id, "sha256": existing.sha256,
                 "created_at": existing.created_at, "is_duplicate": True,
             }
-            audit_repo.write(session, entity_type="source_file", entity_id=existing.id,
+            audit_repo.write(
+                session, entity_type="source_file", entity_id=existing.id,
                 action="dedup_hit", user_id=user_id, source="system",
-                note=f"duplicate upload; original created at {existing.created_at.isoformat()}")
+                note=f"duplicate upload; original created at {existing.created_at.isoformat()}",
+            )
             session.commit()
             return result
         ext = "jpg" if kind == "photo" else "bin"
@@ -107,10 +106,12 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
             telegram_file_id=telegram_file_id, mime=mime,
             bytes_size=len(file_bytes), storage_path=path,
         )
-        audit_repo.write(session, entity_type="source_file", entity_id=new_sf.id,
+        audit_repo.write(
+            session, entity_type="source_file", entity_id=new_sf.id,
             action="create", user_id=user_id, source="user",
             after={"kind": new_sf.kind, "sha256": new_sf.sha256,
-                   "bytes_size": new_sf.bytes_size, "storage_path": new_sf.storage_path})
+                   "bytes_size": new_sf.bytes_size, "storage_path": new_sf.storage_path},
+        )
         result = {
             "id": new_sf.id, "sha256": new_sf.sha256,
             "created_at": new_sf.created_at, "is_duplicate": False,
@@ -139,10 +140,12 @@ def persist_document(user_id, source_file_id, item, banca, raw_response, prompt_
             prompt_version=prompt_version, status="posted", confidence=1.0,
         )
         doc_id = doc.id
-        audit_repo.write(session, entity_type="document", entity_id=doc_id,
+        audit_repo.write(
+            session, entity_type="document", entity_id=doc_id,
             action="create", user_id=user_id, source="ai",
             after=documents_repo.to_dict(doc),
-            note=f"posted via AI extraction (prompt={prompt_version})")
+            note=f"posted via AI extraction (prompt={prompt_version})",
+        )
         session.commit()
         logger.info(f"New Document id={doc_id} tip={item.tip} brut={item.brut}")
         return doc_id
@@ -193,10 +196,40 @@ def sync_to_sheets(doc_id, row_data, date_str):
         session.close()
 
 
+def _parse_period_args(args, now: datetime):
+    """
+    Parsează argumentele lunii/anului dintr-o comandă Telegram.
+    Returnează (year, month) sau ridică ValueError.
+    Folosit de /raport și /export.
+    """
+    if len(args) == 0:
+        return now.year, now.month
+    elif len(args) == 1:
+        month = int(args[0])
+        if not 1 <= month <= 12:
+            raise ValueError("luna invalida")
+        return now.year, month
+    else:
+        month = int(args[0])
+        year = int(args[1])
+        if not 1 <= month <= 12:
+            raise ValueError("luna invalida")
+        if not 2020 <= year <= 2099:
+            raise ValueError("an invalid")
+        return year, month
+
+
+def _tx_count_label(n: int) -> str:
+    """'1 tranzacție', '2 tranzacții', etc."""
+    if n == 1:
+        return "1 tranzacție"
+    return f"{n} tranzacții"
+
+
 # --- COMMAND HANDLERS ---
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = ensure_user(update)
+    ensure_user(update)
     name = update.effective_user.first_name or "șofer"
     await update.message.reply_text(
         f"👋 Bun venit, {name}!\n\n"
@@ -205,8 +238,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✍️ Text (ex: *am dat 50 lei bacsis cash*) → înregistrez manual\n\n"
         f"Comenzi:\n"
         f"/raport — raport luna curentă\n"
-        f"/raport 04 — raport luna aprilie\n"
         f"/raport 04 2026 — raport specific\n"
+        f"/export 04 2026 — export CSV pentru Excel\n"
         f"/ajutor — această listă",
         parse_mode="Markdown"
     )
@@ -218,6 +251,7 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/raport — raport luna curentă\n"
         "/raport 04 — raport luna aprilie\n"
         "/raport 04 2026 — raport specific\n"
+        "/export 04 2026 — CSV pentru Excel/contabil\n"
         "/ajutor — această listă\n\n"
         "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber.",
         parse_mode="Markdown"
@@ -225,90 +259,144 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_raport(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /raport [luna] [an]
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
+        return
 
-    Exemple:
-      /raport            → luna curentă
-      /raport 04         → aprilie, anul curent
-      /raport 04 2026    → aprilie 2026
+    now = datetime.now()
+    try:
+        year, month = _parse_period_args(context.args or [], now)
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "⚠️ Format incorect.\nExemple:\n  /raport\n  /raport 04\n  /raport 04 2026"
+        )
+        return
+
+    await update.message.reply_text("🔄 Calculez raportul...")
+
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
+
+        if totals["tx_count"] == 0:
+            await update.message.reply_text(
+                f"📭 Nu am găsit tranzacții pentru "
+                f"{tax_engine.LUNI_RO.get(month, str(month))} {year}.\n\n"
+                f"Trimite bonuri și facturi, apoi rulează din nou /raport."
+            )
+            return
+
+        tp = tax_periods_repo.get_or_create(session, user_id=user_id, year=year, month=month)
+        tax_periods_repo.save_totals(session, tp, totals)
+        session.commit()
+
+        msg = tax_engine.format_report_message(totals)
+        # Fix gramatică inline în mesaj
+        msg = msg.replace(
+            f"_{totals['tx_count']} tranzacții procesate_",
+            f"_{_tx_count_label(totals['tx_count'])} procesate_",
+        )
+        await update.message.reply_text(msg, parse_mode="Markdown")
+        logger.info(f"Raport {year}/{month:02d} generat pentru user_id={user_id}")
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error computing period {year}/{month}: {e}")
+        await update.message.reply_text("❌ Eroare la calculul raportului. Încearcă din nou.")
+    finally:
+        session.close()
+
+
+async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /export [luna] [an]
+    Generează și trimite 2 fișiere CSV:
+    1. tranzactii_<an>_<luna>.csv — toate tranzacțiile cu detalii
+    2. rezumat_fiscal_<an>_<luna>.csv — totaluri pentru contabil
     """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
         return
 
-    # Parsare argumente
     now = datetime.now()
-    args = context.args or []
-
     try:
-        if len(args) == 0:
-            year, month = now.year, now.month
-        elif len(args) == 1:
-            month = int(args[0])
-            year = now.year
-            if not 1 <= month <= 12:
-                raise ValueError("luna invalida")
-        elif len(args) >= 2:
-            month = int(args[0])
-            year = int(args[1])
-            if not 1 <= month <= 12:
-                raise ValueError("luna invalida")
-            if not 2020 <= year <= 2099:
-                raise ValueError("an invalid")
-        else:
-            raise ValueError()
+        year, month = _parse_period_args(context.args or [], now)
     except (ValueError, IndexError):
         await update.message.reply_text(
-            "⚠️ Format incorect.\n"
-            "Exemple:\n"
-            "  /raport\n"
-            "  /raport 04\n"
-            "  /raport 04 2026"
+            "⚠️ Format incorect.\nExemple:\n  /export\n  /export 04\n  /export 04 2026"
         )
         return
 
-    await update.message.reply_text("🔄 Calculez raportul...")
+    month_name = tax_engine.LUNI_RO.get(month, str(month))
+    await update.message.reply_text(f"🔄 Generez CSV pentru {month_name} {year}...")
 
+    session = get_session()
     try:
-        session = get_session()
-        try:
-            totals = tax_engine.compute_period(
-                session, user_id=user_id, year=year, month=month,
+        # Luăm tranzacțiile din DB
+        txs = tx_repo.list_for_period(session, user_id=user_id, year=year, month=month)
+
+        if not txs:
+            await update.message.reply_text(
+                f"📭 Nu am găsit tranzacții pentru {month_name} {year}.\n"
+                f"Trimite documente mai întâi."
             )
+            return
 
-            if totals["tx_count"] == 0:
-                await update.message.reply_text(
-                    f"📭 Nu am găsit tranzacții pentru "
-                    f"{tax_engine.LUNI_RO.get(month, str(month))} {year}.\n\n"
-                    f"Trimite bonuri și facturi pentru această lună, "
-                    f"apoi rulează din nou /raport."
-                )
-                return
+        # Generăm totalurile (pentru rezumat)
+        totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
 
-            # Salvăm snapshot-ul în DB
-            tp = tax_periods_repo.get_or_create(
-                session, user_id=user_id, year=year, month=month,
-            )
-            tax_periods_repo.save_totals(session, tp, totals)
-            session.commit()
+        # Generăm CSV-urile în memorie
+        csv_tx = csv_export.generate_transactions_csv(txs, year, month)
+        csv_rez = csv_export.generate_rezumat_csv(totals)
 
-            # Formatăm și trimitem mesajul
-            msg = tax_engine.format_report_message(totals)
-            await update.message.reply_text(msg, parse_mode="Markdown")
-            logger.info(f"Raport {year}/{month:02d} generat pentru user_id={user_id}")
+        fname_tx = csv_export.filename_transactions(year, month)
+        fname_rez = csv_export.filename_rezumat(year, month)
 
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error computing period {year}/{month}: {e}")
-            await update.message.reply_text("❌ Eroare la calculul raportului. Încearcă din nou.")
-        finally:
-            session.close()
+        # Trimitem în Telegram ca fișiere
+        import io as _io
+        await update.message.reply_document(
+            document=_io.BytesIO(csv_tx),
+            filename=fname_tx,
+            caption=f"📊 Tranzacții {month_name} {year} — {_tx_count_label(len(txs))}",
+        )
+        await update.message.reply_document(
+            document=_io.BytesIO(csv_rez),
+            filename=fname_rez,
+            caption=f"📋 Rezumat fiscal {month_name} {year}",
+        )
+
+        # Log export în DB
+        from app.models import ExportLog
+        log_tx = ExportLog(
+            target="csv",
+            entity_type="period",
+            entity_id=0,
+            external_ref=fname_tx,
+            status="ok",
+            response_msg=f"{len(txs)} tranzacții",
+        )
+        log_rez = ExportLog(
+            target="csv",
+            entity_type="period",
+            entity_id=0,
+            external_ref=fname_rez,
+            status="ok",
+            response_msg=f"rezumat {month_name} {year}",
+        )
+        session.add(log_tx)
+        session.add(log_rez)
+        session.commit()
+
+        logger.info(f"CSV export {year}/{month:02d} trimis user_id={user_id}: {len(txs)} tx")
 
     except Exception as e:
-        logger.error(f"Unexpected error in handle_raport: {e}")
-        await update.message.reply_text("❌ Eroare neașteptată. Încearcă din nou.")
+        session.rollback()
+        logger.error(f"Error in handle_export {year}/{month}: {e}")
+        await update.message.reply_text("❌ Eroare la generarea CSV. Încearcă din nou.")
+    finally:
+        session.close()
 
 
 # --- PROCESARE MESAJ ---
@@ -379,7 +467,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
             sheet_used = sync_to_sheets(doc_id=doc_id, row_data=row, date_str=data_doc) if doc_id else None
 
             doc_tag = f" #{doc_id}" if doc_id else ""
-            tx_tag = f" ({len(tx_ids)} tx)" if tx_ids else ""
+            tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
 
             if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
@@ -457,12 +545,11 @@ if __name__ == '__main__':
     keep_alive()
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
 
-    # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor))
     app_bot.add_handler(CommandHandler("raport", handle_raport))
+    app_bot.add_handler(CommandHandler("export", handle_export))
 
-    # Mesaje
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
 
