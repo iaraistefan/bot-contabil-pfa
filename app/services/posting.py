@@ -4,24 +4,19 @@ Serviciu de posting: transformă un Document validat în tranzacții contabile.
 Reguli pentru PFA Ridesharing Romania (2026):
 
 VENIT:
-  → 1x INCOME / ride_revenue (sau tip_revenue dacă cash > brut*0.9)
-  → payment_method: APP dacă cash=0, CASH dacă cash>0, mixt dacă ambele
+  → 1x INCOME / ride_revenue
+  → payment_method: APP sau CASH sau mixt
 
 CHELTUIALA:
   → 1x EXPENSE / categorie dedusă din platforma+detalii
-  → deductibility_pct:
-      - combustibil (fuel): 50%
-      - altele (maintenance, registration, other): 100%
-  → vat_treatment: STANDARD dacă TVA>0, NA altfel
+  → deductibility_pct calculat prin tax_rules
 
-FACTURA_COMISION (Bolt/Uber):
-  → 1x EXPENSE / platform_commission
-  → vat_treatment: REVERSE_CHARGE (servicii intracomunitare, taxare inversă)
-  → deductibility_pct: 100%
-  → TVA: calculat separat la pasul 12 prin tax_rules
-    (pentru acum nu creăm VAT_OUT/IN — e placeholder la pasul 12)
+FACTURA_COMISION (Bolt/Uber intracomunitare):
+  → 1x EXPENSE / platform_commission (reverse charge)
+  → 1x VAT_OUT / reverse_charge_vat (TVA de plătit la ANAF → D301)
+  → 1x VAT_IN  / reverse_charge_vat (TVA deductibil dacă ești plătitor)
 
-NOTE: Funcțiile sunt PURE în sensul că nu fac commit — sesiunea e la apelant.
+NOTE: Funcțiile nu fac commit — sesiunea e la apelant.
 """
 
 import logging
@@ -30,27 +25,26 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Transaction
 from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
+from app.domain import tax_rules
 
 logger = logging.getLogger(__name__)
 
 
 # --- Constante categorii ---
 CAT_RIDE_REVENUE = "ride_revenue"
-CAT_TIP_REVENUE = "tip_revenue"
 CAT_PLATFORM_COMMISSION = "platform_commission"
 CAT_FUEL = "fuel"
 CAT_MAINTENANCE = "maintenance"
 CAT_REGISTRATION = "registration"
 CAT_OTHER_EXPENSE = "other_expense"
+CAT_REVERSE_CHARGE_VAT = "reverse_charge_vat"
 
-# Cuvinte cheie pentru a detecta categoria cheltuielii din detalii + platforma
 _FUEL_KEYWORDS = {
     "motorina", "benzina", "combustibil", "carburant", "gpl",
     "euro diesel", "euro premium", "omv", "petrom", "rompetrol",
-    "mol", "lukoil", "socar",
+    "mol", "lukoil", "socar", "lukoil", "diesel",
 }
 _REGISTRATION_KEYWORDS = {
     "autorizat", "inregistrar", "ecuson", "autorizatie", "rutier",
@@ -68,8 +62,7 @@ def _detect_registration(platforma: Optional[str], detalii: Optional[str]) -> bo
     return any(kw in text for kw in _REGISTRATION_KEYWORDS)
 
 
-def _parse_occurred_on(data_doc: Optional[str]):
-    """Parsare DD.MM.YYYY → date. None dacă eșuează."""
+def _parse_occurred_on(data_doc: Optional[str]) -> Optional[date]:
     if not data_doc:
         return None
     try:
@@ -95,10 +88,8 @@ def post_document(
     data_doc: Optional[str],
 ) -> List[int]:
     """
-    Derivă tranzacțiile contabile dintr-un document și le inserează în DB.
+    Derivă tranzacțiile contabile dintr-un document.
     Întoarce lista de tx_id-uri create. Commit la apelant.
-
-    Nu aruncă excepții — logăm și întoarcem [] în caz de eroare.
     """
     occurred_on = _parse_occurred_on(data_doc)
     period_year = occurred_on.year if occurred_on else None
@@ -123,14 +114,13 @@ def post_document(
         elif tip == "FACTURA_COMISION":
             tx_ids += _post_factura_comision(
                 session, user_id=user_id, document_id=document_id,
-                platforma=platforma, comision=comision, tva=tva,
+                platforma=platforma, comision=comision,
                 occurred_on=occurred_on, period_year=period_year, period_month=period_month,
             )
 
         else:
-            logger.warning(f"Unknown tip '{tip}' for document_id={document_id} — no transactions created")
+            logger.warning(f"Unknown tip '{tip}' for document_id={document_id}")
 
-        # Audit pentru fiecare tranzacție creată
         for tx_id in tx_ids:
             audit_repo.write(
                 session,
@@ -149,20 +139,17 @@ def post_document(
     return tx_ids
 
 
-# --- Funcții private per tip ---
-
 def _post_venit(
     session, *, user_id, document_id, platforma, brut, net, cash,
     occurred_on, period_year, period_month,
 ) -> List[int]:
-    """VENIT → 1 tranzacție INCOME."""
-    # Dacă cash ≈ brut → plată cash. Dacă cash=0 → plată app. Altfel → mixt (APP pentru simplitate).
+    """VENIT → 1x INCOME."""
     if cash >= brut * 0.99:
         pay_method = "CASH"
     elif cash == 0:
         pay_method = "APP"
     else:
-        pay_method = "APP"  # venit mixt — simplificăm
+        pay_method = "APP"
 
     tx = tx_repo.create(
         session,
@@ -189,13 +176,15 @@ def _post_cheltuiala(
     session, *, user_id, document_id, platforma, detalii, brut, tva,
     occurred_on, period_year, period_month,
 ) -> List[int]:
-    """CHELTUIALA → 1 tranzacție EXPENSE cu deductibilitate corectă."""
+    """CHELTUIALA → 1x EXPENSE cu deductibilitate calculată prin tax_rules."""
     is_fuel = _detect_fuel(platforma, detalii)
     is_reg = _detect_registration(platforma, detalii)
 
     if is_fuel:
         category = CAT_FUEL
-        deductibility_pct = 50
+        # Folosim tax_rules pentru deductibilitate — nu mai e hardcodat
+        deductible_amount = tax_rules.fuel_deductible_share(brut)
+        deductibility_pct = tax_rules.FUEL_DEDUCTIBLE_PCT
     elif is_reg:
         category = CAT_REGISTRATION
         deductibility_pct = 100
@@ -216,7 +205,7 @@ def _post_cheltuiala(
         amount_net=brut - tva,
         currency="RON",
         deductibility_pct=deductibility_pct,
-        payment_method="CARD",  # presupunem card; în pasul 11 detectăm din context
+        payment_method="CARD",
         counterparty=platforma or "N/A",
         vat_treatment=vat_treatment,
         occurred_on=occurred_on,
@@ -227,21 +216,24 @@ def _post_cheltuiala(
 
 
 def _post_factura_comision(
-    session, *, user_id, document_id, platforma, comision, tva,
+    session, *, user_id, document_id, platforma, comision,
     occurred_on, period_year, period_month,
 ) -> List[int]:
     """
-    FACTURA_COMISION → 1 tranzacție EXPENSE (reverse charge).
-    TVA_OUT + TVA_IN vine la pasul 12 prin tax_rules.
+    FACTURA_COMISION → 3 tranzacții:
+    1. EXPENSE comision (baza impozabilă)
+    2. VAT_OUT reverse charge (TVA de plătit la ANAF — D301)
+    3. VAT_IN reverse charge (TVA deductibil — D301, net=0 pentru neplătitori)
     """
-    tx = tx_repo.create(
+    # 1. Comisionul propriu-zis
+    tx_expense = tx_repo.create(
         session,
         user_id=user_id,
         document_id=document_id,
         tx_type="EXPENSE",
         category=CAT_PLATFORM_COMMISSION,
         amount_brut=comision,
-        amount_vat=0.0,    # TVA e 0 pe factură (reverse charge — l-ai plătit tu la ANAF)
+        amount_vat=0.0,
         amount_net=comision,
         currency="RON",
         deductibility_pct=100,
@@ -252,4 +244,54 @@ def _post_factura_comision(
         period_year=period_year,
         period_month=period_month,
     )
-    return [tx.id]
+
+    # 2. TVA colectat prin taxare inversă (îl datorezi la ANAF)
+    vat_amount = tax_rules.apply_reverse_charge(comision)
+    tx_vat_out = tx_repo.create(
+        session,
+        user_id=user_id,
+        document_id=document_id,
+        tx_type="VAT_OUT",
+        category=CAT_REVERSE_CHARGE_VAT,
+        amount_brut=vat_amount,
+        amount_vat=vat_amount,
+        amount_net=0.0,
+        currency="RON",
+        deductibility_pct=0,
+        payment_method="APP",
+        counterparty=platforma or "Platform",
+        vat_treatment="REVERSE_CHARGE",
+        occurred_on=occurred_on,
+        period_year=period_year,
+        period_month=period_month,
+    )
+
+    # 3. TVA deductibil (îl recuperezi — net 0 pentru PFA neplătitor de TVA)
+    # La pasul 13 vom condiționa asta de user.regim_tva.
+    # Momentan: creăm tranzacția pentru orice user (worst case: intrare cu 0 impact).
+    tx_vat_in = tx_repo.create(
+        session,
+        user_id=user_id,
+        document_id=document_id,
+        tx_type="VAT_IN",
+        category=CAT_REVERSE_CHARGE_VAT,
+        amount_brut=vat_amount,
+        amount_vat=vat_amount,
+        amount_net=0.0,
+        currency="RON",
+        deductibility_pct=100,
+        payment_method="APP",
+        counterparty=platforma or "Platform",
+        vat_treatment="REVERSE_CHARGE",
+        occurred_on=occurred_on,
+        period_year=period_year,
+        period_month=period_month,
+    )
+
+    logger.info(
+        f"FACTURA_COMISION doc_id={document_id}: "
+        f"comision={comision} RON, VAT_reverse={vat_amount} RON "
+        f"→ tx_ids={[tx_expense.id, tx_vat_out.id, tx_vat_in.id]}"
+    )
+
+    return [tx_expense.id, tx_vat_out.id, tx_vat_in.id]
