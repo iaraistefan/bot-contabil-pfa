@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot Contabil PFA — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #f8fafc;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 20px;
+    }
+
+    /* Period selector */
+    .period-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .period-bar select, .period-bar button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .period-bar button {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .period-bar button:hover { background: #2563eb; }
+
+    .btn-export {
+      background: #10b981 !important;
+      border-color: #10b981 !important;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 600px) {
+      .cards { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #334155;
+    }
+
+    .card-label {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+
+    .card-value.income { color: #34d399; }
+    .card-value.expense { color: #f87171; }
+    .card-value.vat { color: #fbbf24; }
+    .card-value.profit { color: #60a5fa; }
+    .card-value.profit.negative { color: #f87171; }
+
+    .card-sub {
+      font-size: 0.72rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    /* Section title */
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+
+    /* Table */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    thead { background: #1e293b; }
+
+    th {
+      padding: 10px 12px;
+      text-align: left;
+      color: #94a3b8;
+      font-weight: 600;
+      white-space: nowrap;
+      border-bottom: 1px solid #334155;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1e293b;
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1e293b88; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .badge-INCOME { background: #064e3b; color: #34d399; }
+    .badge-EXPENSE { background: #450a0a; color: #f87171; }
+    .badge-VAT_OUT { background: #451a03; color: #fbbf24; }
+    .badge-VAT_IN { background: #1c1917; color: #a8a29e; }
+    .badge-ADJUSTMENT { background: #1e1b4b; color: #a5b4fc; }
+
+    .amount { font-variant-numeric: tabular-nums; }
+    .amount.positive { color: #34d399; }
+    .amount.negative { color: #f87171; }
+    .amount.neutral { color: #94a3b8; }
+
+    /* Loading / empty */
+    .state-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid #334155;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-bar {
+      background: #450a0a;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #475569;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #1e293b;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🧾 Bot Contabil PFA</h1>
+  <p class="subtitle">Dashboard fiscal — date în timp real din Postgres</p>
+
+  <!-- Period selector -->
+  <div class="period-bar">
+    <select id="sel-month">
+      <option value="1">Ianuarie</option>
+      <option value="2">Februarie</option>
+      <option value="3">Martie</option>
+      <option value="4" selected>Aprilie</option>
+      <option value="5">Mai</option>
+      <option value="6">Iunie</option>
+      <option value="7">Iulie</option>
+      <option value="8">August</option>
+      <option value="9">Septembrie</option>
+      <option value="10">Octombrie</option>
+      <option value="11">Noiembrie</option>
+      <option value="12">Decembrie</option>
+    </select>
+    <select id="sel-year">
+      <option value="2025">2025</option>
+      <option value="2026" selected>2026</option>
+    </select>
+    <button onclick="loadData()">🔄 Actualizează</button>
+    <a id="btn-export-tx" class="period-bar btn-export" style="display:none" target="_blank">
+      ⬇️ CSV Tranzacții
+    </a>
+    <a id="btn-export-rez" class="period-bar btn-export" style="display:none" target="_blank">
+      ⬇️ CSV Rezumat
+    </a>
+  </div>
+
+  <!-- Error bar -->
+  <div class="error-bar" id="error-bar"></div>
+
+  <!-- Summary cards -->
+  <div class="section-title">Sumar</div>
+  <div class="cards" id="cards">
+    <div class="card">
+      <div class="card-label">💰 Venituri</div>
+      <div class="card-value income" id="c-income">—</div>
+      <div class="card-sub" id="c-income-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">💸 Cheltuieli</div>
+      <div class="card-value expense" id="c-expense">—</div>
+      <div class="card-sub" id="c-expense-sub">deductibile</div>
+    </div>
+    <div class="card">
+      <div class="card-label">🏛️ TVA D301</div>
+      <div class="card-value vat" id="c-vat">—</div>
+      <div class="card-sub">reverse charge</div>
+    </div>
+    <div class="card">
+      <div class="card-label">📈 Profit estimat</div>
+      <div class="card-value profit" id="c-profit">—</div>
+      <div class="card-sub">venituri − deductibile</div>
+    </div>
+  </div>
+
+  <!-- Transactions table -->
+  <div class="section-title">Tranzacții <span id="tx-count" style="color:#475569"></span></div>
+  <div class="table-wrap">
+    <div class="state-msg" id="table-state">
+      Selectează o perioadă și apasă Actualizează.
+    </div>
+    <table id="tx-table" style="display:none">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data</th>
+          <th>Tip</th>
+          <th>Categorie</th>
+          <th>Brut (RON)</th>
+          <th>Deductibil</th>
+          <th>Partener</th>
+          <th>TVA</th>
+        </tr>
+      </thead>
+      <tbody id="tx-body"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Bot Contabil PFA v5 · Date din Postgres · Actualizate live
+  </footer>
+
+  <script>
+    const MONTH_NAMES = {
+      1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",
+      5:"Mai",6:"Iunie",7:"Iulie",8:"August",
+      9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"
+    };
+
+    function fmt(val) {
+      if (val == null) return "—";
+      return Number(val).toLocaleString("ro-RO", {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+
+    function setCards(totals) {
+      document.getElementById("c-income").textContent = fmt(totals.income_total) + " RON";
+      document.getElementById("c-income-sub").textContent =
+        totals.income_tips > 0 ? `din care bacșișuri ${fmt(totals.income_tips)} RON` : "";
+
+      document.getElementById("c-expense").textContent = fmt(totals.expense_deductible_total) + " RON";
+      document.getElementById("c-expense-sub").textContent =
+        `brut ${fmt(totals.expense_total_brut)} RON`;
+
+      document.getElementById("c-vat").textContent =
+        totals.vat_out_total > 0 ? fmt(totals.vat_out_total) + " RON" : "0.00 RON";
+
+      const profitEl = document.getElementById("c-profit");
+      profitEl.textContent = fmt(totals.profit_estimated) + " RON";
+      profitEl.className = "card-value profit" + (totals.profit_estimated < 0 ? " negative" : "");
+    }
+
+    function setTable(txs) {
+      const tbody = document.getElementById("tx-body");
+      tbody.innerHTML = "";
+
+      txs.forEach(tx => {
+        const deductible = tx.deductibility_pct < 100
+          ? `${fmt(tx.amount_brut * tx.deductibility_pct / 100)} (${tx.deductibility_pct}%)`
+          : "100%";
+
+        const amtClass = tx.tx_type === "INCOME" ? "positive"
+                       : tx.tx_type.startsWith("VAT") ? "neutral"
+                       : "negative";
+
+        tbody.innerHTML += `
+          <tr>
+            <td style="color:#475569">${tx.id}</td>
+            <td>${tx.occurred_on || "—"}</td>
+            <td><span class="badge badge-${tx.tx_type}">${tx.tx_type}</span></td>
+            <td style="color:#cbd5e1">${tx.category}</td>
+            <td class="amount ${amtClass}">${fmt(tx.amount_brut)}</td>
+            <td style="color:#94a3b8;font-size:0.78rem">${deductible}</td>
+            <td style="color:#94a3b8">${tx.counterparty || "—"}</td>
+            <td style="color:#94a3b8;font-size:0.78rem">${tx.vat_treatment || "NA"}</td>
+          </tr>`;
+      });
+    }
+
+    function showError(msg) {
+      const bar = document.getElementById("error-bar");
+      bar.textContent = "❌ " + msg;
+      bar.style.display = "block";
+    }
+
+    function hideError() {
+      document.getElementById("error-bar").style.display = "none";
+    }
+
+    async function loadData() {
+      hideError();
+      const month = document.getElementById("sel-month").value;
+      const year = document.getElementById("sel-year").value;
+
+      // Reset state
+      document.getElementById("table-state").innerHTML =
+        '<span class="spinner"></span> Se încarcă...';
+      document.getElementById("table-state").style.display = "block";
+      document.getElementById("tx-table").style.display = "none";
+      document.getElementById("tx-count").textContent = "";
+      ["c-income","c-expense","c-vat","c-profit"].forEach(id =>
+        document.getElementById(id).textContent = "…"
+      );
+
+      // Update export links
+      document.getElementById("btn-export-tx").href =
+        `/api/v1/transactions/export/${year}/${month}`;
+      document.getElementById("btn-export-rez").href =
+        `/api/v1/period/export/${year}/${month}`;
+
+      try {
+        // Fetch period totals + transactions in parallel
+        const [rPeriod, rTxs] = await Promise.all([
+          fetch(`/api/v1/period/${year}/${month}`),
+          fetch(`/api/v1/transactions/${year}/${month}`)
+        ]);
+
+        if (!rPeriod.ok || !rTxs.ok) throw new Error("Eroare server API");
+
+        const totals = await rPeriod.json();
+        const txData = await rTxs.json();
+
+        setCards(totals);
+
+        const txs = txData.transactions || [];
+        document.getElementById("tx-count").textContent =
+          txs.length > 0 ? `(${txs.length})` : "";
+
+        if (txs.length === 0) {
+          document.getElementById("table-state").textContent =
+            `📭 Nicio tranzacție în ${MONTH_NAMES[+month]} ${year}.`;
+        } else {
+          document.getElementById("table-state").style.display = "none";
+          document.getElementById("tx-table").style.display = "table";
+          setTable(txs);
+        }
+
+        // Show export buttons
+        document.getElementById("btn-export-tx").style.display = "inline-flex";
+        document.getElementById("btn-export-rez").style.display = "inline-flex";
+
+      } catch (err) {
+        showError("Nu s-a putut încărca datele. Verifică conexiunea.");
+        document.getElementById("table-state").textContent = "⚠️ Eroare la încărcare.";
+      }
+    }
+
+    // Set current month/year on load
+    (function () {
+      const now = new Date();
+      const m = document.getElementById("sel-month");
+      const y = document.getElementById("sel-year");
+      m.value = now.getMonth() + 1;
+      if ([...y.options].some(o => o.value == now.getFullYear())) {
+        y.value = now.getFullYear();
+      }
+      loadData();
+    })();
+  </script>
+</body>
+  </html>
