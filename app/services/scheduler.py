@@ -1,32 +1,19 @@
 """
-Scheduler pentru reminder-uri săptămânale.
-
-Folosește APScheduler (deja disponibil sau adăugat în requirements.txt).
-Rulează în background thread, independent de bot și Flask.
-
-Funcționalitate:
-- În fiecare Luni dimineață (08:00 Romania) → verifică dacă user-ul
-  a încărcat documente în ultimele 7 zile.
-- Dacă NU → trimite reminder Telegram.
-- Dacă DA → trimite confirmare scurtă cu statistici.
-- În ziua de 20 a fiecărei luni → alertă D301/D390 dacă există facturi Bolt.
-- Pe 10 mai în fiecare an → alertă Declarație Unică (termen 25 mai).
+Scheduler pentru reminder-uri și monitorizare fiscală.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 logger = logging.getLogger(__name__)
-
 ROMANIA_TZ = pytz.timezone("Europe/Bucharest")
 
 
 def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> None:
-    """Trimite mesaj Telegram sincron (pentru scheduler)."""
     import requests
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
@@ -34,19 +21,16 @@ def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> None:
             "chat_id": chat_id,
             "text": text,
             "parse_mode": "Markdown",
-        }, timeout=10)
+        }, timeout=15)
         resp.raise_for_status()
     except Exception as e:
-        logger.error(f"Scheduler send_message failed: {e}")
+        logger.error(f"Scheduler send_message failed for chat_id={chat_id}: {e}")
 
 
 def check_and_remind(bot_token: str) -> None:
-    """
-    Verifică toți userii activi și trimite reminder-uri dacă e cazul.
-    Apelat automat de scheduler în fiecare Luni la 08:00.
-    """
+    """Reminder săptămânal — Luni 08:00."""
     from db import get_session
-    from app.models import User, Document, Transaction
+    from app.models import User, Document
 
     session = get_session()
     try:
@@ -58,7 +42,6 @@ def check_and_remind(bot_token: str) -> None:
             if not user.telegram_id:
                 continue
 
-            # Câte documente în ultima săptămână?
             recent_docs = (
                 session.query(Document)
                 .filter(
@@ -69,7 +52,6 @@ def check_and_remind(bot_token: str) -> None:
                 .count()
             )
 
-            # Câte documente total?
             total_docs = (
                 session.query(Document)
                 .filter(Document.user_id == user.id, Document.status != "rejected")
@@ -77,7 +59,6 @@ def check_and_remind(bot_token: str) -> None:
             )
 
             if recent_docs == 0:
-                # Niciun document în ultimele 7 zile → reminder
                 msg = (
                     f"⏰ *Reminder săptămânal — Contabil PFA*\n\n"
                     f"Nu ai înregistrat niciun document în ultimele 7 zile.\n\n"
@@ -86,32 +67,28 @@ def check_and_remind(bot_token: str) -> None:
                     f"• Facturi comision Bolt/Uber\n"
                     f"• Screenshot câștiguri din aplicație\n\n"
                     f"📊 Total documente până acum: *{total_docs}*\n\n"
-                    f"_Datele neînregistrate la timp pot cauza probleme la D301 și Declarația Unică._"
+                    f"_Datele neînregistrate la timp pot cauza probleme la D301._"
                 )
             else:
-                # Documente existente → confirmare pozitivă
                 msg = (
                     f"✅ *Săptămâna aceasta — Contabil PFA*\n\n"
                     f"Ai înregistrat *{recent_docs} document{'e' if recent_docs > 1 else ''}* "
                     f"în ultimele 7 zile. Bravo!\n\n"
-                    f"📊 Total: *{total_docs}* documente\n\n"
-                    f"Folosește /raport pentru a vedea situația lunii curente."
+                    f"📊 Total: *{total_docs}* documente\n"
+                    f"Folosește /raport pentru situația lunii curente."
                 )
 
             _send_telegram_message(bot_token, user.telegram_id, msg)
-            logger.info(f"Reminder sent to user_id={user.id} (recent_docs={recent_docs})")
+            logger.info(f"Weekly reminder sent to user_id={user.id}")
 
     except Exception as e:
-        logger.error(f"Scheduler check_and_remind error: {e}")
+        logger.error(f"check_and_remind error: {e}")
     finally:
         session.close()
 
 
 def check_fiscal_deadlines(bot_token: str) -> None:
-    """
-    Trimite alertă fiscală pe 20 a fiecărei luni.
-    Verifică dacă există facturi Bolt în luna curentă → D301/D390 alert.
-    """
+    """Alertă termene fiscale — ziua 20 a fiecărei luni."""
     from db import get_session
     from app.models import User, Transaction
     from app.domain.fiscal_calendar import format_fiscal_message
@@ -122,12 +99,9 @@ def check_fiscal_deadlines(bot_token: str) -> None:
     session = get_session()
     try:
         users = session.query(User).all()
-
         for user in users:
             if not user.telegram_id:
                 continue
-
-            # Verifică dacă există tranzacții REVERSE_CHARGE în luna curentă
             has_bolt = (
                 session.query(Transaction)
                 .filter(
@@ -139,25 +113,99 @@ def check_fiscal_deadlines(bot_token: str) -> None:
                 )
                 .count()
             ) > 0
-
             msg = format_fiscal_message(year, month, has_bolt_invoice=has_bolt)
             _send_telegram_message(bot_token, user.telegram_id, msg)
-            logger.info(f"Fiscal alert sent to user_id={user.id} (has_bolt={has_bolt})")
+            logger.info(f"Fiscal deadline alert sent to user_id={user.id}")
+    except Exception as e:
+        logger.error(f"check_fiscal_deadlines error: {e}")
+    finally:
+        session.close()
+
+
+def run_fiscal_monitoring(bot_token: str) -> None:
+    """
+    Monitorizare legislativă cu OpenAI Web Search.
+    Rulează ziua 1 a fiecărei luni, 07:00.
+    """
+    from db import get_session
+    from app.models import User, FiscalAlert
+    from app.ai.fiscal_monitor import run_fiscal_research, format_alert_telegram
+
+    now = datetime.now(ROMANIA_TZ)
+    year, month = now.year, now.month
+
+    logger.info(f"Running fiscal monitoring for {year}/{month:02d}...")
+
+    session = get_session()
+    try:
+        users = session.query(User).all()
+        if not users:
+            logger.info("No users found for fiscal monitoring.")
+            return
+
+        # Research o singură dată — același rezultat pentru toți userii
+        result = run_fiscal_research(year, month)
+
+        for user in users:
+            if not user.telegram_id:
+                continue
+
+            # Salvăm alerta în DB
+            alert = FiscalAlert(
+                user_id=user.id,
+                research_year=year,
+                research_month=month,
+                title=result.get("title", "Research lunar"),
+                summary=result.get("summary", ""),
+                full_response=result.get("raw_response", "")[:5000],
+                sources_json=[
+                    {
+                        "url": c.get("source_url", ""),
+                        "name": c.get("source_name", ""),
+                    }
+                    for c in result.get("changes", [])
+                    if c.get("source_url")
+                ],
+                urgency=result.get("urgency", "none"),
+                has_changes=result.get("has_changes", False),
+                seen=False,
+            )
+            session.add(alert)
+            session.flush()
+
+            # Trimitem alertă Telegram doar dacă sunt modificări relevante
+            telegram_msg = format_alert_telegram(result)
+            if telegram_msg:
+                _send_telegram_message(bot_token, user.telegram_id, telegram_msg)
+                logger.info(
+                    f"Fiscal alert sent to user_id={user.id} "
+                    f"urgency={result.get('urgency')}"
+                )
+            else:
+                # Nicio modificare — trimitem o confirmare discretă
+                _send_telegram_message(
+                    bot_token, user.telegram_id,
+                    f"✅ *Monitorizare fiscală {now.strftime('%B %Y')}*\n\n"
+                    f"Nu am găsit modificări legislative relevante pentru PFA-ul tău "
+                    f"în această lună.\n\n"
+                    f"_Verificare automată efectuată pe ANAF.ro și Monitorul Oficial._"
+                )
+
+        session.commit()
+        logger.info(f"Fiscal monitoring complete for {year}/{month:02d}")
 
     except Exception as e:
-        logger.error(f"Scheduler check_fiscal_deadlines error: {e}")
+        session.rollback()
+        logger.error(f"run_fiscal_monitoring error: {e}")
     finally:
         session.close()
 
 
 def start_scheduler(bot_token: str) -> BackgroundScheduler:
-    """
-    Pornește scheduler-ul în background.
-    Returnează instanța pentru a putea fi oprită dacă e nevoie.
-    """
+    """Pornește toate job-urile schedulerului."""
     scheduler = BackgroundScheduler(timezone=ROMANIA_TZ)
 
-    # Reminder săptămânal: Luni 08:00 Romania
+    # Reminder săptămânal: Luni 08:00
     scheduler.add_job(
         func=lambda: check_and_remind(bot_token),
         trigger=CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=ROMANIA_TZ),
@@ -166,7 +214,7 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
-    # Alertă fiscală: ziua 20 a fiecărei luni, ora 09:00
+    # Alertă termene fiscale: ziua 20, ora 09:00
     scheduler.add_job(
         func=lambda: check_fiscal_deadlines(bot_token),
         trigger=CronTrigger(day=20, hour=9, minute=0, timezone=ROMANIA_TZ),
@@ -175,6 +223,20 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # Monitorizare legislativă: ziua 1 a lunii, ora 07:00
+    scheduler.add_job(
+        func=lambda: run_fiscal_monitoring(bot_token),
+        trigger=CronTrigger(day=1, hour=7, minute=0, timezone=ROMANIA_TZ),
+        id="fiscal_monitoring",
+        name="Monthly fiscal law monitoring",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("✅ Scheduler started (weekly reminder + fiscal alerts)")
+    logger.info(
+        "✅ Scheduler started:\n"
+        "   • Luni 08:00 — reminder săptămânal\n"
+        "   • Ziua 20, 09:00 — alerte termene fiscale\n"
+        "   • Ziua 1, 07:00 — monitorizare legislativă"
+    )
     return scheduler
