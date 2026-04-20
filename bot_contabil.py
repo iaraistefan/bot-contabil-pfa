@@ -280,15 +280,15 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/web — dashboard cu rapoarte și grafice\n"
         "/raport — raport luna curentă\n"
         "/raport 04 2026 — raport specific\n"
-        "/fiscal — calendar declarații ANAF (D301, D390, D212)\n"
+        "/fiscal — calendar declarații ANAF\n"
         "/fiscal 03 2026 — calendar pentru lună specifică\n"
         "/export 04 2026 — CSV pentru Excel/contabil\n"
         "/delete 5 — anulează documentul \\#5\n"
-        "/reset — șterge toate datele (⚠️ ireversibil)\n"
-        "/reminder — trimite reminder manual acum\n"
+        "/reset — șterge toate datele ⚠️\n"
+        "/reminder — trimite reminder manual\n"
         "/ajutor — această listă\n\n"
-        "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber.\n"
-        "📄 Poți trimite documente în orice ordine — le sortez cronologic.",
+        "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber\\.\n"
+        "📄 Poți trimite în orice ordine — sortez cronologic după data documentului\\.",
         parse_mode="Markdown"
     )
 
@@ -309,11 +309,6 @@ async def handle_web(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_fiscal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /fiscal [luna] [an]
-    Afișează obligațiile fiscale pentru luna dată.
-    Verifică automat dacă există facturi Bolt în DB.
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
@@ -328,7 +323,6 @@ async def handle_fiscal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Verifică dacă există facturi Bolt/Uber în luna respectivă
     session = get_session()
     try:
         from app.models import Transaction
@@ -364,7 +358,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args or []
 
-    # Pasul 1: fără argumente → cer confirmare
     if not args or args[0].upper() != "CONFIRM":
         await update.message.reply_text(
             "⚠️ *Atenție — Operațiune ireversibilă!*\n\n"
@@ -373,35 +366,70 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Toate tranzacțiile din ledger\n"
             "• Toate fișierele sursă înregistrate\n"
             "• Toate rapoartele salvate\n\n"
-            "Google Sheets NU va fi modificat (rândurile rămân acolo).\n\n"
+            "Google Sheets NU va fi modificat \\(rândurile rămân acolo\\)\\.\n\n"
             "Dacă ești sigur, scrie:\n"
             "`/reset CONFIRM`",
             parse_mode="Markdown"
         )
         return
 
-    # Pasul 2: CONFIRM primit → ștergem
     await update.message.reply_text("🔄 Șterg toate datele tale...")
 
     session = get_session()
     try:
         from app.models import (
             Document, Transaction, SourceFile,
-            TaxPeriod, ExportLog, AuditLog
+            TaxPeriod, ExportLog,
         )
 
-        # Ștergem în ordine (foreign keys)
-        tx_count = session.query(Transaction).filter(Transaction.user_id == user_id).delete()
-        doc_count = session.query(Document).filter(Document.user_id == user_id).delete()
-        sf_count = session.query(SourceFile).filter(SourceFile.user_id == user_id).delete()
-        tp_count = session.query(TaxPeriod).filter(TaxPeriod.user_id == user_id).delete()
-        session.query(ExportLog).filter(
-            ExportLog.document_id.in_(
-                session.query(Document.id).filter(Document.user_id == user_id)
+        # 1. Ștergem ExportLog-urile — fetch + delete individual (evităm FK issues)
+        doc_ids = [
+            row[0] for row in
+            session.query(Document.id).filter(Document.user_id == user_id).all()
+        ]
+        if doc_ids:
+            exp_logs = (
+                session.query(ExportLog)
+                .filter(ExportLog.document_id.in_(doc_ids))
+                .all()
             )
-        ).delete(synchronize_session=False)
+            for el in exp_logs:
+                session.delete(el)
+            session.flush()
 
-        # Audit: logăm reset-ul
+        # 2. Ștergem Transactions
+        tx_count = (
+            session.query(Transaction)
+            .filter(Transaction.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        # 3. Ștergem Documents
+        doc_count = (
+            session.query(Document)
+            .filter(Document.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        # 4. Ștergem SourceFiles
+        sf_count = (
+            session.query(SourceFile)
+            .filter(SourceFile.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        # 5. Ștergem TaxPeriods
+        tp_count = (
+            session.query(TaxPeriod)
+            .filter(TaxPeriod.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        # 6. Audit log
         audit_repo.write(
             session,
             entity_type="user",
@@ -409,49 +437,43 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action="reset",
             user_id=user_id,
             source="user",
-            note=f"full reset: {doc_count} docs, {tx_count} txs, {sf_count} source_files deleted",
+            note=f"full reset: {doc_count} docs, {tx_count} txs, {sf_count} sf deleted",
         )
 
         session.commit()
-
         logger.info(
             f"RESET user_id={user_id}: "
             f"{doc_count} docs, {tx_count} txs, {sf_count} sf, {tp_count} periods deleted"
         )
 
         await update.message.reply_text(
-            f"✅ *Date șterse cu succes.*\n\n"
+            f"✅ *Date șterse cu succes\\.*\n\n"
             f"• {doc_count} document{'e' if doc_count != 1 else ''} eliminate\n"
             f"• {tx_count} tranzacții eliminate\n"
             f"• {sf_count} fișiere sursă eliminate\n\n"
-            f"Poți acum să trimiți documentele tale reale de la zero.\n"
-            f"Ordine cronologică recomandată, dar nu obligatorie — "
-            f"sortez eu automat după data de pe document.",
-            parse_mode="Markdown"
+            f"Poți acum să încarci documentele reale de la zero\\.\n"
+            f"Trimite\\-le în orice ordine — sortez după data de pe document\\.",
+            parse_mode="MarkdownV2"
         )
 
     except Exception as e:
         session.rollback()
         logger.error(f"Error in handle_reset for user_id={user_id}: {e}")
-        await update.message.reply_text("❌ Eroare la ștergere. Încearcă din nou.")
+        await update.message.reply_text(
+            f"❌ Eroare la ștergere: `{str(e)[:200]}`",
+            parse_mode="Markdown"
+        )
     finally:
         session.close()
 
 
 async def handle_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /reminder — trimite manual reminder-ul (test sau forțare).
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
         return
-
-    # Trimitem reminder-ul acum pentru acest user
     sched_service.check_and_remind(settings.telegram_token)
-    await update.message.reply_text(
-        "✅ Reminder trimis. Verifică mesajele de mai sus."
-    )
+    await update.message.reply_text("✅ Reminder trimis. Verifică mesajele de mai sus.")
 
 
 async def handle_raport(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -569,8 +591,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args or []
     if not args:
         await update.message.reply_text(
-            "⚠️ Specifică ID-ul documentului.\nExemplu: /delete 5",
-            parse_mode="Markdown"
+            "⚠️ Specifică ID-ul documentului.\nExemplu: /delete 5"
         )
         return
 
@@ -586,19 +607,17 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if doc is None:
             await update.message.reply_text(
-                f"⚠️ Documentul \\#{doc_id} nu a fost găsit sau nu îți aparține.",
-                parse_mode="Markdown"
+                f"⚠️ Documentul #{doc_id} nu a fost găsit sau nu îți aparține."
             )
             return
 
         if doc.status == "rejected":
-            await update.message.reply_text(f"ℹ️ Documentul \\#{doc_id} este deja anulat.", parse_mode="Markdown")
+            await update.message.reply_text(f"ℹ️ Documentul #{doc_id} este deja anulat.")
             return
 
         if doc.status == "exported":
             await update.message.reply_text(
-                f"⚠️ Documentul \\#{doc_id} a fost deja exportat. Contactează contabilul.",
-                parse_mode="Markdown"
+                f"⚠️ Documentul #{doc_id} a fost deja exportat. Contactează contabilul."
             )
             return
 
@@ -619,11 +638,11 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         details = f"{doc.platforma or '?'} · {doc.data_doc or '?'} · {doc.brut:.2f} RON"
         await update.message.reply_text(
-            f"🗑️ Document \\#{doc_id} anulat\\.\n"
+            f"🗑️ Document #{doc_id} anulat.\n"
             f"_{details}_\n\n"
-            f"✅ {_tx_count_label(tx_count)} eliminate din ledger\\.\n\n"
-            f"⚠️ Rândul din Google Sheets rămâne — șterge\\-l manual dacă e necesar\\.",
-            parse_mode="MarkdownV2"
+            f"✅ {_tx_count_label(tx_count)} eliminate din ledger.\n\n"
+            f"⚠️ Rândul din Google Sheets rămâne — șterge-l manual dacă e necesar.",
+            parse_mode="Markdown"
         )
 
     except Exception as e:
@@ -698,7 +717,9 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                 item.brut, item.comision, tva,
                 item.net, item.cash, banca, item.detalii or "",
             ]
-            sheet_used = sync_to_sheets(doc_id=doc_id, row_data=row, date_str=data_doc) if doc_id else None
+            sheet_used = sync_to_sheets(
+                doc_id=doc_id, row_data=row, date_str=data_doc
+            ) if doc_id else None
 
             doc_tag = f" #{doc_id}" if doc_id else ""
             tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
@@ -725,7 +746,10 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
         if extraction["validation_errors"]:
             msg_confirm += f"\n⚠️ {len(extraction['validation_errors'])} item(e) respinse."
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg_confirm)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=msg_confirm
+        )
 
     except Exception as e:
         logger.error(f"Error while processing items: {e}")
@@ -788,10 +812,8 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ Storage dir FAILED: {e}")
 
-    # HTTP API
     start_http_server()
 
-    # Scheduler (reminder + fiscal alerts)
     try:
         sched_service.start_scheduler(settings.telegram_token)
     except Exception as e:
