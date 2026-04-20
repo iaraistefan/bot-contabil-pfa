@@ -2,441 +2,878 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bot Contabil PFA — Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Contabil PFA Pro</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #12121a;
+      --bg3: #1a1a26;
+      --border: #2a2a3d;
+      --accent: #4f46e5;
+      --accent2: #7c3aed;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --blue: #3b82f6;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #475569;
+      --card-h: 120px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      padding: 16px;
+      overflow-x: hidden;
     }
 
-    h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
-      margin-bottom: 4px;
-      color: #f8fafc;
+    /* ── HEADER ── */
+    .header {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      padding: 16px 16px 20px;
+      position: relative;
+      overflow: hidden;
     }
-
-    .subtitle {
-      font-size: 0.85rem;
-      color: #94a3b8;
-      margin-bottom: 20px;
+    .header::before {
+      content: "";
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.07);
     }
-
-    /* Period selector */
-    .period-bar {
+    .header-top {
       display: flex;
-      gap: 8px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-
-    .period-bar select, .period-bar button {
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #1e293b;
-      color: #e2e8f0;
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
-
-    .period-bar button {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      color: #fff;
-      font-weight: 600;
-    }
-
-    .period-bar button:hover { background: #2563eb; }
-
-    .btn-export {
-      background: #10b981 !important;
-      border-color: #10b981 !important;
-      text-decoration: none;
-      display: inline-flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 6px;
+      margin-bottom: 4px;
     }
-
-    /* Cards */
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    @media (min-width: 600px) {
-      .cards { grid-template-columns: repeat(4, 1fr); }
-    }
-
-    .card {
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 16px;
-      border: 1px solid #334155;
-    }
-
-    .card-label {
-      font-size: 0.75rem;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
-
-    .card-value {
-      font-size: 1.3rem;
+    .header-title {
+      font-size: 1.1rem;
       font-weight: 700;
+      letter-spacing: -0.01em;
     }
-
-    .card-value.income { color: #34d399; }
-    .card-value.expense { color: #f87171; }
-    .card-value.vat { color: #fbbf24; }
-    .card-value.profit { color: #60a5fa; }
-    .card-value.profit.negative { color: #f87171; }
-
-    .card-sub {
-      font-size: 0.72rem;
-      color: #64748b;
-      margin-top: 4px;
-    }
-
-    /* Section title */
-    .section-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 10px;
-    }
-
-    /* Table */
-    .table-wrap {
-      overflow-x: auto;
-      border-radius: 12px;
-      border: 1px solid #334155;
-      margin-bottom: 20px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.82rem;
-    }
-
-    thead { background: #1e293b; }
-
-    th {
-      padding: 10px 12px;
-      text-align: left;
-      color: #94a3b8;
-      font-weight: 600;
-      white-space: nowrap;
-      border-bottom: 1px solid #334155;
-    }
-
-    td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #1e293b;
-      white-space: nowrap;
-    }
-
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #1e293b88; }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
+    .header-badge {
+      background: rgba(255,255,255,0.2);
+      padding: 3px 10px;
       border-radius: 20px;
       font-size: 0.72rem;
       font-weight: 600;
     }
-
-    .badge-INCOME { background: #064e3b; color: #34d399; }
-    .badge-EXPENSE { background: #450a0a; color: #f87171; }
-    .badge-VAT_OUT { background: #451a03; color: #fbbf24; }
-    .badge-VAT_IN { background: #1c1917; color: #a8a29e; }
-    .badge-ADJUSTMENT { background: #1e1b4b; color: #a5b4fc; }
-
-    .amount { font-variant-numeric: tabular-nums; }
-    .amount.positive { color: #34d399; }
-    .amount.negative { color: #f87171; }
-    .amount.neutral { color: #94a3b8; }
-
-    /* Loading / empty */
-    .state-msg {
-      text-align: center;
-      padding: 40px 20px;
-      color: #64748b;
-      font-size: 0.9rem;
+    .header-subtitle {
+      font-size: 0.78rem;
+      opacity: 0.75;
     }
 
-    .spinner {
-      display: inline-block;
-      width: 20px; height: 20px;
-      border: 2px solid #334155;
-      border-top-color: #3b82f6;
+    /* ── PERIOD SELECTOR ── */
+    .period-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .period-row::-webkit-scrollbar { display: none; }
+
+    .period-chip {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--text2);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .period-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+
+    .tab {
+      flex-shrink: 0;
+      padding: 11px 16px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* ── TAB CONTENT ── */
+    .tab-content { display: none; padding: 16px; }
+    .tab-content.active { display: block; }
+
+    /* ── CARDS GRID ── */
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      border-radius: 14px 14px 0 0;
+    }
+    .card.green::after { background: var(--green); }
+    .card.red::after { background: var(--red); }
+    .card.yellow::after { background: var(--yellow); }
+    .card.blue::after { background: var(--blue); }
+
+    .card-icon {
+      font-size: 1.3rem;
+      margin-bottom: 6px;
+    }
+    .card-label {
+      font-size: 0.7rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .card-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .card-value.green { color: var(--green); }
+    .card-value.red { color: var(--red); }
+    .card-value.yellow { color: var(--yellow); }
+    .card-value.blue { color: var(--blue); }
+    .card-sub {
+      font-size: 0.68rem;
+      color: var(--text3);
+      margin-top: 4px;
+    }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin: 16px 0 10px;
+    }
+
+    /* ── CHART ── */
+    .chart-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .chart-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text2);
+    }
+    .chart-wrap { position: relative; height: 160px; }
+
+    /* ── TX LIST ── */
+    .tx-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .tx-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .tx-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .tx-icon.INCOME { background: rgba(16,185,129,0.15); }
+    .tx-icon.EXPENSE { background: rgba(239,68,68,0.15); }
+    .tx-icon.VAT_OUT { background: rgba(245,158,11,0.15); }
+    .tx-icon.VAT_IN { background: rgba(59,130,246,0.15); }
+
+    .tx-info { flex: 1; min-width: 0; }
+    .tx-category {
+      font-size: 0.82rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tx-meta {
+      font-size: 0.72rem;
+      color: var(--text3);
+      margin-top: 2px;
+    }
+
+    .tx-amount {
+      font-size: 0.88rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .tx-amount.INCOME { color: var(--green); }
+    .tx-amount.EXPENSE { color: var(--red); }
+    .tx-amount.VAT_OUT { color: var(--yellow); }
+    .tx-amount.VAT_IN { color: var(--blue); }
+
+    .tx-deductible {
+      font-size: 0.68rem;
+      color: var(--text3);
+      text-align: right;
+      margin-top: 2px;
+    }
+
+    /* ── SUMMARY ROWS ── */
+    .summary-list { display: flex; flex-direction: column; gap: 6px; }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .summary-label { font-size: 0.82rem; color: var(--text2); }
+    .summary-value { font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    /* ── PROFIT BAR ── */
+    .profit-card {
+      background: linear-gradient(135deg, rgba(79,70,229,0.2), rgba(124,58,237,0.2));
+      border: 1px solid rgba(79,70,229,0.4);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .profit-label { font-size: 0.75rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .profit-value { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .profit-value.positive { color: var(--green); }
+    .profit-value.negative { color: var(--red); }
+    .profit-sub { font-size: 0.72rem; color: var(--text3); margin-top: 4px; }
+
+    /* ── LOADING ── */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      gap: 12px;
+      color: var(--text3);
+      font-size: 0.85rem;
+    }
+    .spin {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
-      margin-right: 8px;
-      vertical-align: middle;
     }
-
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .error-bar {
-      background: #450a0a;
-      border: 1px solid #7f1d1d;
-      color: #fca5a5;
-      padding: 10px 14px;
-      border-radius: 8px;
-      margin-bottom: 16px;
+    .empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text3);
       font-size: 0.85rem;
-      display: none;
     }
 
-    footer {
-      text-align: center;
-      font-size: 0.75rem;
-      color: #475569;
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 1px solid #1e293b;
+    /* ── EXPORT BUTTON ── */
+    .export-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 13px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      margin-top: 16px;
+      text-decoration: none;
     }
+    .export-btn:active { opacity: 0.85; }
+
+    .export-row { display: flex; gap: 8px; margin-top: 16px; }
+    .export-row .export-btn { margin-top: 0; }
+
+    /* ── VAT SECTION ── */
+    .vat-alert {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .vat-alert-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--yellow);
+      margin-bottom: 4px;
+    }
+    .vat-alert-text {
+      font-size: 0.75rem;
+      color: var(--text2);
+      line-height: 1.5;
+    }
+
+    /* Safe area for notch phones */
+    .bottom-safe { height: env(safe-area-inset-bottom, 16px); }
   </style>
 </head>
 <body>
 
-  <h1>🧾 Bot Contabil PFA</h1>
-  <p class="subtitle">Dashboard fiscal — date în timp real din Postgres</p>
+<!-- HEADER -->
+<div class="header">
+  <div class="header-top">
+    <div class="header-title">🧾 Contabil PFA Pro</div>
+    <div class="header-badge" id="header-badge">—</div>
+  </div>
+  <div class="header-subtitle">Dashboard fiscal · Bolt/Uber Romania</div>
+</div>
 
-  <!-- Period selector -->
-  <div class="period-bar">
-    <select id="sel-month">
-      <option value="1">Ianuarie</option>
-      <option value="2">Februarie</option>
-      <option value="3">Martie</option>
-      <option value="4" selected>Aprilie</option>
-      <option value="5">Mai</option>
-      <option value="6">Iunie</option>
-      <option value="7">Iulie</option>
-      <option value="8">August</option>
-      <option value="9">Septembrie</option>
-      <option value="10">Octombrie</option>
-      <option value="11">Noiembrie</option>
-      <option value="12">Decembrie</option>
-    </select>
-    <select id="sel-year">
-      <option value="2025">2025</option>
-      <option value="2026" selected>2026</option>
-    </select>
-    <button onclick="loadData()">🔄 Actualizează</button>
-    <a id="btn-export-tx" class="period-bar btn-export" style="display:none" target="_blank">
-      ⬇️ CSV Tranzacții
+<!-- PERIOD CHIPS -->
+<div class="period-row" id="period-chips"></div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" data-tab="sumar">📊 Sumar</div>
+  <div class="tab" data-tab="tranzactii">💳 Tranzacții</div>
+  <div class="tab" data-tab="tva">🏛️ TVA D301</div>
+  <div class="tab" data-tab="export">⬇️ Export</div>
+</div>
+
+<!-- TAB: SUMAR -->
+<div class="tab-content active" id="tab-sumar">
+  <div id="sumar-loading" class="loading">
+    <div class="spin"></div>Se încarcă...
+  </div>
+  <div id="sumar-content" style="display:none">
+    <!-- Profit hero -->
+    <div class="profit-card" style="margin-top:4px">
+      <div class="profit-label">📈 Profit estimat</div>
+      <div class="profit-value" id="s-profit">0.00 RON</div>
+      <div class="profit-sub">venituri − cheltuieli deductibile</div>
+    </div>
+
+    <!-- Cards -->
+    <div class="cards">
+      <div class="card green">
+        <div class="card-icon">💰</div>
+        <div class="card-label">Venituri</div>
+        <div class="card-value green" id="s-income">—</div>
+        <div class="card-sub" id="s-income-sub">curse + bacșișuri</div>
+      </div>
+      <div class="card red">
+        <div class="card-icon">💸</div>
+        <div class="card-label">Cheltuieli deductibile</div>
+        <div class="card-value red" id="s-expense">—</div>
+        <div class="card-sub" id="s-expense-sub"></div>
+      </div>
+      <div class="card yellow">
+        <div class="card-icon">🏛️</div>
+        <div class="card-label">TVA D301</div>
+        <div class="card-value yellow" id="s-vat">—</div>
+        <div class="card-sub">reverse charge</div>
+      </div>
+      <div class="card blue">
+        <div class="card-icon">📄</div>
+        <div class="card-label">Tranzacții</div>
+        <div class="card-value blue" id="s-txcount">—</div>
+        <div class="card-sub">în perioada selectată</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-card">
+      <div class="chart-title">📊 Distribuție cheltuieli</div>
+      <div class="chart-wrap">
+        <canvas id="expense-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Detalii cheltuieli -->
+    <div class="section-title">Detaliu cheltuieli</div>
+    <div class="summary-list" id="expense-breakdown"></div>
+  </div>
+</div>
+
+<!-- TAB: TRANZACȚII -->
+<div class="tab-content" id="tab-tranzactii">
+  <div id="tx-loading" class="loading" style="display:none">
+    <div class="spin"></div>Se încarcă...
+  </div>
+  <div id="tx-list" class="tx-list"></div>
+</div>
+
+<!-- TAB: TVA D301 -->
+<div class="tab-content" id="tab-tva">
+  <div id="tva-loading" class="loading" style="display:none">
+    <div class="spin"></div>Se încarcă...
+  </div>
+  <div id="tva-content" style="display:none">
+    <div class="vat-alert">
+      <div class="vat-alert-title">ℹ️ Taxare inversă (Reverse Charge)</div>
+      <div class="vat-alert-text">
+        Comisioanele Bolt/Uber sunt servicii intracomunitare.
+        TVA-ul de mai jos trebuie declarat în <strong>D301</strong> și
+        <strong>D390</strong>. Verificați cu contabilul.
+      </div>
+    </div>
+
+    <div class="summary-list">
+      <div class="summary-row">
+        <div class="summary-label">🧾 Bază impozabilă comisioane</div>
+        <div class="summary-value" id="v-base" style="color:var(--text)">—</div>
+      </div>
+      <div class="summary-row">
+        <div class="summary-label">⬆️ TVA colectat (VAT_OUT)</div>
+        <div class="summary-value" id="v-out" style="color:var(--red)">—</div>
+      </div>
+      <div class="summary-row">
+        <div class="summary-label">⬇️ TVA deductibil (VAT_IN)</div>
+        <div class="summary-value" id="v-in" style="color:var(--green)">—</div>
+      </div>
+      <div class="summary-row" style="border-color:rgba(245,158,11,0.3)">
+        <div class="summary-label" style="font-weight:700;color:var(--text)">💰 NET de plătit ANAF</div>
+        <div class="summary-value" id="v-net" style="color:var(--yellow)">—</div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:20px">Tranzacții TVA</div>
+    <div class="tx-list" id="vat-tx-list"></div>
+  </div>
+</div>
+
+<!-- TAB: EXPORT -->
+<div class="tab-content" id="tab-export">
+  <div class="section-title">Exportă date</div>
+  <div class="summary-list">
+    <div class="summary-row">
+      <div class="summary-label">📅 Perioadă selectată</div>
+      <div class="summary-value" id="exp-period" style="color:var(--accent)">—</div>
+    </div>
+    <div class="summary-row">
+      <div class="summary-label">💳 Tranzacții totale</div>
+      <div class="summary-value" id="exp-txcount" style="color:var(--text)">—</div>
+    </div>
+  </div>
+
+  <div class="export-row">
+    <a id="exp-btn-tx" class="export-btn" href="#" target="_blank">
+      📊 CSV Tranzacții
     </a>
-    <a id="btn-export-rez" class="period-bar btn-export" style="display:none" target="_blank">
-      ⬇️ CSV Rezumat
+    <a id="exp-btn-rez" class="export-btn" href="#" target="_blank"
+       style="background:linear-gradient(135deg,#059669,#10b981)">
+      📋 CSV Rezumat
     </a>
   </div>
 
-  <!-- Error bar -->
-  <div class="error-bar" id="error-bar"></div>
-
-  <!-- Summary cards -->
-  <div class="section-title">Sumar</div>
-  <div class="cards" id="cards">
-    <div class="card">
-      <div class="card-label">💰 Venituri</div>
-      <div class="card-value income" id="c-income">—</div>
-      <div class="card-sub" id="c-income-sub"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">💸 Cheltuieli</div>
-      <div class="card-value expense" id="c-expense">—</div>
-      <div class="card-sub" id="c-expense-sub">deductibile</div>
-    </div>
-    <div class="card">
-      <div class="card-label">🏛️ TVA D301</div>
-      <div class="card-value vat" id="c-vat">—</div>
-      <div class="card-sub">reverse charge</div>
-    </div>
-    <div class="card">
-      <div class="card-label">📈 Profit estimat</div>
-      <div class="card-value profit" id="c-profit">—</div>
-      <div class="card-sub">venituri − deductibile</div>
+  <div class="section-title" style="margin-top:20px">Instrucțiuni D301</div>
+  <div class="vat-alert" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3)">
+    <div class="vat-alert-title" style="color:var(--blue)">📄 Cum completezi D301</div>
+    <div class="vat-alert-text">
+      1. Descarcă CSV Rezumat → coloana <strong>TVA colectat</strong><br>
+      2. În ANAF ePortal → D301 → secțiunea "Achizitii intracomunitare de servicii"<br>
+      3. Completează baza impozabilă + TVA aferent<br>
+      4. Termenul de depunere: data de 25 a lunii următoare
     </div>
   </div>
+</div>
 
-  <!-- Transactions table -->
-  <div class="section-title">Tranzacții <span id="tx-count" style="color:#475569"></span></div>
-  <div class="table-wrap">
-    <div class="state-msg" id="table-state">
-      Selectează o perioadă și apasă Actualizează.
-    </div>
-    <table id="tx-table" style="display:none">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Data</th>
-          <th>Tip</th>
-          <th>Categorie</th>
-          <th>Brut (RON)</th>
-          <th>Deductibil</th>
-          <th>Partener</th>
-          <th>TVA</th>
-        </tr>
-      </thead>
-      <tbody id="tx-body"></tbody>
-    </table>
-  </div>
+<div class="bottom-safe"></div>
 
-  <footer>
-    Bot Contabil PFA v5 · Date din Postgres · Actualizate live
-  </footer>
+<script>
+  // Init Telegram WebApp
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    // Match color scheme
+    if (tg.colorScheme === 'light') {
+      document.documentElement.style.setProperty('--bg', '#f1f5f9');
+      document.documentElement.style.setProperty('--bg2', '#ffffff');
+      document.documentElement.style.setProperty('--bg3', '#f8fafc');
+      document.documentElement.style.setProperty('--border', '#e2e8f0');
+      document.documentElement.style.setProperty('--text', '#0f172a');
+      document.documentElement.style.setProperty('--text2', '#475569');
+      document.documentElement.style.setProperty('--text3', '#94a3b8');
+    }
+  }
 
-  <script>
-    const MONTH_NAMES = {
-      1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",
-      5:"Mai",6:"Iunie",7:"Iulie",8:"August",
-      9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"
+  const MONTHS = {
+    1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",
+    7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"
+  };
+  const MONTHS_FULL = {
+    1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",5:"Mai",6:"Iunie",
+    7:"Iulie",8:"August",9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"
+  };
+  const TX_ICONS = {
+    INCOME: "💰", EXPENSE: "🛒", VAT_OUT: "🏛️", VAT_IN: "↩️", ADJUSTMENT: "⚖️"
+  };
+  const CAT_LABELS = {
+    ride_revenue: "Venituri curse",
+    tip_revenue: "Bacșișuri",
+    platform_commission: "Comision platformă",
+    fuel: "Combustibil",
+    maintenance: "Întreținere auto",
+    registration: "Autorizații/Înreg.",
+    other_expense: "Alte cheltuieli",
+    reverse_charge_vat: "TVA reverse charge",
+  };
+
+  let currentYear = new Date().getFullYear();
+  let currentMonth = new Date().getMonth() + 1;
+  let cachedTotals = null;
+  let cachedTxs = null;
+  let expenseChart = null;
+
+  function fmt(v) {
+    if (v == null) return "—";
+    return Number(v).toLocaleString("ro-RO", {minimumFractionDigits:2,maximumFractionDigits:2}) + " RON";
+  }
+
+  // Build period chips (last 6 months)
+  function buildPeriodChips() {
+    const container = document.getElementById("period-chips");
+    container.innerHTML = "";
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+      const chip = document.createElement("div");
+      chip.className = "period-chip" + (m === currentMonth && y === currentYear ? " active" : "");
+      chip.textContent = `${MONTHS[m]} ${y}`;
+      chip.onclick = () => selectPeriod(y, m);
+      container.appendChild(chip);
+    }
+  }
+
+  function selectPeriod(year, month) {
+    currentYear = year;
+    currentMonth = month;
+    cachedTotals = null;
+    cachedTxs = null;
+    // Update chips
+    document.querySelectorAll(".period-chip").forEach(c => {
+      c.classList.remove("active");
+      if (c.textContent === `${MONTHS[month]} ${year}`) c.classList.add("active");
+    });
+    document.getElementById("header-badge").textContent =
+      `${MONTHS_FULL[month]} ${year}`;
+    loadCurrentTab();
+  }
+
+  // Tab switching
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+      loadCurrentTab();
     };
+  });
 
-    function fmt(val) {
-      if (val == null) return "—";
-      return Number(val).toLocaleString("ro-RO", {minimumFractionDigits:2, maximumFractionDigits:2});
+  function activeTab() {
+    return document.querySelector(".tab.active")?.dataset.tab;
+  }
+
+  function loadCurrentTab() {
+    const tab = activeTab();
+    if (tab === "sumar") loadSumar();
+    else if (tab === "tranzactii") loadTranzactii();
+    else if (tab === "tva") loadTVA();
+    else if (tab === "export") loadExport();
+  }
+
+  async function fetchTotals() {
+    if (cachedTotals) return cachedTotals;
+    const r = await fetch(`/api/v1/period/${currentYear}/${currentMonth}`);
+    if (!r.ok) throw new Error("API error");
+    cachedTotals = await r.json();
+    return cachedTotals;
+  }
+
+  async function fetchTxs() {
+    if (cachedTxs) return cachedTxs;
+    const r = await fetch(`/api/v1/transactions/${currentYear}/${currentMonth}`);
+    if (!r.ok) throw new Error("API error");
+    const data = await r.json();
+    cachedTxs = data.transactions || [];
+    return cachedTxs;
+  }
+
+  async function loadSumar() {
+    const loading = document.getElementById("sumar-loading");
+    const content = document.getElementById("sumar-content");
+    loading.style.display = "flex";
+    content.style.display = "none";
+
+    try {
+      const [totals, txs] = await Promise.all([fetchTotals(), fetchTxs()]);
+
+      // Profit hero
+      const profitEl = document.getElementById("s-profit");
+      profitEl.textContent = fmt(totals.profit_estimated);
+      profitEl.className = "profit-value " + (totals.profit_estimated >= 0 ? "positive" : "negative");
+
+      // Cards
+      document.getElementById("s-income").textContent = fmt(totals.income_total);
+      document.getElementById("s-income-sub").textContent =
+        totals.income_tips > 0 ? `bacșișuri: ${fmt(totals.income_tips)}` : "curse Bolt/Uber";
+      document.getElementById("s-expense").textContent = fmt(totals.expense_deductible_total);
+      document.getElementById("s-expense-sub").textContent =
+        `brut: ${fmt(totals.expense_total_brut)}`;
+      document.getElementById("s-vat").textContent = fmt(totals.vat_out_total);
+      document.getElementById("s-txcount").textContent = totals.tx_count;
+
+      // Chart
+      renderExpenseChart(totals);
+
+      // Breakdown
+      const breakdown = document.getElementById("expense-breakdown");
+      breakdown.innerHTML = "";
+      const rows = [
+        {label: "⛽ Combustibil (brut)", val: totals.expense_fuel_brut, sub: `deductibil: ${fmt(totals.expense_fuel_deductible)}`},
+        {label: "📱 Comisioane Bolt/Uber", val: totals.expense_commission},
+        {label: "📋 Autorizații/Înreg.", val: totals.expense_registration},
+        {label: "🔧 Alte cheltuieli", val: totals.expense_other},
+      ].filter(r => r.val > 0);
+
+      if (rows.length === 0) {
+        breakdown.innerHTML = '<div class="empty">📭 Nicio cheltuială înregistrată.</div>';
+      } else {
+        rows.forEach(r => {
+          breakdown.innerHTML += `
+            <div class="summary-row">
+              <div>
+                <div class="summary-label">${r.label}</div>
+                ${r.sub ? `<div style="font-size:0.68rem;color:var(--text3)">${r.sub}</div>` : ""}
+              </div>
+              <div class="summary-value" style="color:var(--red)">${fmt(r.val)}</div>
+            </div>`;
+        });
+      }
+
+      loading.style.display = "none";
+      content.style.display = "block";
+    } catch(e) {
+      loading.innerHTML = '<div style="color:var(--red);font-size:0.85rem">⚠️ Eroare la încărcare.</div>';
+    }
+  }
+
+  function renderExpenseChart(totals) {
+    const ctx = document.getElementById("expense-chart").getContext("2d");
+    if (expenseChart) expenseChart.destroy();
+
+    const labels = [];
+    const data = [];
+    const colors = [];
+
+    if (totals.expense_fuel_brut > 0) {
+      labels.push("Combustibil"); data.push(totals.expense_fuel_brut); colors.push("#3b82f6");
+    }
+    if (totals.expense_commission > 0) {
+      labels.push("Comisioane"); data.push(totals.expense_commission); colors.push("#8b5cf6");
+    }
+    if (totals.expense_registration > 0) {
+      labels.push("Autorizații"); data.push(totals.expense_registration); colors.push("#10b981");
+    }
+    if (totals.expense_other > 0) {
+      labels.push("Alte"); data.push(totals.expense_other); colors.push("#f59e0b");
     }
 
-    function setCards(totals) {
-      document.getElementById("c-income").textContent = fmt(totals.income_total) + " RON";
-      document.getElementById("c-income-sub").textContent =
-        totals.income_tips > 0 ? `din care bacșișuri ${fmt(totals.income_tips)} RON` : "";
-
-      document.getElementById("c-expense").textContent = fmt(totals.expense_deductible_total) + " RON";
-      document.getElementById("c-expense-sub").textContent =
-        `brut ${fmt(totals.expense_total_brut)} RON`;
-
-      document.getElementById("c-vat").textContent =
-        totals.vat_out_total > 0 ? fmt(totals.vat_out_total) + " RON" : "0.00 RON";
-
-      const profitEl = document.getElementById("c-profit");
-      profitEl.textContent = fmt(totals.profit_estimated) + " RON";
-      profitEl.className = "card-value profit" + (totals.profit_estimated < 0 ? " negative" : "");
+    if (data.length === 0) {
+      document.querySelector(".chart-card").style.display = "none";
+      return;
     }
 
-    function setTable(txs) {
-      const tbody = document.getElementById("tx-body");
-      tbody.innerHTML = "";
-
-      txs.forEach(tx => {
-        const deductible = tx.deductibility_pct < 100
-          ? `${fmt(tx.amount_brut * tx.deductibility_pct / 100)} (${tx.deductibility_pct}%)`
-          : "100%";
-
-        const amtClass = tx.tx_type === "INCOME" ? "positive"
-                       : tx.tx_type.startsWith("VAT") ? "neutral"
-                       : "negative";
-
-        tbody.innerHTML += `
-          <tr>
-            <td style="color:#475569">${tx.id}</td>
-            <td>${tx.occurred_on || "—"}</td>
-            <td><span class="badge badge-${tx.tx_type}">${tx.tx_type}</span></td>
-            <td style="color:#cbd5e1">${tx.category}</td>
-            <td class="amount ${amtClass}">${fmt(tx.amount_brut)}</td>
-            <td style="color:#94a3b8;font-size:0.78rem">${deductible}</td>
-            <td style="color:#94a3b8">${tx.counterparty || "—"}</td>
-            <td style="color:#94a3b8;font-size:0.78rem">${tx.vat_treatment || "NA"}</td>
-          </tr>`;
-      });
-    }
-
-    function showError(msg) {
-      const bar = document.getElementById("error-bar");
-      bar.textContent = "❌ " + msg;
-      bar.style.display = "block";
-    }
-
-    function hideError() {
-      document.getElementById("error-bar").style.display = "none";
-    }
-
-    async function loadData() {
-      hideError();
-      const month = document.getElementById("sel-month").value;
-      const year = document.getElementById("sel-year").value;
-
-      // Reset state
-      document.getElementById("table-state").innerHTML =
-        '<span class="spinner"></span> Se încarcă...';
-      document.getElementById("table-state").style.display = "block";
-      document.getElementById("tx-table").style.display = "none";
-      document.getElementById("tx-count").textContent = "";
-      ["c-income","c-expense","c-vat","c-profit"].forEach(id =>
-        document.getElementById(id).textContent = "…"
-      );
-
-      // Update export links
-      document.getElementById("btn-export-tx").href =
-        `/api/v1/transactions/export/${year}/${month}`;
-      document.getElementById("btn-export-rez").href =
-        `/api/v1/period/export/${year}/${month}`;
-
-      try {
-        // Fetch period totals + transactions in parallel
-        const [rPeriod, rTxs] = await Promise.all([
-          fetch(`/api/v1/period/${year}/${month}`),
-          fetch(`/api/v1/transactions/${year}/${month}`)
-        ]);
-
-        if (!rPeriod.ok || !rTxs.ok) throw new Error("Eroare server API");
-
-        const totals = await rPeriod.json();
-        const txData = await rTxs.json();
-
-        setCards(totals);
-
-        const txs = txData.transactions || [];
-        document.getElementById("tx-count").textContent =
-          txs.length > 0 ? `(${txs.length})` : "";
-
-        if (txs.length === 0) {
-          document.getElementById("table-state").textContent =
-            `📭 Nicio tranzacție în ${MONTH_NAMES[+month]} ${year}.`;
-        } else {
-          document.getElementById("table-state").style.display = "none";
-          document.getElementById("tx-table").style.display = "table";
-          setTable(txs);
+    expenseChart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: colors,
+          borderWidth: 0,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "65%",
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              color: "#94a3b8",
+              font: { size: 11 },
+              boxWidth: 12,
+              padding: 10,
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.label}: ${Number(ctx.raw).toLocaleString("ro-RO",{minimumFractionDigits:2})} RON`
+            }
+          }
         }
-
-        // Show export buttons
-        document.getElementById("btn-export-tx").style.display = "inline-flex";
-        document.getElementById("btn-export-rez").style.display = "inline-flex";
-
-      } catch (err) {
-        showError("Nu s-a putut încărca datele. Verifică conexiunea.");
-        document.getElementById("table-state").textContent = "⚠️ Eroare la încărcare.";
       }
+    });
+  }
+
+  async function loadTranzactii() {
+    const list = document.getElementById("tx-list");
+    list.innerHTML = '<div class="loading"><div class="spin"></div>Se încarcă...</div>';
+    try {
+      const txs = await fetchTxs();
+      if (txs.length === 0) {
+        list.innerHTML = '<div class="empty">📭 Nicio tranzacție în această perioadă.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      txs.forEach(tx => {
+        const isIncome = tx.tx_type === "INCOME";
+        const ded = tx.deductibility_pct < 100
+          ? `Deductibil ${tx.deductibility_pct}% (${(tx.amount_brut * tx.deductibility_pct / 100).toFixed(2)} RON)`
+          : "";
+        list.innerHTML += `
+          <div class="tx-item">
+            <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type] || "💱"}</div>
+            <div class="tx-info">
+              <div class="tx-category">${CAT_LABELS[tx.category] || tx.category}</div>
+              <div class="tx-meta">${tx.occurred_on || "—"} · ${tx.counterparty || "—"}</div>
+            </div>
+            <div>
+              <div class="tx-amount ${tx.tx_type}">${isIncome ? "+" : "−"}${Number(tx.amount_brut).toFixed(2)} RON</div>
+              ${ded ? `<div class="tx-deductible">${ded}</div>` : ""}
+            </div>
+          </div>`;
+      });
+    } catch(e) {
+      list.innerHTML = '<div style="color:var(--red);padding:20px;text-align:center">⚠️ Eroare la încărcare.</div>';
     }
+  }
 
-    // Set current month/year on load
-    (function () {
-      const now = new Date();
-      const m = document.getElementById("sel-month");
-      const y = document.getElementById("sel-year");
-      m.value = now.getMonth() + 1;
-      if ([...y.options].some(o => o.value == now.getFullYear())) {
-        y.value = now.getFullYear();
+  async function loadTVA() {
+    const loading = document.getElementById("tva-loading");
+    const content = document.getElementById("tva-content");
+    loading.style.display = "flex";
+    content.style.display = "none";
+
+    try {
+      const [totals, txs] = await Promise.all([fetchTotals(), fetchTxs()]);
+
+      document.getElementById("v-base").textContent = fmt(totals.expense_commission);
+      document.getElementById("v-out").textContent = fmt(totals.vat_out_total);
+      document.getElementById("v-in").textContent = fmt(totals.vat_in_total);
+      document.getElementById("v-net").textContent = fmt(totals.vat_net);
+
+      const vatTxs = txs.filter(t => t.tx_type === "VAT_OUT" || t.tx_type === "VAT_IN");
+      const vatList = document.getElementById("vat-tx-list");
+      vatList.innerHTML = "";
+
+      if (vatTxs.length === 0) {
+        vatList.innerHTML = '<div class="empty">📭 Nicio tranzacție TVA.</div>';
+      } else {
+        vatTxs.forEach(tx => {
+          vatList.innerHTML += `
+            <div class="tx-item">
+              <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type]}</div>
+              <div class="tx-info">
+                <div class="tx-category">${tx.tx_type === "VAT_OUT" ? "TVA Colectat" : "TVA Deductibil"}</div>
+                <div class="tx-meta">${tx.occurred_on || "—"} · ${tx.counterparty || "—"}</div>
+              </div>
+              <div class="tx-amount ${tx.tx_type}">${Number(tx.amount_brut).toFixed(2)} RON</div>
+            </div>`;
+        });
       }
-      loadData();
-    })();
-  </script>
+
+      loading.style.display = "none";
+      content.style.display = "block";
+    } catch(e) {
+      loading.innerHTML = '<div style="color:var(--red);font-size:0.85rem">⚠️ Eroare la încărcare.</div>';
+    }
+  }
+
+  async function loadExport() {
+    try {
+      const totals = await fetchTotals();
+      document.getElementById("exp-period").textContent =
+        `${MONTHS_FULL[currentMonth]} ${currentYear}`;
+      document.getElementById("exp-txcount").textContent = totals.tx_count;
+      document.getElementById("exp-btn-tx").href =
+        `/api/v1/transactions/export/${currentYear}/${currentMonth}`;
+      document.getElementById("exp-btn-rez").href =
+        `/api/v1/period/export/${currentYear}/${currentMonth}`;
+    } catch(e) {}
+  }
+
+  // Init
+  buildPeriodChips();
+  document.getElementById("header-badge").textContent =
+    `${MONTHS_FULL[currentMonth]} ${currentYear}`;
+  loadSumar();
+</script>
 </body>
-  </html>
+</html>
