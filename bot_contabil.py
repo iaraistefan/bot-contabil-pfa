@@ -18,7 +18,7 @@ import logging
 import traceback
 from datetime import datetime
 from typing import Optional
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ApplicationBuilder, ContextTypes,
     MessageHandler, CommandHandler, filters,
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 SHEET_NAME = "Contabilitate PFA 2025"
 CREDENTIALS_FILE = "credentials.json"
+DASHBOARD_URL = "https://bot-contabil-pfa.onrender.com/dashboard"
 
 
 # --- HELPERS DB ---
@@ -209,35 +210,23 @@ def _tx_count_label(n: int) -> str:
 # --- GLOBAL ERROR HANDLER ---
 
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handler global pentru orice excepție neprinsă în bot.
-    Loghează cu traceback complet + notifică userul + salvează în audit.
-    """
     error = context.error
     tb_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     logger.error(f"Unhandled exception:\n{tb_str}")
 
-    # Salvăm în audit
     try:
         user_id = None
         if isinstance(update, Update) and update.effective_user:
             user_id = update.effective_user.id
-
         session = get_session()
         try:
-            # user_id de mai sus e telegram_id, nu db user_id. Facem lookup rapid.
             db_user_id = None
             if user_id:
                 db_user = users_repo.get_by_telegram_id(session, telegram_id=user_id)
                 db_user_id = db_user.id if db_user else None
-
             audit_repo.write(
-                session,
-                entity_type="system",
-                entity_id=0,
-                action="error",
-                user_id=db_user_id,
-                source="system",
+                session, entity_type="system", entity_id=0,
+                action="error", user_id=db_user_id, source="system",
                 note=f"{type(error).__name__}: {str(error)[:400]}",
             )
             session.commit()
@@ -248,7 +237,6 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as audit_err:
         logger.error(f"Failed to write error to audit: {audit_err}")
 
-    # Notificăm userul (dacă avem context de update)
     if isinstance(update, Update) and update.effective_message:
         try:
             await update.effective_message.reply_text(
@@ -257,7 +245,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
                 "Încearcă din nou sau contactează administratorul."
             )
         except Exception:
-            pass  # Dacă nu putem trimite mesajul, nu facem nimic
+            pass
 
 
 # --- COMMAND HANDLERS ---
@@ -265,24 +253,33 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(update)
     name = update.effective_user.first_name or "șofer"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🖥️ Deschide Dashboard",
+            web_app=WebAppInfo(url=DASHBOARD_URL),
+        )],
+    ])
     await update.message.reply_text(
-        f"👋 Bun venit, {name}!\n\n"
+        f"👋 Bun venit, *{name}*!\n\n"
         f"Trimite-mi:\n"
         f"📸 O poză cu bon/factură → o înregistrez automat\n"
         f"✍️ Text (ex: *am dat 50 lei bacsis cash*) → înregistrez manual\n\n"
         f"Comenzi:\n"
+        f"/web — dashboard web cu rapoarte\n"
         f"/raport — raport luna curentă\n"
         f"/raport 04 2026 — raport specific\n"
-        f"/export 04 2026 — export CSV pentru Excel\n"
+        f"/export 04 2026 — export CSV\n"
         f"/delete 5 — anulează documentul #5\n"
-        f"/ajutor — această listă",
-        parse_mode="Markdown"
+        f"/ajutor — toate comenzile",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
     )
 
 
 async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📋 *Comenzi disponibile:*\n\n"
+        "/web — dashboard cu rapoarte și grafice\n"
         "/raport — raport luna curentă\n"
         "/raport 04 — raport luna aprilie\n"
         "/raport 04 2026 — raport specific\n"
@@ -291,6 +288,27 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/ajutor — această listă\n\n"
         "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber.",
         parse_mode="Markdown"
+    )
+
+
+async def handle_web(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /web — buton Telegram WebApp care deschide dashboard-ul direct în Telegram.
+    """
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🖥️ Deschide Dashboard",
+            web_app=WebAppInfo(url=DASHBOARD_URL),
+        )],
+    ])
+    await update.message.reply_text(
+        "📊 *Contabil PFA Pro — Dashboard*\n\n"
+        "📈 Rapoarte lunare\n"
+        "💳 Tranzacții detaliate\n"
+        "🏛️ TVA D301 calculat automat\n"
+        "⬇️ Export CSV pentru contabil",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
     )
 
 
@@ -385,10 +403,16 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         from app.models import ExportLog
-        session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
-            external_ref=fname_tx, status="ok", response_msg=f"{len(txs)} tranzacții"))
-        session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
-            external_ref=fname_rez, status="ok", response_msg=f"rezumat {month_name} {year}"))
+        session.add(ExportLog(
+            target="csv", entity_type="period", entity_id=0,
+            external_ref=fname_tx, status="ok",
+            response_msg=f"{len(txs)} tranzacții",
+        ))
+        session.add(ExportLog(
+            target="csv", entity_type="period", entity_id=0,
+            external_ref=fname_rez, status="ok",
+            response_msg=f"rezumat {month_name} {year}",
+        ))
         session.commit()
         logger.info(f"CSV export {year}/{month:02d} trimis user_id={user_id}: {len(txs)} tx")
 
@@ -401,17 +425,6 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /delete <doc_id>
-
-    Anulează un document și tranzacțiile asociate.
-    - Document → status='rejected'
-    - Transactions → șterse (dacă nu sunt locked)
-    - Audit log → 'delete' cu before snapshot
-
-    Google Sheets NU e modificat automat — rândul rămâne acolo
-    dar e marcat ca anulat în DB. La pasul 18+ vom adăuga resync.
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
@@ -430,12 +443,13 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         doc_id = int(args[0])
     except ValueError:
-        await update.message.reply_text("⚠️ ID-ul trebuie să fie un număr. Exemplu: /delete 5")
+        await update.message.reply_text(
+            "⚠️ ID-ul trebuie să fie un număr. Exemplu: /delete 5"
+        )
         return
 
     session = get_session()
     try:
-        # Verificăm că documentul există și aparține acestui user
         doc = documents_repo.get_by_id(session, doc_id=doc_id, user_id=user_id)
 
         if doc is None:
@@ -457,33 +471,21 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Snapshot before pentru audit
         before_snapshot = documents_repo.to_dict(doc)
-
-        # Ștergem tranzacțiile
         tx_count = tx_repo.delete_for_document(session, document_id=doc_id)
-
-        # Marcăm documentul ca rejected
         documents_repo.set_status(session, doc, "rejected")
 
-        # Audit
         audit_repo.write(
-            session,
-            entity_type="document",
-            entity_id=doc_id,
-            action="delete",
-            user_id=user_id,
-            source="user",
+            session, entity_type="document", entity_id=doc_id,
+            action="delete", user_id=user_id, source="user",
             before=before_snapshot,
             after={"status": "rejected"},
             note=f"deleted by user via /delete; {tx_count} transactions removed",
         )
 
         session.commit()
-
         logger.info(f"Document #{doc_id} rejected by user_id={user_id}; {tx_count} tx removed")
 
-        # Mesaj confirmare
         details = f"{doc.platforma or '?'} · {doc.data_doc or '?'} · {doc.brut:.2f} RON"
         await update.message.reply_text(
             f"🗑️ Document #{doc_id} anulat.\n"
@@ -509,7 +511,10 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
     if user_id:
         logger.info(f"Processing entry for user_id={user_id} source_file_id={source_file_id}")
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 Analizez documentul (TVA 21%)...")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔄 Analizez documentul (TVA 21%)..."
+    )
 
     extraction = ai_client.extract_document(
         user_input=text_input,
@@ -568,32 +573,46 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                 item.brut, item.comision, tva,
                 item.net, item.cash, banca, item.detalii or "",
             ]
-            sheet_used = sync_to_sheets(doc_id=doc_id, row_data=row, date_str=data_doc) if doc_id else None
+            sheet_used = sync_to_sheets(
+                doc_id=doc_id, row_data=row, date_str=data_doc
+            ) if doc_id else None
 
             doc_tag = f" #{doc_id}" if doc_id else ""
             tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
 
             if tip == DocType.FACTURA_COMISION:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                                f"📄 **FACTURA {item.platforma}**\n"
-                                f"📅 Data: {data_doc}\n"
-                                f"💵 Baza: {item.comision} RON\n"
-                                f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n")
+                msg_confirm += (
+                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
+                    f"📄 **FACTURA {item.platforma}**\n"
+                    f"📅 Data: {data_doc}\n"
+                    f"💵 Baza: {item.comision} RON\n"
+                    f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n"
+                )
             elif tip == DocType.CHELTUIALA:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                                f"🛒 **{item.detalii}** ({item.brut} RON)\n")
+                msg_confirm += (
+                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
+                    f"🛒 **{item.detalii}** ({item.brut} RON)\n"
+                )
             else:
-                msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                                f"💰 Incasare: {item.brut} RON\n")
+                msg_confirm += (
+                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
+                    f"💰 Incasare: {item.brut} RON\n"
+                )
 
         if extraction["validation_errors"]:
             msg_confirm += f"\n⚠️ {len(extraction['validation_errors'])} item(e) respinse la validare."
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg_confirm)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=msg_confirm
+        )
 
     except Exception as e:
         logger.error(f"Error while processing items: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Eroare sistem: {str(e)}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"❌ Eroare sistem: {str(e)}"
+        )
 
 
 # --- HANDLERS ---
@@ -625,7 +644,8 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await process_entry(
         update, context,
-        text_input=caption, image_bytes=file_bytes,
+        text_input=caption,
+        image_bytes=file_bytes,
         source_file_id=source_file_id,
     )
 
@@ -653,18 +673,16 @@ if __name__ == '__main__':
 
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
 
-    # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor))
+    app_bot.add_handler(CommandHandler("web", handle_web))
     app_bot.add_handler(CommandHandler("raport", handle_raport))
     app_bot.add_handler(CommandHandler("export", handle_export))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
 
-    # Mesaje
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
 
-    # Global error handler — ULTIMA linie înainte de run_polling
     app_bot.add_error_handler(handle_error)
 
     print("🤖 Bot Contabil v5 (2026/TVA 21%) ONLINE!")
