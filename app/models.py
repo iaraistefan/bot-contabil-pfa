@@ -1,24 +1,13 @@
 """
 SQLAlchemy ORM models for the PFA accounting bot.
-
 Single source of truth for all DB tables.
-Import Base from db.py so all models register on the same declarative registry.
 """
 
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    Column,
-    Date,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    JSON,
-    String,
-    Text,
+    BigInteger, Boolean, Column, Date, DateTime,
+    Float, ForeignKey, Integer, JSON, String, Text,
 )
 from sqlalchemy.orm import relationship
 
@@ -38,6 +27,7 @@ class User(Base):
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    tax_periods = relationship("TaxPeriod", back_populates="user")
 
     def __repr__(self):
         return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
@@ -140,31 +130,45 @@ class Transaction(Base):
         )
 
 
+class TaxPeriod(Base):
+    """
+    Snapshot al calculelor fiscale pentru o lună.
+    Compute on-demand prin /raport, snapshot salvat pentru referință.
+    """
+    __tablename__ = "tax_periods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    computed_at = Column(DateTime, nullable=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    year = Column(Integer, nullable=False, index=True)
+    month = Column(Integer, nullable=False, index=True)
+
+    status = Column(String(20), nullable=False, default="open")
+    # open | computed | submitted | closed
+
+    # Snapshot JSON cu totalurile — ce returnează tax_engine.compute_period()
+    totals_json = Column(JSON, nullable=True)
+
+    user = relationship("User", back_populates="tax_periods")
+
+    def __repr__(self):
+        return f"<TaxPeriod {self.year}/{self.month:02d} user={self.user_id} status={self.status}>"
+
+
 class ExportLog(Base):
-    """
-    Log al fiecărei tentative de export extern (Sheets, CSV, D301, etc.).
-    Idempotent prin (target, entity_type, entity_id) — știm dacă un document
-    a fost deja exportat și dacă exportul a reușit.
-    """
     __tablename__ = "export_logs"
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     target = Column(String(30), nullable=False, index=True)
-    # 'sheets' | 'csv' | 'd301' | 'd390' | 'du'
-
     entity_type = Column(String(30), nullable=False, default="document")
     entity_id = Column(Integer, nullable=False, index=True)
-
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
-
     external_ref = Column(String(500), nullable=True)
-    # Ex: "Aprilie 2026" (tab name), "exports/raport_04_2026.csv"
-
     status = Column(String(10), nullable=False, default="ok")
-    # 'ok' | 'failed'
-
     response_msg = Column(Text, nullable=True)
 
     document = relationship("Document", back_populates="export_logs")
