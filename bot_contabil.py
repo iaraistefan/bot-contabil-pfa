@@ -1,4 +1,3 @@
-from app.ai import fiscal_monitor as fiscal_mon
 from config import settings
 from app.enums import DocType
 from db import init_db, get_session
@@ -10,6 +9,7 @@ from app.repositories import audit as audit_repo
 from app.repositories import tax_periods as tax_periods_repo
 from app import storage
 from app.ai import client as ai_client
+from app.ai import fiscal_monitor as fiscal_mon
 from app.services import posting
 from app.services import tax_engine
 from app.services import scheduler as sched_service
@@ -265,10 +265,10 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/web — dashboard cu rapoarte și grafice\n"
         f"/raport — raport luna curentă\n"
         f"/fiscal — calendar declarații ANAF\n"
+        f"/alerte — monitorizare modificări legislative\n"
         f"/export 04 2026 — CSV pentru contabil\n"
         f"/delete 5 — anulează documentul \\#5\n"
         f"/reset — șterge tot și începe de la zero\n"
-        f"/reminder — trimite reminder acum\n"
         f"/ajutor — toate comenzile",
         parse_mode="Markdown",
         reply_markup=keyboard,
@@ -283,6 +283,8 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/raport 04 2026 — raport specific\n"
         "/fiscal — calendar declarații ANAF\n"
         "/fiscal 03 2026 — calendar pentru lună specifică\n"
+        "/alerte — istoricul alertelor fiscale\n"
+        "/alerte acum — verifică modificări legislative acum\n"
         "/export 04 2026 — CSV pentru Excel/contabil\n"
         "/delete 5 — anulează documentul \\#5\n"
         "/reset — șterge toate datele ⚠️\n"
@@ -347,11 +349,123 @@ async def handle_fiscal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 
+async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /alerte — istoricul alertelor fiscale.
+    /alerte acum — rulează monitorizarea acum (test manual).
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
+        return
+
+    args = context.args or []
+
+    # /alerte acum → rulează monitorizarea manual
+    if args and args[0].lower() == "acum":
+        await update.message.reply_text(
+            "🔄 Rulez monitorizarea fiscală acum...\n"
+            "_(30-60 secunde, caut pe ANAF.ro și Monitorul Oficial)_",
+            parse_mode="Markdown"
+        )
+        try:
+            now = datetime.now()
+            result = fiscal_mon.run_fiscal_research(now.year, now.month)
+
+            # Salvăm în DB
+            session = get_session()
+            try:
+                from app.models import FiscalAlert
+                alert = FiscalAlert(
+                    user_id=user_id,
+                    research_year=now.year,
+                    research_month=now.month,
+                    title=result.get("title", "Research manual"),
+                    summary=result.get("summary", ""),
+                    full_response=result.get("raw_response", "")[:5000],
+                    sources_json=[
+                        {"url": c.get("source_url", ""), "name": c.get("source_name", "")}
+                        for c in result.get("changes", []) if c.get("source_url")
+                    ],
+                    urgency=result.get("urgency", "none"),
+                    has_changes=result.get("has_changes", False),
+                    seen=True,
+                )
+                session.add(alert)
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Error saving fiscal alert: {e}")
+            finally:
+                session.close()
+
+            # Formatăm și trimitem
+            msg = fiscal_mon.format_alert_telegram(result)
+            if msg:
+                await update.message.reply_text(msg, parse_mode="Markdown")
+            else:
+                await update.message.reply_text(
+                    "✅ *Monitorizare finalizată*\n\n"
+                    "Nu am găsit modificări legislative relevante pentru luna curentă.\n\n"
+                    "_Surse verificate: ANAF.ro, Monitorul Oficial, legislatie.just.ro_",
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"handle_alerte acum error: {e}")
+            await update.message.reply_text(
+                "❌ Eroare la monitorizare. Încearcă din nou mai târziu."
+            )
+        return
+
+    # /alerte → istoricul ultimelor alerte
+    session = get_session()
+    try:
+        from app.models import FiscalAlert
+        alerts = (
+            session.query(FiscalAlert)
+            .filter(FiscalAlert.user_id == user_id)
+            .order_by(FiscalAlert.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+        if not alerts:
+            await update.message.reply_text(
+                "📭 Nu există alerte fiscale înregistrate.\n\n"
+                "Monitorizarea rulează automat în ziua 1 a fiecărei luni.\n"
+                "Sau folosește `/alerte acum` pentru a rula acum.",
+                parse_mode="Markdown"
+            )
+            return
+
+        luni = {
+            1:"Ian", 2:"Feb", 3:"Mar", 4:"Apr", 5:"Mai", 6:"Iun",
+            7:"Iul", 8:"Aug", 9:"Sep", 10:"Oct", 11:"Nov", 12:"Dec"
+        }
+        urgency_icon = {"critical": "🔴", "warning": "🟡", "info": "🟢", "none": "✅"}
+
+        msg = "📋 *Istoric alerte fiscale:*\n\n"
+        for a in alerts:
+            icon = urgency_icon.get(a.urgency, "ℹ️")
+            period = f"{luni.get(a.research_month, '?')} {a.research_year}"
+            status = "" if a.seen else " 🆕"
+            msg += f"{icon} *{period}*{status} — {a.title}\n"
+            msg += f"   _{a.summary[:100]}..._\n\n"
+            a.seen = True
+
+        msg += "_Folosește `/alerte acum` pentru o verificare manuală._"
+        session.commit()
+        await update.message.reply_text(msg, parse_mode="Markdown")
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"handle_alerte error: {e}")
+        await update.message.reply_text("❌ Eroare la citirea alertelor.")
+    finally:
+        session.close()
+
+
 async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /reset — șterge toate datele user-ului.
-    Cere confirmare explicită: /reset CONFIRM
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
@@ -367,7 +481,7 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• Toate tranzacțiile din ledger\n"
             "• Toate fișierele sursă înregistrate\n"
             "• Toate rapoartele salvate\n\n"
-            "Google Sheets NU va fi modificat \\(rândurile rămân acolo\\)\\.\n\n"
+            "Google Sheets NU va fi modificat (rândurile rămân acolo).\n\n"
             "Dacă ești sigur, scrie:\n"
             "`/reset CONFIRM`",
             parse_mode="Markdown"
@@ -380,10 +494,10 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from app.models import (
             Document, Transaction, SourceFile,
-            TaxPeriod, ExportLog,
+            TaxPeriod, ExportLog, FiscalAlert,
         )
 
-        # 1. Ștergem ExportLog-urile — fetch + delete individual (evităm FK issues)
+        # 1. ExportLog — fetch și delete individual
         doc_ids = [
             row[0] for row in
             session.query(Document.id).filter(Document.user_id == user_id).all()
@@ -398,7 +512,7 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session.delete(el)
             session.flush()
 
-        # 2. Ștergem Transactions
+        # 2. Transactions
         tx_count = (
             session.query(Transaction)
             .filter(Transaction.user_id == user_id)
@@ -406,7 +520,7 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 3. Ștergem Documents
+        # 3. Documents
         doc_count = (
             session.query(Document)
             .filter(Document.user_id == user_id)
@@ -414,7 +528,7 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 4. Ștergem SourceFiles
+        # 4. SourceFiles
         sf_count = (
             session.query(SourceFile)
             .filter(SourceFile.user_id == user_id)
@@ -422,7 +536,7 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 5. Ștergem TaxPeriods
+        # 5. TaxPeriods
         tp_count = (
             session.query(TaxPeriod)
             .filter(TaxPeriod.user_id == user_id)
@@ -430,31 +544,37 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 6. Audit log
+        # 6. FiscalAlerts
+        fa_count = (
+            session.query(FiscalAlert)
+            .filter(FiscalAlert.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        # 7. Audit
         audit_repo.write(
             session,
-            entity_type="user",
-            entity_id=user_id,
-            action="reset",
-            user_id=user_id,
-            source="user",
+            entity_type="user", entity_id=user_id,
+            action="reset", user_id=user_id, source="user",
             note=f"full reset: {doc_count} docs, {tx_count} txs, {sf_count} sf deleted",
         )
 
         session.commit()
         logger.info(
             f"RESET user_id={user_id}: "
-            f"{doc_count} docs, {tx_count} txs, {sf_count} sf, {tp_count} periods deleted"
+            f"{doc_count} docs, {tx_count} txs, {sf_count} sf, "
+            f"{tp_count} periods, {fa_count} alerts deleted"
         )
 
         await update.message.reply_text(
-            f"✅ *Date șterse cu succes\\.*\n\n"
+            f"✅ *Date șterse cu succes.*\n\n"
             f"• {doc_count} document{'e' if doc_count != 1 else ''} eliminate\n"
             f"• {tx_count} tranzacții eliminate\n"
             f"• {sf_count} fișiere sursă eliminate\n\n"
-            f"Poți acum să încarci documentele reale de la zero\\.\n"
-            f"Trimite\\-le în orice ordine — sortez după data de pe document\\.",
-            parse_mode="MarkdownV2"
+            f"Poți acum să încarci documentele reale de la zero.\n"
+            f"Trimite-le în orice ordine — sortez după data de pe document.",
+            parse_mode="Markdown"
         )
 
     except Exception as e:
@@ -827,6 +947,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("web", handle_web))
     app_bot.add_handler(CommandHandler("raport", handle_raport))
     app_bot.add_handler(CommandHandler("fiscal", handle_fiscal))
+    app_bot.add_handler(CommandHandler("alerte", handle_alerte))
     app_bot.add_handler(CommandHandler("export", handle_export))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("reset", handle_reset))
