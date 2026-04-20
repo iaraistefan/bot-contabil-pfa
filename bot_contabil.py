@@ -13,6 +13,7 @@ from app.services import posting
 from app.services import tax_engine
 from app.integrations import sheets
 from app.integrations.exports import csv_export
+from app.http.app import start_http_server
 import logging
 from datetime import datetime
 from typing import Optional
@@ -21,32 +22,17 @@ from telegram.ext import (
     ApplicationBuilder, ContextTypes,
     MessageHandler, CommandHandler, filters,
 )
-from flask import Flask
-from threading import Thread
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURARE ---
 SHEET_NAME = "Contabilitate PFA 2025"
 CREDENTIALS_FILE = "credentials.json"
 
-# --- SERVER WEB ---
-app = Flask('')
-@app.route('/')
-def home():
-    return "Bot Fiscal (TVA 21% + Taburi Lunare) ONLINE"
-
-def run_http():
-    app.run(host='0.0.0.0', port=settings.port)
-
-def keep_alive():
-    t = Thread(target=run_http)
-    t.start()
-
-# --- INITIALIZARE ---
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 # --- HELPERS DB ---
+
 def ensure_user(update: Update):
     try:
         tg_user = update.effective_user
@@ -197,11 +183,6 @@ def sync_to_sheets(doc_id, row_data, date_str):
 
 
 def _parse_period_args(args, now: datetime):
-    """
-    Parsează argumentele lunii/anului dintr-o comandă Telegram.
-    Returnează (year, month) sau ridică ValueError.
-    Folosit de /raport și /export.
-    """
     if len(args) == 0:
         return now.year, now.month
     elif len(args) == 1:
@@ -220,7 +201,6 @@ def _parse_period_args(args, now: datetime):
 
 
 def _tx_count_label(n: int) -> str:
-    """'1 tranzacție', '2 tranzacții', etc."""
     if n == 1:
         return "1 tranzacție"
     return f"{n} tranzacții"
@@ -292,11 +272,6 @@ async def handle_raport(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.commit()
 
         msg = tax_engine.format_report_message(totals)
-        # Fix gramatică inline în mesaj
-        msg = msg.replace(
-            f"_{totals['tx_count']} tranzacții procesate_",
-            f"_{_tx_count_label(totals['tx_count'])} procesate_",
-        )
         await update.message.reply_text(msg, parse_mode="Markdown")
         logger.info(f"Raport {year}/{month:02d} generat pentru user_id={user_id}")
 
@@ -309,12 +284,6 @@ async def handle_raport(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /export [luna] [an]
-    Generează și trimite 2 fișiere CSV:
-    1. tranzactii_<an>_<luna>.csv — toate tranzacțiile cu detalii
-    2. rezumat_fiscal_<an>_<luna>.csv — totaluri pentru contabil
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
@@ -334,7 +303,6 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     session = get_session()
     try:
-        # Luăm tranzacțiile din DB
         txs = tx_repo.list_for_period(session, user_id=user_id, year=year, month=month)
 
         if not txs:
@@ -344,17 +312,13 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Generăm totalurile (pentru rezumat)
         totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
 
-        # Generăm CSV-urile în memorie
         csv_tx = csv_export.generate_transactions_csv(txs, year, month)
         csv_rez = csv_export.generate_rezumat_csv(totals)
-
         fname_tx = csv_export.filename_transactions(year, month)
         fname_rez = csv_export.filename_rezumat(year, month)
 
-        # Trimitem în Telegram ca fișiere
         import io as _io
         await update.message.reply_document(
             document=_io.BytesIO(csv_tx),
@@ -367,28 +331,12 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption=f"📋 Rezumat fiscal {month_name} {year}",
         )
 
-        # Log export în DB
         from app.models import ExportLog
-        log_tx = ExportLog(
-            target="csv",
-            entity_type="period",
-            entity_id=0,
-            external_ref=fname_tx,
-            status="ok",
-            response_msg=f"{len(txs)} tranzacții",
-        )
-        log_rez = ExportLog(
-            target="csv",
-            entity_type="period",
-            entity_id=0,
-            external_ref=fname_rez,
-            status="ok",
-            response_msg=f"rezumat {month_name} {year}",
-        )
-        session.add(log_tx)
-        session.add(log_rez)
+        session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
+            external_ref=fname_tx, status="ok", response_msg=f"{len(txs)} tranzacții"))
+        session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
+            external_ref=fname_rez, status="ok", response_msg=f"rezumat {month_name} {year}"))
         session.commit()
-
         logger.info(f"CSV export {year}/{month:02d} trimis user_id={user_id}: {len(txs)} tx")
 
     except Exception as e:
@@ -400,6 +348,7 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- PROCESARE MESAJ ---
+
 async def process_entry(update, context, text_input=None, image_bytes=None, source_file_id=None):
     user_id = ensure_user(update)
     if user_id:
@@ -493,6 +442,7 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
 
 
 # --- HANDLERS ---
+
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_file = await update.message.photo[-1].get_file()
     file_bytes = bytes(await tg_file.download_as_bytearray())
@@ -529,6 +479,8 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
     await process_entry(update, context, text_input=update.message.text)
 
 
+# --- MAIN ---
+
 if __name__ == '__main__':
     try:
         init_db()
@@ -542,14 +494,15 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ Storage dir FAILED: {e}")
 
-    keep_alive()
+    # Pornește API-ul HTTP în background
+    start_http_server()
+
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
 
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor))
     app_bot.add_handler(CommandHandler("raport", handle_raport))
     app_bot.add_handler(CommandHandler("export", handle_export))
-
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
 
