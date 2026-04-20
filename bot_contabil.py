@@ -15,6 +15,7 @@ from app.integrations import sheets
 from app.integrations.exports import csv_export
 from app.http.app import start_http_server
 import logging
+import traceback
 from datetime import datetime
 from typing import Optional
 from telegram import Update
@@ -26,7 +27,6 @@ from telegram.ext import (
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURARE ---
 SHEET_NAME = "Contabilitate PFA 2025"
 CREDENTIALS_FILE = "credentials.json"
 
@@ -206,6 +206,60 @@ def _tx_count_label(n: int) -> str:
     return f"{n} tranzacții"
 
 
+# --- GLOBAL ERROR HANDLER ---
+
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handler global pentru orice excepție neprinsă în bot.
+    Loghează cu traceback complet + notifică userul + salvează în audit.
+    """
+    error = context.error
+    tb_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    logger.error(f"Unhandled exception:\n{tb_str}")
+
+    # Salvăm în audit
+    try:
+        user_id = None
+        if isinstance(update, Update) and update.effective_user:
+            user_id = update.effective_user.id
+
+        session = get_session()
+        try:
+            # user_id de mai sus e telegram_id, nu db user_id. Facem lookup rapid.
+            db_user_id = None
+            if user_id:
+                db_user = users_repo.get_by_telegram_id(session, telegram_id=user_id)
+                db_user_id = db_user.id if db_user else None
+
+            audit_repo.write(
+                session,
+                entity_type="system",
+                entity_id=0,
+                action="error",
+                user_id=db_user_id,
+                source="system",
+                note=f"{type(error).__name__}: {str(error)[:400]}",
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+        finally:
+            session.close()
+    except Exception as audit_err:
+        logger.error(f"Failed to write error to audit: {audit_err}")
+
+    # Notificăm userul (dacă avem context de update)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "❌ A apărut o eroare neașteptată.\n"
+                "Mesajul tău a fost primit, dar nu a putut fi procesat.\n"
+                "Încearcă din nou sau contactează administratorul."
+            )
+        except Exception:
+            pass  # Dacă nu putem trimite mesajul, nu facem nimic
+
+
 # --- COMMAND HANDLERS ---
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,6 +274,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/raport — raport luna curentă\n"
         f"/raport 04 2026 — raport specific\n"
         f"/export 04 2026 — export CSV pentru Excel\n"
+        f"/delete 5 — anulează documentul #5\n"
         f"/ajutor — această listă",
         parse_mode="Markdown"
     )
@@ -232,6 +287,7 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/raport 04 — raport luna aprilie\n"
         "/raport 04 2026 — raport specific\n"
         "/export 04 2026 — CSV pentru Excel/contabil\n"
+        "/delete 5 — anulează documentul #5\n"
         "/ajutor — această listă\n\n"
         "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber.",
         parse_mode="Markdown"
@@ -313,7 +369,6 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
-
         csv_tx = csv_export.generate_transactions_csv(txs, year, month)
         csv_rez = csv_export.generate_rezumat_csv(totals)
         fname_tx = csv_export.filename_transactions(year, month)
@@ -321,13 +376,11 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         import io as _io
         await update.message.reply_document(
-            document=_io.BytesIO(csv_tx),
-            filename=fname_tx,
+            document=_io.BytesIO(csv_tx), filename=fname_tx,
             caption=f"📊 Tranzacții {month_name} {year} — {_tx_count_label(len(txs))}",
         )
         await update.message.reply_document(
-            document=_io.BytesIO(csv_rez),
-            filename=fname_rez,
+            document=_io.BytesIO(csv_rez), filename=fname_rez,
             caption=f"📋 Rezumat fiscal {month_name} {year}",
         )
 
@@ -343,6 +396,108 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.rollback()
         logger.error(f"Error in handle_export {year}/{month}: {e}")
         await update.message.reply_text("❌ Eroare la generarea CSV. Încearcă din nou.")
+    finally:
+        session.close()
+
+
+async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /delete <doc_id>
+
+    Anulează un document și tranzacțiile asociate.
+    - Document → status='rejected'
+    - Transactions → șterse (dacă nu sunt locked)
+    - Audit log → 'delete' cu before snapshot
+
+    Google Sheets NU e modificat automat — rândul rămâne acolo
+    dar e marcat ca anulat în DB. La pasul 18+ vom adăuga resync.
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "⚠️ Specifică ID-ul documentului.\n"
+            "Exemplu: /delete 5\n\n"
+            "ID-ul apare în mesajul de confirmare (ex: *#5*).",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        doc_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("⚠️ ID-ul trebuie să fie un număr. Exemplu: /delete 5")
+        return
+
+    session = get_session()
+    try:
+        # Verificăm că documentul există și aparține acestui user
+        doc = documents_repo.get_by_id(session, doc_id=doc_id, user_id=user_id)
+
+        if doc is None:
+            await update.message.reply_text(
+                f"⚠️ Documentul #{doc_id} nu a fost găsit sau nu îți aparține."
+            )
+            return
+
+        if doc.status == "rejected":
+            await update.message.reply_text(
+                f"ℹ️ Documentul #{doc_id} este deja anulat."
+            )
+            return
+
+        if doc.status == "exported":
+            await update.message.reply_text(
+                f"⚠️ Documentul #{doc_id} a fost deja exportat într-o perioadă fiscală.\n"
+                f"Nu poate fi anulat retroactiv. Contactează contabilul."
+            )
+            return
+
+        # Snapshot before pentru audit
+        before_snapshot = documents_repo.to_dict(doc)
+
+        # Ștergem tranzacțiile
+        tx_count = tx_repo.delete_for_document(session, document_id=doc_id)
+
+        # Marcăm documentul ca rejected
+        documents_repo.set_status(session, doc, "rejected")
+
+        # Audit
+        audit_repo.write(
+            session,
+            entity_type="document",
+            entity_id=doc_id,
+            action="delete",
+            user_id=user_id,
+            source="user",
+            before=before_snapshot,
+            after={"status": "rejected"},
+            note=f"deleted by user via /delete; {tx_count} transactions removed",
+        )
+
+        session.commit()
+
+        logger.info(f"Document #{doc_id} rejected by user_id={user_id}; {tx_count} tx removed")
+
+        # Mesaj confirmare
+        details = f"{doc.platforma or '?'} · {doc.data_doc or '?'} · {doc.brut:.2f} RON"
+        await update.message.reply_text(
+            f"🗑️ Document #{doc_id} anulat.\n"
+            f"_{details}_\n\n"
+            f"✅ {_tx_count_label(tx_count)} {'eliminată' if tx_count == 1 else 'eliminate'} din ledger.\n\n"
+            f"⚠️ Rândul din Google Sheets rămâne — șterge-l manual dacă e necesar.\n"
+            f"Rulează /raport pentru a vedea raportul actualizat.",
+            parse_mode="Markdown"
+        )
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error in handle_delete doc_id={doc_id}: {e}")
+        await update.message.reply_text("❌ Eroare la anularea documentului. Încearcă din nou.")
     finally:
         session.close()
 
@@ -494,17 +649,23 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ Storage dir FAILED: {e}")
 
-    # Pornește API-ul HTTP în background
     start_http_server()
 
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
 
+    # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor))
     app_bot.add_handler(CommandHandler("raport", handle_raport))
     app_bot.add_handler(CommandHandler("export", handle_export))
+    app_bot.add_handler(CommandHandler("delete", handle_delete))
+
+    # Mesaje
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
+
+    # Global error handler — ULTIMA linie înainte de run_polling
+    app_bot.add_error_handler(handle_error)
 
     print("🤖 Bot Contabil v5 (2026/TVA 21%) ONLINE!")
     app_bot.run_polling()
