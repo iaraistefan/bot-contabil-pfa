@@ -6,17 +6,20 @@ from app.repositories import source_files as source_files_repo
 from app.repositories import documents as documents_repo
 from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
+from app.repositories import tax_periods as tax_periods_repo
 from app import storage
 from app.ai import client as ai_client
 from app.services import posting
+from app.services import tax_engine
 from app.integrations import sheets
 import logging
-import gspread
 from datetime import datetime
 from typing import Optional
-from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder, ContextTypes,
+    MessageHandler, CommandHandler, filters,
+)
 from flask import Flask
 from threading import Thread
 
@@ -24,7 +27,7 @@ from threading import Thread
 SHEET_NAME = "Contabilitate PFA 2025"
 CREDENTIALS_FILE = "credentials.json"
 
-# --- SERVER WEB (PENTRU RENDER) ---
+# --- SERVER WEB ---
 app = Flask('')
 @app.route('/')
 def home():
@@ -42,6 +45,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 
+# --- HELPERS DB ---
 def ensure_user(update: Update):
     try:
         tg_user = update.effective_user
@@ -80,13 +84,7 @@ def ensure_user(update: Update):
         return None
 
 
-def register_source_file(
-    user_id: int,
-    file_bytes: bytes,
-    telegram_file_id: str,
-    kind: str = "photo",
-    mime: str = "image/jpeg",
-):
+def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mime="image/jpeg"):
     sha = storage.compute_sha256(file_bytes)
     session = get_session()
     try:
@@ -94,53 +92,28 @@ def register_source_file(
         if existing is not None:
             logger.info(f"Dedup HIT sha={sha[:8]}... sf_id={existing.id}")
             result = {
-                "id": existing.id,
-                "sha256": existing.sha256,
-                "created_at": existing.created_at,
-                "is_duplicate": True,
+                "id": existing.id, "sha256": existing.sha256,
+                "created_at": existing.created_at, "is_duplicate": True,
             }
-            audit_repo.write(
-                session,
-                entity_type="source_file",
-                entity_id=existing.id,
-                action="dedup_hit",
-                user_id=user_id,
-                source="system",
-                note=f"duplicate upload; original created at {existing.created_at.isoformat()}",
-            )
+            audit_repo.write(session, entity_type="source_file", entity_id=existing.id,
+                action="dedup_hit", user_id=user_id, source="system",
+                note=f"duplicate upload; original created at {existing.created_at.isoformat()}")
             session.commit()
             return result
         ext = "jpg" if kind == "photo" else "bin"
         path = storage.save_bytes(file_bytes, sha, ext=ext)
         new_sf = source_files_repo.create(
-            session,
-            user_id=user_id,
-            kind=kind,
-            sha256=sha,
-            telegram_file_id=telegram_file_id,
-            mime=mime,
-            bytes_size=len(file_bytes),
-            storage_path=path,
+            session, user_id=user_id, kind=kind, sha256=sha,
+            telegram_file_id=telegram_file_id, mime=mime,
+            bytes_size=len(file_bytes), storage_path=path,
         )
-        audit_repo.write(
-            session,
-            entity_type="source_file",
-            entity_id=new_sf.id,
-            action="create",
-            user_id=user_id,
-            source="user",
-            after={
-                "kind": new_sf.kind,
-                "sha256": new_sf.sha256,
-                "bytes_size": new_sf.bytes_size,
-                "storage_path": new_sf.storage_path,
-            },
-        )
+        audit_repo.write(session, entity_type="source_file", entity_id=new_sf.id,
+            action="create", user_id=user_id, source="user",
+            after={"kind": new_sf.kind, "sha256": new_sf.sha256,
+                   "bytes_size": new_sf.bytes_size, "storage_path": new_sf.storage_path})
         result = {
-            "id": new_sf.id,
-            "sha256": new_sf.sha256,
-            "created_at": new_sf.created_at,
-            "is_duplicate": False,
+            "id": new_sf.id, "sha256": new_sf.sha256,
+            "created_at": new_sf.created_at, "is_duplicate": False,
         }
         session.commit()
         logger.info(f"New SourceFile id={result['id']} sha={sha[:8]}...")
@@ -153,46 +126,23 @@ def register_source_file(
         session.close()
 
 
-def persist_document(
-    user_id: Optional[int],
-    source_file_id: Optional[int],
-    item,
-    banca: float,
-    raw_response: str,
-    prompt_version: Optional[str],
-):
+def persist_document(user_id, source_file_id, item, banca, raw_response, prompt_version):
     session = get_session()
     try:
         doc = documents_repo.create(
-            session,
-            user_id=user_id,
-            source_file_id=source_file_id,
-            data_doc=item.data,
-            platforma=item.platforma,
-            tip=item.tip,
-            brut=item.brut,
-            comision=item.comision,
-            tva=item.tva,
-            net=item.net,
-            cash=item.cash,
-            banca=banca,
+            session, user_id=user_id, source_file_id=source_file_id,
+            data_doc=item.data, platforma=item.platforma, tip=item.tip,
+            brut=item.brut, comision=item.comision, tva=item.tva,
+            net=item.net, cash=item.cash, banca=banca,
             detalii=item.detalii or "",
             raw_json=raw_response[:10000] if raw_response else "",
-            prompt_version=prompt_version,
-            status="posted",
-            confidence=1.0,
+            prompt_version=prompt_version, status="posted", confidence=1.0,
         )
         doc_id = doc.id
-        audit_repo.write(
-            session,
-            entity_type="document",
-            entity_id=doc_id,
-            action="create",
-            user_id=user_id,
-            source="ai",
+        audit_repo.write(session, entity_type="document", entity_id=doc_id,
+            action="create", user_id=user_id, source="ai",
             after=documents_repo.to_dict(doc),
-            note=f"posted via AI extraction (prompt={prompt_version})",
-        )
+            note=f"posted via AI extraction (prompt={prompt_version})")
         session.commit()
         logger.info(f"New Document id={doc_id} tip={item.tip} brut={item.brut}")
         return doc_id
@@ -204,28 +154,14 @@ def persist_document(
         session.close()
 
 
-def persist_transactions(
-    user_id: int,
-    doc_id: int,
-    item,
-    banca: float,
-):
+def persist_transactions(user_id, doc_id, item, banca):
     session = get_session()
     try:
         tx_ids = posting.post_document(
-            session,
-            user_id=user_id,
-            document_id=doc_id,
-            tip=item.tip,
-            platforma=item.platforma,
-            detalii=item.detalii,
-            brut=item.brut,
-            comision=item.comision,
-            tva=item.tva,
-            net=item.net,
-            cash=item.cash,
-            banca=banca,
-            data_doc=item.data,
+            session, user_id=user_id, document_id=doc_id,
+            tip=item.tip, platforma=item.platforma, detalii=item.detalii,
+            brut=item.brut, comision=item.comision, tva=item.tva,
+            net=item.net, cash=item.cash, banca=banca, data_doc=item.data,
         )
         session.commit()
         if tx_ids:
@@ -239,24 +175,12 @@ def persist_transactions(
         session.close()
 
 
-def sync_to_sheets(
-    doc_id: int,
-    row_data: list,
-    date_str: Optional[str],
-):
-    """
-    Scrie documentul în Google Sheets + loghează în export_logs.
-    Silent fail — nu blocăm bot-ul dacă Sheets e indisponibil.
-    Întoarce tab_name sau None.
-    """
+def sync_to_sheets(doc_id, row_data, date_str):
     session = get_session()
     try:
         tab_name = sheets.upsert_document(
-            session,
-            doc_id=doc_id,
-            row_data=row_data,
-            date_str=date_str,
-            sheet_name=SHEET_NAME,
+            session, doc_id=doc_id, row_data=row_data,
+            date_str=date_str, sheet_name=SHEET_NAME,
             credentials_file=CREDENTIALS_FILE,
         )
         session.commit()
@@ -267,6 +191,124 @@ def sync_to_sheets(
         return None
     finally:
         session.close()
+
+
+# --- COMMAND HANDLERS ---
+
+async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = ensure_user(update)
+    name = update.effective_user.first_name or "șofer"
+    await update.message.reply_text(
+        f"👋 Bun venit, {name}!\n\n"
+        f"Trimite-mi:\n"
+        f"📸 O poză cu bon/factură → o înregistrez automat\n"
+        f"✍️ Text (ex: *am dat 50 lei bacsis cash*) → înregistrez manual\n\n"
+        f"Comenzi:\n"
+        f"/raport — raport luna curentă\n"
+        f"/raport 04 — raport luna aprilie\n"
+        f"/raport 04 2026 — raport specific\n"
+        f"/ajutor — această listă",
+        parse_mode="Markdown"
+    )
+
+
+async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 *Comenzi disponibile:*\n\n"
+        "/raport — raport luna curentă\n"
+        "/raport 04 — raport luna aprilie\n"
+        "/raport 04 2026 — raport specific\n"
+        "/ajutor — această listă\n\n"
+        "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber.",
+        parse_mode="Markdown"
+    )
+
+
+async def handle_raport(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /raport [luna] [an]
+
+    Exemple:
+      /raport            → luna curentă
+      /raport 04         → aprilie, anul curent
+      /raport 04 2026    → aprilie 2026
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
+        return
+
+    # Parsare argumente
+    now = datetime.now()
+    args = context.args or []
+
+    try:
+        if len(args) == 0:
+            year, month = now.year, now.month
+        elif len(args) == 1:
+            month = int(args[0])
+            year = now.year
+            if not 1 <= month <= 12:
+                raise ValueError("luna invalida")
+        elif len(args) >= 2:
+            month = int(args[0])
+            year = int(args[1])
+            if not 1 <= month <= 12:
+                raise ValueError("luna invalida")
+            if not 2020 <= year <= 2099:
+                raise ValueError("an invalid")
+        else:
+            raise ValueError()
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "⚠️ Format incorect.\n"
+            "Exemple:\n"
+            "  /raport\n"
+            "  /raport 04\n"
+            "  /raport 04 2026"
+        )
+        return
+
+    await update.message.reply_text("🔄 Calculez raportul...")
+
+    try:
+        session = get_session()
+        try:
+            totals = tax_engine.compute_period(
+                session, user_id=user_id, year=year, month=month,
+            )
+
+            if totals["tx_count"] == 0:
+                await update.message.reply_text(
+                    f"📭 Nu am găsit tranzacții pentru "
+                    f"{tax_engine.LUNI_RO.get(month, str(month))} {year}.\n\n"
+                    f"Trimite bonuri și facturi pentru această lună, "
+                    f"apoi rulează din nou /raport."
+                )
+                return
+
+            # Salvăm snapshot-ul în DB
+            tp = tax_periods_repo.get_or_create(
+                session, user_id=user_id, year=year, month=month,
+            )
+            tax_periods_repo.save_totals(session, tp, totals)
+            session.commit()
+
+            # Formatăm și trimitem mesajul
+            msg = tax_engine.format_report_message(totals)
+            await update.message.reply_text(msg, parse_mode="Markdown")
+            logger.info(f"Raport {year}/{month:02d} generat pentru user_id={user_id}")
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error computing period {year}/{month}: {e}")
+            await update.message.reply_text("❌ Eroare la calculul raportului. Încearcă din nou.")
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.error(f"Unexpected error in handle_raport: {e}")
+        await update.message.reply_text("❌ Eroare neașteptată. Încearcă din nou.")
 
 
 # --- PROCESARE MESAJ ---
@@ -314,61 +356,31 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
             if tip == DocType.VENIT:
                 banca = item.net - item.cash
 
-            # 1. Document în DB
             doc_id = None
             if user_id:
                 doc_id = persist_document(
-                    user_id=user_id,
-                    source_file_id=source_file_id,
-                    item=item,
-                    banca=banca,
+                    user_id=user_id, source_file_id=source_file_id,
+                    item=item, banca=banca,
                     raw_response=extraction["raw_response"],
                     prompt_version=extraction["prompt_version"],
                 )
 
-            # 2. Transactions în DB
             tx_ids = []
             if user_id and doc_id:
                 tx_ids = persist_transactions(
-                    user_id=user_id,
-                    doc_id=doc_id,
-                    item=item,
-                    banca=banca,
+                    user_id=user_id, doc_id=doc_id, item=item, banca=banca,
                 )
 
-            # 3. Google Sheets — cu export log
             row = [
-                data_doc,
-                item.platforma or "",
-                tip,
-                item.brut,
-                item.comision,
-                tva,
-                item.net,
-                item.cash,
-                banca,
-                item.detalii or "",
+                data_doc, item.platforma or "", tip,
+                item.brut, item.comision, tva,
+                item.net, item.cash, banca, item.detalii or "",
             ]
-            if doc_id:
-                sheet_used = sync_to_sheets(
-                    doc_id=doc_id,
-                    row_data=row,
-                    date_str=data_doc,
-                )
-            else:
-                # Fallback dacă DB nu era disponibil: scriem direct (fără export log)
-                sheet_used = sheets.upsert_document(
-                    get_session(),
-                    doc_id=0,
-                    row_data=row,
-                    date_str=data_doc,
-                    sheet_name=SHEET_NAME,
-                    credentials_file=CREDENTIALS_FILE,
-                )
+            sheet_used = sync_to_sheets(doc_id=doc_id, row_data=row, date_str=data_doc) if doc_id else None
 
-            # 4. Mesaj user
             doc_tag = f" #{doc_id}" if doc_id else ""
             tx_tag = f" ({len(tx_ids)} tx)" if tx_ids else ""
+
             if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
                                 f"📄 **FACTURA {item.platforma}**\n"
@@ -402,11 +414,8 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if user_id:
         sf_info = register_source_file(
-            user_id=user_id,
-            file_bytes=file_bytes,
+            user_id=user_id, file_bytes=file_bytes,
             telegram_file_id=tg_file.file_id,
-            kind="photo",
-            mime="image/jpeg",
         )
         if sf_info:
             if sf_info["is_duplicate"]:
@@ -423,8 +432,7 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await process_entry(
         update, context,
-        text_input=caption,
-        image_bytes=file_bytes,
+        text_input=caption, image_bytes=file_bytes,
         source_file_id=source_file_id,
     )
 
@@ -448,7 +456,15 @@ if __name__ == '__main__':
 
     keep_alive()
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
+
+    # Comenzi
+    app_bot.add_handler(CommandHandler("start", handle_start))
+    app_bot.add_handler(CommandHandler("ajutor", handle_ajutor))
+    app_bot.add_handler(CommandHandler("raport", handle_raport))
+
+    # Mesaje
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
-    print("🤖 Bot Contabil v4 (2026/TVA 21%) ONLINE!")
+
+    print("🤖 Bot Contabil v5 (2026/TVA 21%) ONLINE!")
     app_bot.run_polling()
