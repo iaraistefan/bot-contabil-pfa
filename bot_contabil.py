@@ -1,3 +1,4 @@
+from app.ai import fiscal_monitor as fiscal_mon
 from config import settings
 from app.enums import DocType
 from db import init_db, get_session
