@@ -28,6 +28,7 @@ class User(Base):
     source_files = relationship("SourceFile", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
     tax_periods = relationship("TaxPeriod", back_populates="user")
+    fiscal_alerts = relationship("FiscalAlert", back_populates="user")
 
     def __repr__(self):
         return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
@@ -38,9 +39,7 @@ class SourceFile(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-
     kind = Column(String(20), nullable=False, default="photo")
     telegram_file_id = Column(String(300), nullable=True)
     sha256 = Column(String(64), nullable=False, index=True)
@@ -52,7 +51,7 @@ class SourceFile(Base):
     documents = relationship("Document", back_populates="source_file")
 
     def __repr__(self):
-        return f"<SourceFile id={self.id} sha={self.sha256[:8]}... user_id={self.user_id}>"
+        return f"<SourceFile id={self.id} sha={self.sha256[:8]}...>"
 
 
 class Document(Base):
@@ -60,21 +59,17 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     source_file_id = Column(Integer, ForeignKey("source_files.id"), nullable=True, index=True)
-
     data_doc = Column(String(20), index=True)
     platforma = Column(String(50), index=True)
     tip = Column(String(30), index=True)
-
     brut = Column(Float, default=0.0)
     comision = Column(Float, default=0.0)
     tva = Column(Float, default=0.0)
     net = Column(Float, default=0.0)
     cash = Column(Float, default=0.0)
     banca = Column(Float, default=0.0)
-
     detalii = Column(Text, default="")
     raw_json = Column(Text, default="")
     image_id = Column(String(200), default="")
@@ -96,27 +91,21 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
-
     tx_type = Column(String(20), nullable=False, index=True)
     category = Column(String(50), nullable=False, index=True)
-
     amount_brut = Column(Float, nullable=False, default=0.0)
     amount_vat = Column(Float, nullable=False, default=0.0)
     amount_net = Column(Float, nullable=False, default=0.0)
     currency = Column(String(5), nullable=False, default="RON")
-
     deductibility_pct = Column(Integer, nullable=False, default=100)
     payment_method = Column(String(20), nullable=True)
     counterparty = Column(String(200), nullable=True)
     vat_treatment = Column(String(30), nullable=True, default="NA")
-
     occurred_on = Column(Date, nullable=True, index=True)
     period_year = Column(Integer, nullable=True, index=True)
     period_month = Column(Integer, nullable=True, index=True)
-
     locked = Column(Boolean, nullable=False, default=False)
     posted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -124,37 +113,63 @@ class Transaction(Base):
     document = relationship("Document", back_populates="transactions")
 
     def __repr__(self):
-        return (
-            f"<Transaction id={self.id} type={self.tx_type} "
-            f"cat={self.category} amount={self.amount_brut} {self.currency}>"
-        )
+        return f"<Transaction id={self.id} type={self.tx_type} amount={self.amount_brut}>"
 
 
 class TaxPeriod(Base):
-    """
-    Snapshot al calculelor fiscale pentru o lună.
-    Compute on-demand prin /raport, snapshot salvat pentru referință.
-    """
     __tablename__ = "tax_periods"
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     computed_at = Column(DateTime, nullable=True)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     year = Column(Integer, nullable=False, index=True)
     month = Column(Integer, nullable=False, index=True)
-
     status = Column(String(20), nullable=False, default="open")
-    # open | computed | submitted | closed
-
-    # Snapshot JSON cu totalurile — ce returnează tax_engine.compute_period()
     totals_json = Column(JSON, nullable=True)
 
     user = relationship("User", back_populates="tax_periods")
 
     def __repr__(self):
-        return f"<TaxPeriod {self.year}/{self.month:02d} user={self.user_id} status={self.status}>"
+        return f"<TaxPeriod {self.year}/{self.month:02d} user={self.user_id}>"
+
+
+class FiscalAlert(Base):
+    """
+    Alertă fiscală generată de monitorizarea lunară.
+    Stochează ce a găsit AI-ul + sursele citate.
+    """
+    __tablename__ = "fiscal_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    # Luna pentru care s-a făcut research-ul
+    research_year = Column(Integer, nullable=False, index=True)
+    research_month = Column(Integer, nullable=False, index=True)
+
+    # Conținutul alertei
+    title = Column(String(300), nullable=False)
+    summary = Column(Text, nullable=False)          # rezumat concis
+    full_response = Column(Text, nullable=True)     # răspunsul complet AI
+    sources_json = Column(JSON, nullable=True)      # lista URL-uri sursă
+
+    # Clasificare
+    urgency = Column(String(20), nullable=False, default="info")
+    # info | warning | critical
+
+    has_changes = Column(Boolean, nullable=False, default=False)
+    # True dacă AI-ul a găsit modificări relevante
+
+    # Utilizator a văzut alerta?
+    seen = Column(Boolean, nullable=False, default=False)
+
+    user = relationship("User", back_populates="fiscal_alerts")
+
+    def __repr__(self):
+        return f"<FiscalAlert {self.research_year}/{self.research_month:02d} urgency={self.urgency}>"
 
 
 class ExportLog(Base):
@@ -162,7 +177,6 @@ class ExportLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-
     target = Column(String(30), nullable=False, index=True)
     entity_type = Column(String(30), nullable=False, default="document")
     entity_id = Column(Integer, nullable=False, index=True)
@@ -182,16 +196,14 @@ class AuditLog(Base):
 
     id = Column(BigInteger, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     entity_type = Column(String(50), nullable=False, index=True)
     entity_id = Column(Integer, nullable=False, index=True)
     action = Column(String(50), nullable=False)
     source = Column(String(20), nullable=False, default="system")
-
     before_json = Column(JSON, nullable=True)
     after_json = Column(JSON, nullable=True)
     note = Column(String(500), nullable=True)
 
     def __repr__(self):
-        return f"<AuditLog {self.entity_type}:{self.entity_id} {self.action} @{self.created_at}>"
+        return f"<AuditLog {self.entity_type}:{self.entity_id} {self.action}>"
