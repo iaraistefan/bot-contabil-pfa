@@ -350,10 +350,6 @@ async def handle_fiscal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /alerte — istoricul alertelor fiscale.
-    /alerte acum — rulează monitorizarea acum (test manual).
-    """
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
@@ -361,7 +357,6 @@ async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args or []
 
-    # /alerte acum → rulează monitorizarea manual
     if args and args[0].lower() == "acum":
         await update.message.reply_text(
             "🔄 Rulez monitorizarea fiscală acum...\n"
@@ -372,7 +367,6 @@ async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
             now = datetime.now()
             result = fiscal_mon.run_fiscal_research(now.year, now.month)
 
-            # Salvăm în DB
             session = get_session()
             try:
                 from app.models import FiscalAlert
@@ -399,7 +393,6 @@ async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
             finally:
                 session.close()
 
-            # Formatăm și trimitem
             msg = fiscal_mon.format_alert_telegram(result)
             if msg:
                 await update.message.reply_text(msg, parse_mode="Markdown")
@@ -417,7 +410,6 @@ async def handle_alerte(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # /alerte → istoricul ultimelor alerte
     session = get_session()
     try:
         from app.models import FiscalAlert
@@ -497,7 +489,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
             TaxPeriod, ExportLog, FiscalAlert,
         )
 
-        # 1. ExportLog — fetch și delete individual
         doc_ids = [
             row[0] for row in
             session.query(Document.id).filter(Document.user_id == user_id).all()
@@ -512,7 +503,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 session.delete(el)
             session.flush()
 
-        # 2. Transactions
         tx_count = (
             session.query(Transaction)
             .filter(Transaction.user_id == user_id)
@@ -520,7 +510,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 3. Documents
         doc_count = (
             session.query(Document)
             .filter(Document.user_id == user_id)
@@ -528,7 +517,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 4. SourceFiles
         sf_count = (
             session.query(SourceFile)
             .filter(SourceFile.user_id == user_id)
@@ -536,7 +524,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 5. TaxPeriods
         tp_count = (
             session.query(TaxPeriod)
             .filter(TaxPeriod.user_id == user_id)
@@ -544,7 +531,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 6. FiscalAlerts
         fa_count = (
             session.query(FiscalAlert)
             .filter(FiscalAlert.user_id == user_id)
@@ -552,7 +538,6 @@ async def handle_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         session.flush()
 
-        # 7. Audit
         audit_repo.write(
             session,
             entity_type="user", entity_id=user_id,
@@ -859,9 +844,16 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                     f"🛒 **{item.detalii}** ({item.brut} RON)\n"
                 )
             else:
+                # ── FIX: afișăm net, card, cash — nu brut-ul ──
+                net_display = item.net if item.net > 0 else item.brut
+                card_display = round(net_display - item.cash, 2)
+                platforma_tag = f" {item.platforma}" if item.platforma else ""
                 msg_confirm += (
                     f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"💰 Incasare: {item.brut} RON\n"
+                    f"💰 **Venit net{platforma_tag}: {net_display:.2f} RON**\n"
+                    f"   💳 Card: {card_display:.2f} RON\n"
+                    f"   💵 Cash: {item.cash:.2f} RON\n"
+                    f"   📅 Data: {data_doc}\n"
                 )
 
         if extraction["validation_errors"]:
