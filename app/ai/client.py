@@ -1,14 +1,5 @@
 """
 Wrapper subțire peste OpenAI pentru extragere documente.
-
-Responsabilități:
-- Construire messages (system + user, cu sau fără imagine).
-- Apel cu timeout implicit din SDK.
-- Curățare markdown fences din răspuns.
-- Parsare JSON cu tratament explicit al erorilor.
-- Validare Pydantic a item-urilor extrase.
-
-NU decide politici de business. Doar extrage și validează forma.
 """
 
 import base64
@@ -25,7 +16,6 @@ from app.ai.schemas import validate_items, ValidationReport
 
 logger = logging.getLogger(__name__)
 
-# Singleton OpenAI client — reutilizat între apeluri.
 _client = OpenAI(api_key=settings.openai_api_key)
 
 
@@ -43,17 +33,16 @@ def extract_document(
     Rulează extragerea pe text și/sau imagine, apoi validează.
 
     Returns dict cu:
-        - "ok": bool — True dacă am ≥1 item valid după validare
-        - "items": list[ExtractionItem] — item-urile care au trecut validarea
-        - "validation_errors": list[str] — erori per item (dacă există)
-        - "raw_response": str — răspunsul brut de la model
+        - "ok": bool
+        - "items": list[ExtractionItem]
+        - "validation_errors": list[str]
+        - "raw_response": str
         - "prompt_version": str
-        - "error": str | None — eroare globală (OpenAI fail, JSON parse fail)
+        - "error": str | None
     """
     today_str = today_str or datetime.now().strftime("%d.%m.%Y")
     system_prompt = build_extraction_system_prompt(today_str)
 
-    # Construim user content: text + (opțional) imagine
     user_content = [
         {"type": "text", "text": user_input if user_input else "Analizeaza imaginea"}
     ]
@@ -69,7 +58,6 @@ def extract_document(
         {"role": "user", "content": user_content},
     ]
 
-    # Apel la OpenAI
     try:
         response = _client.chat.completions.create(
             model=settings.openai_model,
@@ -89,7 +77,6 @@ def extract_document(
             "error": f"openai_error: {e}",
         }
 
-    # Parsare JSON
     cleaned = _clean_json_response(raw_response)
     try:
         data = json.loads(cleaned)
@@ -108,7 +95,6 @@ def extract_document(
             "error": f"json_parse_error: {e}",
         }
 
-    # Validare Pydantic
     report: ValidationReport = validate_items(data)
 
     if report.has_errors:
