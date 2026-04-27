@@ -260,7 +260,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"👋 Bun venit, *{name}*!\n\n"
         f"📸 Trimite poze cu bonuri/facturi → le înregistrez automat\n"
-        f"✍️ Text (ex: *am dat 50 lei bacsis cash*) → înregistrez manual\n\n"
+        f"✍️ Text (ex: *bon 05.04.2026 Lukoil 300 lei motorina*) → înregistrez manual\n\n"
         f"*Comenzi:*\n"
         f"/web — dashboard cu rapoarte și grafice\n"
         f"/raport — raport luna curentă\n"
@@ -291,6 +291,7 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/reminder — trimite reminder manual\n"
         "/ajutor — această listă\n\n"
         "📸 Trimite orice poză cu bon, factură sau screenshot din Bolt/Uber\\.\n"
+        "✍️ Sau text: *bon 05\\.04\\.2026 Lukoil 300 lei motorina*\n"
         "📄 Poți trimite în orice ordine — sortez cronologic după data documentului\\.",
         parse_mode="Markdown"
     )
@@ -787,7 +788,11 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
     if not extraction["items"]:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="⚠️ Nu am putut citi datele. Incearca o poza mai clara.",
+            text=(
+                "⚠️ Nu am putut citi datele.\n\n"
+                "Pentru cheltuieli încearcă formatul text:\n"
+                "`bon 05.04.2026 Lukoil 300 lei motorina`"
+            ),
         )
         return
 
@@ -842,9 +847,10 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                 msg_confirm += (
                     f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
                     f"🛒 **{item.detalii}** ({item.brut} RON)\n"
+                    f"   📅 Data: {data_doc}\n"
                 )
             else:
-                # ── FIX: afișăm net, card, cash — nu brut-ul ──
+                # Venit — afișăm net, card, cash
                 net_display = item.net if item.net > 0 else item.brut
                 card_display = round(net_display - item.cash, 2)
                 platforma_tag = f" {item.platforma}" if item.platforma else ""
@@ -888,16 +894,42 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         if sf_info:
             if sf_info["is_duplicate"]:
-                created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=(
-                        f"⚠️ Această imagine a fost deja înregistrată "
-                        f"pe {created_at_str}. Nu o procesez din nou."
-                    ),
-                )
-                return
-            source_file_id = sf_info["id"]
+                # ── FIX: verificăm dacă duplicatul are documente reale.
+                # Dacă prima extracție a eșuat (0 documente) → permitem retry.
+                session = get_session()
+                try:
+                    from app.models import Document
+                    has_docs = (
+                        session.query(Document)
+                        .filter(
+                            Document.source_file_id == sf_info["id"],
+                            Document.status != "rejected",
+                        )
+                        .count()
+                    ) > 0
+                finally:
+                    session.close()
+
+                if has_docs:
+                    # Duplicat real — documentul e deja înregistrat cu succes
+                    created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=(
+                            f"⚠️ Această imagine a fost deja înregistrată "
+                            f"pe {created_at_str}. Nu o procesez din nou."
+                        ),
+                    )
+                    return
+                else:
+                    # Prima extracție a eșuat — reîncercăm
+                    logger.info(
+                        f"Dedup override: sf_id={sf_info['id']} "
+                        f"fără documente valide, reprocessez."
+                    )
+                    source_file_id = sf_info["id"]
+            else:
+                source_file_id = sf_info["id"]
 
     await process_entry(
         update, context,
