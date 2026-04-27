@@ -1,17 +1,9 @@
 """
 Tax engine — agregare din transactions pentru rapoarte fiscale.
-
-Toate calculele se bazează exclusiv pe tabela `transactions`.
-Google Sheets nu e consultat — DB e sursa de adevăr.
-
-Output-ul `compute_period` e un dict cu toate valorile necesare pentru:
-- Afișaj Telegram (/raport)
-- Pasul 14: export CSV
-- Viitor: generare D301/D390
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from sqlalchemy.orm import Session
 
@@ -33,28 +25,6 @@ def compute_period(
     year: int,
     month: int,
 ) -> Dict[str, Any]:
-    """
-    Agregează toate tranzacțiile pentru user/an/lună și returnează
-    un dict cu totalurile fiscale.
-
-    Returns dict cu:
-        year, month, month_name
-        income_total       — venituri brute totale
-        income_rides       — din curse (ride_revenue)
-        income_tips        — din bacșișuri (tip_revenue)
-        expense_total_brut — cheltuieli brute totale
-        expense_fuel_brut  — combustibil brut
-        expense_fuel_deductible — combustibil deductibil (50%)
-        expense_commission — comisioane platformă
-        expense_other      — alte cheltuieli
-        expense_registration — costuri înregistrare/autorizare
-        vat_out_total      — TVA de plătit (reverse charge) → D301
-        vat_in_total       — TVA deductibil (reverse charge)
-        vat_net            — vat_out - vat_in (net de plătit)
-        profit_estimated   — income_total - expense_deductible_total
-        expense_deductible_total — total cheltuieli deductibile
-        tx_count           — numărul de tranzacții procesate
-    """
     txs = (
         session.query(Transaction)
         .filter(
@@ -66,7 +36,6 @@ def compute_period(
         .all()
     )
 
-    # Inițializare acumulatori
     income_rides = 0.0
     income_tips = 0.0
     expense_fuel_brut = 0.0
@@ -78,12 +47,16 @@ def compute_period(
 
     for tx in txs:
         if tx.tx_type == "INCOME":
+            # ── FIX: folosim amount_net (câștigul real după comision Bolt)
+            # amount_brut = brut înainte de comision (3848.57)
+            # amount_net  = net după comision = ce primești efectiv (2909.29)
+            net_value = tx.amount_net if tx.amount_net and tx.amount_net > 0 else tx.amount_brut
             if tx.category == "ride_revenue":
-                income_rides += tx.amount_brut
+                income_rides += net_value
             elif tx.category == "tip_revenue":
-                income_tips += tx.amount_brut
+                income_tips += net_value
             else:
-                income_rides += tx.amount_brut  # fallback
+                income_rides += net_value  # fallback
 
         elif tx.tx_type == "EXPENSE":
             if tx.category == "fuel":
@@ -138,10 +111,6 @@ def compute_period(
 
 
 def format_report_message(totals: Dict[str, Any]) -> str:
-    """
-    Formatează dict-ul de totaluri ca mesaj Telegram (Markdown).
-    Complet în ~20 rânduri — citibil pe ecran de telefon.
-    """
     t = totals
     has_fuel = t["expense_fuel_brut"] > 0
     has_commission = t["expense_commission"] > 0
