@@ -4,7 +4,7 @@ Prompt-uri pentru AI extraction.
 Regulă: fiecare prompt are o versiune explicită. Când schimbi prompt-ul, BUMP versiunea.
 """
 
-PROMPT_VERSION = "extract.v3"
+PROMPT_VERSION = "extract.v4"
 
 
 def build_extraction_system_prompt(today_str: str) -> str:
@@ -22,7 +22,7 @@ REGULA #1 — FORMATUL DE OUTPUT (NENEGOCIABIL):
 
 REGULA #2 — VALORI ACCEPTATE pentru campul "tip":
 - "VENIT" — incasari (raport aplicatie, bacsis, cash).
-- "CHELTUIALA" — bonuri fiscale (combustibil, piese, autorizatii, taxe).
+- "CHELTUIALA" — bonuri fiscale (combustibil, piese, autorizatii, taxe, echipamente).
 - "FACTURA_COMISION" — facturi comision Bolt/Uber (taxare inversa TVA).
 - NU inventa alte valori. Daca nu esti sigur, pune "CHELTUIALA".
 
@@ -36,10 +36,23 @@ REGULA #3 — DATA DOCUMENTULUI (CRITICA):
   - "aprilie"   → data = "30.04.2026"
   - "mai"       → data = "31.05.2026"
   - "iunie"     → data = "30.06.2026"
-- NICIODATA nu folosi data curenta ({today_str}) pentru un raport lunar care 
+  - "iulie"     → data = "31.07.2026"
+  - "august"    → data = "31.08.2026"
+  - "septembrie"→ data = "30.09.2026"
+  - "octombrie" → data = "31.10.2026"
+  - "noiembrie" → data = "30.11.2026"
+- NICIODATA nu folosi data curenta ({today_str}) pentru un raport lunar care
   afiseaza explicit o alta luna.
 - Daca nu gasesti nicio data in document → atunci si doar atunci folosesti {today_str}.
 - Pentru bonuri si facturi: citeste data exact de pe document.
+
+REGULA #4 — RECUNOASTERE TIP DIN TEXT:
+- Cuvinte cheie pentru CHELTUIALA: "bon", "factura", "am platit", "cheltuiala",
+  "combustibil", "motorina", "benzina", "piese", "service", "autorizatie",
+  "inregistrare", "taxa", "echipament", "accesorii", "reparatie".
+- Cuvinte cheie pentru VENIT: "venit", "incasat", "castiguri", "bolt", "uber",
+  "bacsis", "curse".
+- Daca textul contine o suma si un furnizor/descriere → extrage ca CHELTUIALA.
 
 REGULI ANALIZA:
 
@@ -49,9 +62,10 @@ REGULI ANALIZA:
    - TVA Datorat = Comision * 0.21 (Taxare Inversa).
    - Impozit Nerezidenti = Comision * 0.02 (informativ).
 
-2. BON FISCAL (Combustibil/Piese/Autorizatii):
-   - Cauta data bonului.
-   - Brut = Total bon cu TVA inclus.
+2. BON FISCAL / CHELTUIALA (Combustibil/Piese/Autorizatii/Echipamente):
+   - Cauta data bonului sau din text.
+   - Brut = Total bon/factura cu TVA inclus.
+   - detalii = descriere scurta a cheltuielii (ex: "Combustibil", "Casa de marcat", "Service auto").
 
 3. RAPORT VENITURI LUNAR (Screenshot aplicatie Bolt/Uber):
    - PRIMUL LUCRU: citeste luna afisata in titlul ecranului.
@@ -84,6 +98,22 @@ Input: "am dat 50 lei bacsis cash azi"
 Output:
 [{{"data":"{today_str}","platforma":null,"tip":"VENIT","brut":50,"comision":0,"tva":0,"net":50,"cash":50,"detalii":"Bacsis cash"}}]
 
+Input: "bon 19.01.2026 Electro Supermax 1330 lei accesorii casa marcat"
+Output:
+[{{"data":"19.01.2026","platforma":null,"tip":"CHELTUIALA","brut":1330,"comision":0,"tva":0,"net":1330,"cash":0,"detalii":"Electro Supermax - accesorii casa de marcat"}}]
+
+Input: "cheltuiala 15.03.2026 service auto 800 lei"
+Output:
+[{{"data":"15.03.2026","platforma":null,"tip":"CHELTUIALA","brut":800,"comision":0,"tva":0,"net":800,"cash":0,"detalii":"Service auto"}}]
+
+Input: "am platit 300 lei combustibil azi"
+Output:
+[{{"data":"{today_str}","platforma":null,"tip":"CHELTUIALA","brut":300,"comision":0,"tva":0,"net":300,"cash":300,"detalii":"Combustibil"}}]
+
+Input: "bon 05.02.2026 Lukoil motorina 450 lei"
+Output:
+[{{"data":"05.02.2026","platforma":null,"tip":"CHELTUIALA","brut":450,"comision":0,"tva":0,"net":450,"cash":450,"detalii":"Combustibil Lukoil"}}]
+
 Input: (screenshot Bolt cu titlu "februarie", Castiguri 1147 lei, Numerar 717.80 lei, Comision -378 lei)
 Output:
 [{{"data":"28.02.2026","platforma":"Bolt","tip":"VENIT","brut":1525,"comision":378,"tva":0,"net":1147,"cash":717.80,"detalii":"Venituri Bolt februarie 2026"}}]
@@ -97,6 +127,10 @@ Output:
 [{{"data":"31.12.2025","platforma":"Bolt","tip":"FACTURA_COMISION","brut":346.81,"comision":346.81,"tva":72.83,"net":346.81,"cash":0,"detalii":"Comision Bolt decembrie 2025"}}]
 
 Input: "salut, cum merge bot-ul?"
+Output:
+[]
+
+Input: "ce parere ai despre vreme?"
 Output:
 []
 """
