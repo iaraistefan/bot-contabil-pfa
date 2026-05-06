@@ -14,6 +14,9 @@ from db import get_session
 from app.repositories import transactions as tx_repo
 from app.services import tax_engine
 from app.integrations.exports import csv_export
+from app.integrations.exports.registru import (
+    generate_registru_xlsx, filename_registru
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +66,6 @@ def metrics():
 
 @flask_app.route("/dashboard")
 def dashboard():
-    """Servește dashboard-ul web."""
     return render_template("dashboard.html")
 
 
@@ -109,10 +111,8 @@ def transactions_list(year: int, month: int):
             "document_id": tx.document_id,
         } for tx in txs]
         return jsonify({
-            "year": year,
-            "month": month,
-            "count": len(data),
-            "transactions": data,
+            "year": year, "month": month,
+            "count": len(data), "transactions": data,
         })
     except Exception as e:
         logger.error(f"API transactions error {year}/{month}: {e}")
@@ -154,11 +154,10 @@ def documents_recent():
         session.close()
 
 
-# --- API v1 — Export CSV direct din browser ---
+# --- API v1 — Export CSV ---
 
 @flask_app.route("/api/v1/transactions/export/<int:year>/<int:month>")
 def export_transactions_csv(year: int, month: int):
-    """Descarcă CSV cu tranzacțiile perioadei direct din browser."""
     if not (1 <= month <= 12 and 2020 <= year <= 2099):
         return "Invalid period", 400
     session = get_session()
@@ -180,7 +179,6 @@ def export_transactions_csv(year: int, month: int):
 
 @flask_app.route("/api/v1/period/export/<int:year>/<int:month>")
 def export_period_csv(year: int, month: int):
-    """Descarcă CSV cu rezumatul fiscal al perioadei."""
     if not (1 <= month <= 12 and 2020 <= year <= 2099):
         return "Invalid period", 400
     session = get_session()
@@ -195,6 +193,40 @@ def export_period_csv(year: int, month: int):
         )
     except Exception as e:
         logger.error(f"Period CSV export error {year}/{month}: {e}")
+        return "Export error", 500
+    finally:
+        session.close()
+
+
+# --- API v1 — Registru Încasări și Plăți ---
+
+@flask_app.route("/api/v1/registru/export/<int:year>")
+def export_registru(year: int):
+    """Generează Registrul de Încasări și Plăți pentru un an întreg."""
+    if not 2020 <= year <= 2099:
+        return "Invalid year", 400
+    session = get_session()
+    try:
+        from app.models import Transaction
+        txs = (
+            session.query(Transaction)
+            .filter(
+                Transaction.user_id == 1,
+                Transaction.period_year == year,
+                Transaction.locked == False,
+            )
+            .order_by(Transaction.occurred_on)
+            .all()
+        )
+        xlsx_bytes = generate_registru_xlsx(txs, year)
+        fname = filename_registru(year)
+        return Response(
+            xlsx_bytes,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={fname}"},
+        )
+    except Exception as e:
+        logger.error(f"Registru export error {year}: {e}")
         return "Export error", 500
     finally:
         session.close()
