@@ -15,6 +15,9 @@ from app.services import tax_engine
 from app.services import scheduler as sched_service
 from app.integrations import sheets
 from app.integrations.exports import csv_export
+from app.integrations.exports.registru import (
+    generate_registru_xlsx, filename_registru
+)
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
 import logging
@@ -27,7 +30,10 @@ from telegram.ext import (
     MessageHandler, CommandHandler, filters,
 )
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 SHEET_NAME = "Contabilitate PFA 2025"
@@ -100,7 +106,8 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
             session, entity_type="source_file", entity_id=new_sf.id,
             action="create", user_id=user_id, source="user",
             after={"kind": new_sf.kind, "sha256": new_sf.sha256,
-                   "bytes_size": new_sf.bytes_size, "storage_path": new_sf.storage_path},
+                   "bytes_size": new_sf.bytes_size,
+                   "storage_path": new_sf.storage_path},
         )
         result = {
             "id": new_sf.id, "sha256": new_sf.sha256,
@@ -266,6 +273,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"/raport — raport luna curentă\n"
         f"/fiscal — calendar declarații ANAF\n"
         f"/alerte — monitorizare modificări legislative\n"
+        f"/registru 2026 — Registru Încasări și Plăți Excel\n"
         f"/export 04 2026 — CSV pentru contabil\n"
         f"/delete 5 — anulează documentul \\#5\n"
         f"/reset — șterge tot și începe de la zero\n"
@@ -285,6 +293,8 @@ async def handle_ajutor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/fiscal 03 2026 — calendar pentru lună specifică\n"
         "/alerte — istoricul alertelor fiscale\n"
         "/alerte acum — verifică modificări legislative acum\n"
+        "/registru 2026 — Registru Încasări și Plăți Excel \\(pentru bancă\\)\n"
+        "/registru 2025 — Registru pentru anul 2025\n"
         "/export 04 2026 — CSV pentru Excel/contabil\n"
         "/delete 5 — anulează documentul \\#5\n"
         "/reset — șterge toate datele ⚠️\n"
@@ -675,9 +685,11 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         from app.models import ExportLog
         session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
-            external_ref=fname_tx, status="ok", response_msg=f"{len(txs)} tranzacții"))
+            external_ref=fname_tx, status="ok",
+            response_msg=f"{len(txs)} tranzacții"))
         session.add(ExportLog(target="csv", entity_type="period", entity_id=0,
-            external_ref=fname_rez, status="ok", response_msg=f"rezumat {month_name} {year}"))
+            external_ref=fname_rez, status="ok",
+            response_msg=f"rezumat {month_name} {year}"))
         session.commit()
         logger.info(f"CSV export {year}/{month:02d} trimis user_id={user_id}: {len(txs)} tx")
 
@@ -685,6 +697,95 @@ async def handle_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.rollback()
         logger.error(f"Error in handle_export {year}/{month}: {e}")
         await update.message.reply_text("❌ Eroare la generarea CSV. Încearcă din nou.")
+    finally:
+        session.close()
+
+
+async def handle_registru(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /registru [an]
+    Generează Registrul de Încasări și Plăți ca fișier Excel formatat.
+    Acceptat de bănci și ANAF.
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu am putut identifica utilizatorul.")
+        return
+
+    args = context.args or []
+    now = datetime.now()
+    try:
+        year = int(args[0]) if args else now.year
+        if not 2020 <= year <= 2099:
+            raise ValueError("an invalid")
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "⚠️ Format incorect.\nExemple:\n"
+            "  /registru\n"
+            "  /registru 2025\n"
+            "  /registru 2026"
+        )
+        return
+
+    await update.message.reply_text(
+        f"🔄 Generez Registrul de Încasări și Plăți pentru *{year}*...\n"
+        f"_(document Excel formatat, gata de tipărit)_",
+        parse_mode="Markdown"
+    )
+
+    session = get_session()
+    try:
+        from app.models import Transaction as TxModel
+
+        txs = (
+            session.query(TxModel)
+            .filter(
+                TxModel.user_id == user_id,
+                TxModel.period_year == year,
+                TxModel.locked == False,
+            )
+            .order_by(TxModel.occurred_on)
+            .all()
+        )
+
+        if not txs:
+            await update.message.reply_text(
+                f"📭 Nu am găsit tranzacții pentru {year}.\n"
+                f"Încarcă documente mai întâi."
+            )
+            return
+
+        xlsx_bytes = generate_registru_xlsx(
+            txs, year,
+            pfa_name="IARAI STEFAN PERSOANA FIZICA AUTORIZATA",
+            pfa_cui="53067338",
+        )
+        fname = filename_registru(year)
+
+        import io as _io
+        await update.message.reply_document(
+            document=_io.BytesIO(xlsx_bytes),
+            filename=fname,
+            caption=(
+                f"📊 *Registru Încasări și Plăți {year}*\n\n"
+                f"✅ Format Excel — deschide în Excel sau Google Sheets\n"
+                f"🖨️ Tipărește: File → Print → Landscape A4\n"
+                f"🏦 Acceptat de bănci și ANAF\n\n"
+                f"_⚠️ Verificați cu contabilul înainte de depunere._"
+            ),
+            parse_mode="Markdown"
+        )
+
+        logger.info(
+            f"Registru {year} generat pentru user_id={user_id}: {len(txs)} tx"
+        )
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error in handle_registru year={year}: {e}")
+        await update.message.reply_text(
+            "❌ Eroare la generarea registrului. Încearcă din nou."
+        )
     finally:
         session.close()
 
@@ -705,7 +806,9 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         doc_id = int(args[0])
     except ValueError:
-        await update.message.reply_text("⚠️ ID-ul trebuie să fie un număr. Exemplu: /delete 5")
+        await update.message.reply_text(
+            "⚠️ ID-ul trebuie să fie un număr. Exemplu: /delete 5"
+        )
         return
 
     session = get_session()
@@ -719,7 +822,9 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if doc.status == "rejected":
-            await update.message.reply_text(f"ℹ️ Documentul #{doc_id} este deja anulat.")
+            await update.message.reply_text(
+                f"ℹ️ Documentul #{doc_id} este deja anulat."
+            )
             return
 
         if doc.status == "exported":
@@ -741,7 +846,9 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         session.commit()
-        logger.info(f"Document #{doc_id} rejected by user_id={user_id}; {tx_count} tx removed")
+        logger.info(
+            f"Document #{doc_id} rejected by user_id={user_id}; {tx_count} tx removed"
+        )
 
         details = f"{doc.platforma or '?'} · {doc.data_doc or '?'} · {doc.brut:.2f} RON"
         await update.message.reply_text(
@@ -762,10 +869,15 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- PROCESARE MESAJ ---
 
-async def process_entry(update, context, text_input=None, image_bytes=None, source_file_id=None):
+async def process_entry(
+    update, context,
+    text_input=None, image_bytes=None, source_file_id=None
+):
     user_id = ensure_user(update)
     if user_id:
-        logger.info(f"Processing entry for user_id={user_id} source_file_id={source_file_id}")
+        logger.info(
+            f"Processing entry for user_id={user_id} source_file_id={source_file_id}"
+        )
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -850,7 +962,6 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                     f"   📅 Data: {data_doc}\n"
                 )
             else:
-                # Venit — afișăm net, card, cash
                 net_display = item.net if item.net > 0 else item.brut
                 card_display = round(net_display - item.cash, 2)
                 platforma_tag = f" {item.platforma}" if item.platforma else ""
@@ -863,7 +974,9 @@ async def process_entry(update, context, text_input=None, image_bytes=None, sour
                 )
 
         if extraction["validation_errors"]:
-            msg_confirm += f"\n⚠️ {len(extraction['validation_errors'])} item(e) respinse."
+            msg_confirm += (
+                f"\n⚠️ {len(extraction['validation_errors'])} item(e) respinse."
+            )
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -894,8 +1007,8 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         if sf_info:
             if sf_info["is_duplicate"]:
-                # ── FIX: verificăm dacă duplicatul are documente reale.
-                # Dacă prima extracție a eșuat (0 documente) → permitem retry.
+                # Verificăm dacă duplicatul are documente reale.
+                # Dacă prima extracție a eșuat → permitem retry.
                 session = get_session()
                 try:
                     from app.models import Document
@@ -911,8 +1024,9 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                     session.close()
 
                 if has_docs:
-                    # Duplicat real — documentul e deja înregistrat cu succes
-                    created_at_str = sf_info["created_at"].strftime('%d.%m.%Y la %H:%M')
+                    created_at_str = sf_info["created_at"].strftime(
+                        '%d.%m.%Y la %H:%M'
+                    )
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
                         text=(
@@ -922,7 +1036,6 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                     return
                 else:
-                    # Prima extracție a eșuat — reîncercăm
                     logger.info(
                         f"Dedup override: sf_id={sf_info['id']} "
                         f"fără documente valide, reprocessez."
@@ -973,12 +1086,15 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("fiscal", handle_fiscal))
     app_bot.add_handler(CommandHandler("alerte", handle_alerte))
     app_bot.add_handler(CommandHandler("export", handle_export))
+    app_bot.add_handler(CommandHandler("registru", handle_registru))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("reset", handle_reset))
     app_bot.add_handler(CommandHandler("reminder", handle_reminder))
 
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
-    app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper))
+    app_bot.add_handler(
+        MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper)
+    )
 
     app_bot.add_error_handler(handle_error)
 
