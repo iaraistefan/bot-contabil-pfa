@@ -435,12 +435,12 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name or "șofer"
     await update.message.reply_text(
         f"👋 Bun venit, *{name}*!\n\n"
-        f"Folosește meniul de mai jos pentru navigare rapidă\\.\n\n"
+        f"Folosește meniul de mai jos pentru navigare rapidă.\n\n"
         f"📸 *Cum încarci documente:*\n"
         f"• Trimite poze cu bonuri/facturi → procesate automat\n"
-        f"• Sau text: `bon 05\\.04\\.2026 Lukoil 300 lei motorina`\n"
+        f"• Sau text: `bon 05.04.2026 Lukoil 300 lei motorina`\n"
         f"• Sau text: `venit bolt aprilie: net 1878 lei, cash 1081 lei`",
-        parse_mode="MarkdownV2",
+        parse_mode="Markdown",
         reply_markup=build_main_menu(),
     )
 
@@ -559,7 +559,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             if parts[1] == "close":
                 await query.edit_message_text("✅ Meniu închis.")
             elif parts[1] == "noop":
-                pass  # buton dezactivat
+                pass
             return
 
         # ── RAPORT ──
@@ -732,7 +732,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             await query.edit_message_text(
                 f"❌ Eroare: {str(e)[:200]}",
-                parse_mode="Markdown",
             )
         except Exception:
             pass
@@ -816,7 +815,7 @@ async def execute_registru(query, context, user_id, year, month=None):
                 f"📊 *Registru Încasări și Plăți — {period_label}*\n\n"
                 f"✅ Format Excel — bancă și ANAF\n"
                 f"🖨️ Tipărește: File → Print → Landscape A4\n\n"
-                f"_⚠️ Verificați cu contabilul înainte de depunere._"
+                f"_Verificați cu contabilul înainte de depunere._"
             ),
             parse_mode="Markdown",
         )
@@ -1186,11 +1185,12 @@ async def process_entry(
                 "Pentru cheltuieli încearcă formatul text:\n"
                 "`bon 05.04.2026 Lukoil 300 lei motorina`"
             ),
+            parse_mode="Markdown",
         )
         return
 
     try:
-        msg_confirm = "✅ **Salvat:**\n"
+        msg_confirm = "✅ *Salvat:*\n"
         for item in extraction["items"]:
             data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
             tip = item.tip
@@ -1229,15 +1229,15 @@ async def process_entry(
             if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (
                     f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"📄 **FACTURA {item.platforma}**\n"
+                    f"📄 *FACTURA {item.platforma}*\n"
                     f"📅 Data: {data_doc}\n"
                     f"💵 Baza: {item.comision} RON\n"
-                    f"🏛️ **TVA (21%): {tva:.2f} RON** (D301)\n"
+                    f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
                 )
             elif tip == DocType.CHELTUIALA:
                 msg_confirm += (
                     f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"🛒 **{item.detalii}** ({item.brut} RON)\n"
+                    f"🛒 *{item.detalii}* ({item.brut} RON)\n"
                     f"   📅 Data: {data_doc}\n"
                 )
             else:
@@ -1246,14 +1246,16 @@ async def process_entry(
                 platforma_tag = f" {item.platforma}" if item.platforma else ""
                 msg_confirm += (
                     f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"💰 **Venit net{platforma_tag}: {net_display:.2f} RON**\n"
+                    f"💰 *Venit net{platforma_tag}: {net_display:.2f} RON*\n"
                     f"   💳 Card: {card_display:.2f} RON\n"
                     f"   💵 Cash: {item.cash:.2f} RON\n"
                     f"   📅 Data: {data_doc}\n"
                 )
 
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=msg_confirm
+            chat_id=update.effective_chat.id,
+            text=msg_confirm,
+            parse_mode="Markdown",
         )
     except Exception as e:
         logger.error(f"Error processing items: {e}")
@@ -1321,12 +1323,12 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
-    
+
     # Detectăm dacă e buton meniu
     if text in MAIN_MENU_BUTTONS:
         await handle_menu_button(update, context, text)
         return
-    
+
     # Altfel, procesăm ca document
     await process_entry(update, context, text_input=text)
 
