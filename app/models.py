@@ -24,29 +24,29 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     name = Column(String(200), nullable=True)
 
-    # === Profil firmă (NOI) ===
+    # === Profil firmă ===
     firma_nume = Column(String(255), nullable=True)
     firma_cui = Column(String(20), nullable=True, index=True)
     firma_forma_juridica = Column(String(20), nullable=True)
     # Valori: PFA / II / IF / SRL_MICRO / SRL_NORMAL / PROFESIE_LIBERALA
 
-    # === Regim fiscal (NOI) ===
+    # === Regim fiscal ===
     regim_tva = Column(String(20), nullable=True)
     # Valori: NEPLATITOR / PLATITOR_21 / SPECIAL_INTRACOM
     regim_impunere = Column(String(20), nullable=True)
     # Valori: SISTEM_REAL / NORMA_VENIT / MICRO_1 / MICRO_3
 
-    # === Activitate (NOI) ===
+    # === Activitate ===
     caen_principal = Column(String(10), nullable=True)
     activity_code = Column(String(50), nullable=True)
     # Valori: ridesharing / it_freelance / ecommerce / consulting /
     #         construction / medical / transport / real_estate / education / generic
 
-    # === Locație (NOI) ===
+    # === Locație ===
     judet = Column(String(50), nullable=True)
     localitate = Column(String(100), nullable=True)
 
-    # === Stare (NOI) ===
+    # === Stare ===
     data_inceput_activitate = Column(Date, nullable=True)
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     onboarding_step = Column(Integer, nullable=False, default=0)
@@ -63,11 +63,11 @@ class User(Base):
     # 10 = data început
     # 99 = COMPLETED
 
-    # === Contact (NOI, opțional) ===
+    # === Contact (opțional) ===
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
-    # === Relations (existente) ===
+    # === Relations ===
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
@@ -103,7 +103,8 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # ⭐ FIX BUG #4: user_id NOT NULL pentru integritate multi-tenant
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     source_file_id = Column(Integer, ForeignKey("source_files.id"), nullable=True, index=True)
     data_doc = Column(String(20), index=True)
     platforma = Column(String(50), index=True)
