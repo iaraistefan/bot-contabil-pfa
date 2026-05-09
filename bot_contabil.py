@@ -416,7 +416,6 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
 
     if onboarding.user_is_onboarded(tg_id):
-        # Utilizator existent — meniu normal
         name = update.effective_user.first_name or "șofer"
         await update.message.reply_text(
             f"👋 Bun venit înapoi, *{name}*!\n\n"
@@ -428,7 +427,6 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=build_main_menu(),
         )
     else:
-        # Utilizator nou sau în mijloc onboarding — pornim flow-ul
         await onboarding.start_onboarding(update, context)
 
 
@@ -507,7 +505,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
         f"*Status onboarding:* {onb_status}\n\n"
-        f"_Pentru editare folosește /reset_profil_"
+        f"_Pentru editare folosește_ `/reset_profil`"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -828,7 +826,7 @@ async def execute_show_profil(query, context, user_id):
         f"📈 *Regim impunere:* {regim_imp_label}\n"
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
-        f"_Pentru editare: /reset_profil_"
+        f"_Pentru editare:_ `/reset_profil`"
     )
     await query.edit_message_text(msg, parse_mode="Markdown")
 
@@ -874,7 +872,6 @@ async def execute_registru(query, context, user_id, year, month=None):
 
     session = get_session()
     try:
-        # Folosim numele firmei din profil (sau fallback)
         profile = users_repo.get_profile_dict(session, user_id) or {}
         pfa_name = profile.get("firma_nume") or "PFA"
         pfa_cui = profile.get("firma_cui") or ""
@@ -1363,7 +1360,6 @@ async def process_entry(
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
 
-    # Dacă user e în mijloc onboarding, nu acceptăm poze
     if onboarding.user_is_in_onboarding(tg_id):
         await update.message.reply_text(
             "⚠️ Te rog termină mai întâi configurarea profilului.\n"
