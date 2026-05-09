@@ -2,19 +2,11 @@
 Generator Registru de Încasări și Plăți pentru PFA.
 
 Format conform Ordinului MFP 170/2015 (PFA sistem real).
-Generat ca XLSX formatat, gata de tipărit și depus la bancă/ANAF.
 
-Structură:
-- Coloana A: Nr. crt.
-- Coloana B: Data
-- Coloana C: Explicații (descrierea operațiunii)
-- Coloana D: Încasări numerar
-- Coloana E: Încasări bancă
-- Coloana F: Total încasări
-- Coloana G: Plăți numerar
-- Coloana H: Plăți bancă
-- Coloana I: Total plăți
-- Coloana J: Sold (running balance)
+PRINCIPIU CONTABIL:
+- Încasări = VENIT BRUT total (card + cash) — cifra de afaceri reală
+- Plăți = TOATE cheltuielile (inclusiv comisionul Bolt din raport)
+- Sold cumulat = flux real al banilor în business
 """
 
 import io
@@ -26,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_date(date_str: Optional[str]) -> Optional[date]:
-    """Parsează data din format DD.MM.YYYY sau ISO."""
     if not date_str:
         return None
     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
@@ -43,24 +34,11 @@ def generate_registru_xlsx(
     pfa_name: str = "IARAI STEFAN PERSOANA FIZICA AUTORIZATA",
     pfa_cui: str = "53067338",
 ) -> bytes:
-    """
-    Generează Registrul de Încasări și Plăți ca fișier XLSX.
-
-    Args:
-        transactions: lista de Transaction ORM objects
-        year: anul pentru care se generează registrul
-        pfa_name: numele PFA-ului
-        pfa_cui: CUI-ul PFA-ului
-
-    Returns:
-        bytes — conținutul fișierului XLSX
-    """
     try:
         import openpyxl
         from openpyxl.styles import (
-            Font, PatternFill, Alignment, Border, Side, numbers
+            Font, PatternFill, Alignment, Border, Side
         )
-        from openpyxl.utils import get_column_letter
     except ImportError:
         logger.error("openpyxl not installed — falling back to CSV")
         return generate_registru_csv(transactions, year, pfa_name, pfa_cui)
@@ -70,12 +48,11 @@ def generate_registru_xlsx(
     ws.title = f"Registru {year}"
 
     # ── Stiluri ──────────────────────────────────────────────────────────────
-    header_fill = PatternFill("solid", fgColor="1F3864")   # albastru închis
-    subheader_fill = PatternFill("solid", fgColor="2E75B6")  # albastru
-    income_fill = PatternFill("solid", fgColor="E2EFDA")   # verde deschis
-    expense_fill = PatternFill("solid", fgColor="FCE4D6")  # roșu deschis
-    total_fill = PatternFill("solid", fgColor="FFF2CC")    # galben
-    alt_fill = PatternFill("solid", fgColor="F5F5F5")      # gri deschis
+    header_fill = PatternFill("solid", fgColor="1F3864")
+    subheader_fill = PatternFill("solid", fgColor="2E75B6")
+    income_fill = PatternFill("solid", fgColor="E2EFDA")
+    expense_fill = PatternFill("solid", fgColor="FCE4D6")
+    total_fill = PatternFill("solid", fgColor="FFF2CC")
 
     white_bold = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
     dark_bold = Font(name="Calibri", bold=True, color="1F3864", size=10)
@@ -89,26 +66,15 @@ def generate_registru_xlsx(
     thin = Side(style="thin", color="BFBFBF")
     thick = Side(style="medium", color="1F3864")
     thin_border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    thick_border = Border(left=thick, right=thick, top=thick, bottom=thick)
-    header_border = Border(
-        left=thick, right=thick, top=thick, bottom=thick
-    )
+    header_border = Border(left=thick, right=thick, top=thick, bottom=thick)
 
     num_fmt = '#,##0.00 "RON"'
-    date_fmt = "DD.MM.YYYY"
 
     # ── Lățimi coloane ───────────────────────────────────────────────────────
     col_widths = {
-        "A": 6,   # Nr
-        "B": 13,  # Data
-        "C": 45,  # Explicații
-        "D": 16,  # Încasări numerar
-        "E": 16,  # Încasări bancă
-        "F": 16,  # Total încasări
-        "G": 16,  # Plăți numerar
-        "H": 16,  # Plăți bancă
-        "I": 16,  # Total plăți
-        "J": 16,  # Sold
+        "A": 6, "B": 13, "C": 45,
+        "D": 16, "E": 16, "F": 16,
+        "G": 16, "H": 16, "I": 16, "J": 16,
     }
     for col, width in col_widths.items():
         ws.column_dimensions[col].width = width
@@ -163,7 +129,6 @@ def generate_registru_xlsx(
     row += 1
 
     # ── Procesare tranzacții ──────────────────────────────────────────────────
-    # Filtrăm și sortăm: doar INCOME și EXPENSE, sortate cronologic
     relevant_txs = [
         tx for tx in transactions
         if tx.tx_type in ("INCOME", "EXPENSE")
@@ -173,18 +138,17 @@ def generate_registru_xlsx(
         tx.id
     ))
 
-    # Sold inițial = 0 (registrul începe de la 0 pentru fiecare an)
     sold_curent = 0.0
     nr_crt = 0
-    data_start_row = row  # pentru total final
+    data_start_row = row
 
-    # Sold inițial row
-    ws.merge_cells(f"C{row}:I{row}")
+    # ── Sold inițial ──────────────────────────────────────────────────────────
     for col in ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]:
         c = ws[f"{col}{row}"]
         c.border = thin_border
         c.font = dark_bold
         c.fill = total_fill
+    ws.merge_cells(f"C{row}:I{row}")
     ws[f"A{row}"].value = "—"
     ws[f"A{row}"].alignment = center
     ws[f"B{row}"].value = f"01.01.{year}"
@@ -224,43 +188,32 @@ def generate_registru_xlsx(
         nr_crt += 1
         is_income = tx.tx_type == "INCOME"
 
-        # Calcul sume
+        # ── Calcul sume — FOLOSIM AMOUNT_BRUT (corect fiscal) ──
         if is_income:
-            inc_cash = tx.amount_brut - (tx.amount_net or tx.amount_brut) if False else 0.0
-            # Pentru venituri: folosim cash și bancă din tranzacție
-            # amount_brut = total brut, dar noi vrem să afișăm cash și card separat
-            # Vom folosi payment_method pentru a decide
+            amount = tx.amount_brut
             if tx.payment_method == "CASH":
-                inc_cash = tx.amount_net if tx.amount_net else tx.amount_brut
-                inc_bank = 0.0
+                inc_cash, inc_bank = amount, 0.0
             elif tx.payment_method == "CARD":
-                inc_cash = 0.0
-                inc_bank = tx.amount_net if tx.amount_net else tx.amount_brut
+                inc_cash, inc_bank = 0.0, amount
             else:
-                # Mixed — split din amount_net
-                inc_bank = tx.amount_net if tx.amount_net else tx.amount_brut
-                inc_cash = 0.0
+                # Default: card/bancă
+                inc_cash, inc_bank = 0.0, amount
             total_inc = inc_cash + inc_bank
-            pay_cash = 0.0
-            pay_bank = 0.0
-            total_pay = 0.0
+            pay_cash = pay_bank = total_pay = 0.0
             sold_curent += total_inc
         else:
-            inc_cash = 0.0
-            inc_bank = 0.0
-            total_inc = 0.0
+            inc_cash = inc_bank = total_inc = 0.0
+            amount = tx.amount_brut
             if tx.payment_method == "CASH":
-                pay_cash = tx.amount_brut
-                pay_bank = 0.0
+                pay_cash, pay_bank = amount, 0.0
             else:
-                pay_cash = 0.0
-                pay_bank = tx.amount_brut
+                pay_cash, pay_bank = 0.0, amount
             total_pay = pay_cash + pay_bank
             sold_curent -= total_pay
 
         # Descriere
         cat_labels = {
-            "ride_revenue": "Venituri curse Bolt/Uber",
+            "ride_revenue": "Venituri brute curse Bolt/Uber",
             "tip_revenue": "Bacșișuri",
             "fuel": "Combustibil auto",
             "platform_commission": "Comision platformă Bolt/Uber",
@@ -268,10 +221,10 @@ def generate_registru_xlsx(
             "other_expense": "Alte cheltuieli",
         }
         descriere = cat_labels.get(tx.category, tx.category or "—")
-        if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber"):
+        if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber", "APP"):
             descriere += f" — {tx.counterparty}"
 
-        # Row fill
+        # Row fill alternant
         fill = income_fill if is_income else expense_fill
         if nr_crt % 2 == 0 and not is_income:
             fill = PatternFill("solid", fgColor="FBE9E7")
@@ -301,8 +254,10 @@ def generate_registru_xlsx(
             if col in ("D", "E", "F", "G", "H", "I", "J") and val is not None:
                 c.number_format = num_fmt
             if col == "J":
-                c.font = Font(name="Calibri", bold=True, size=10,
-                              color="1F6B2A" if sold_curent >= 0 else "C00000")
+                c.font = Font(
+                    name="Calibri", bold=True, size=10,
+                    color="1F6B2A" if sold_curent >= 0 else "C00000"
+                )
 
         ws.row_dimensions[row].height = 16
         row += 1
@@ -331,16 +286,40 @@ def generate_registru_xlsx(
             left if col == "C" else right
         )
         c.border = header_border
-        if col in ("D", "E", "F", "G", "H", "I"):
-            c.number_format = num_fmt
-        elif col == "J":
+        if col in ("D", "E", "F", "G", "H", "I", "J"):
             c.number_format = num_fmt
     ws.row_dimensions[row].height = 22
     row += 2
 
+    # ── Sumar fiscal final ──
+    ws.merge_cells(f"A{row}:J{row}")
+    c = ws[f"A{row}"]
+    c.value = (
+        f"💡 PROFIT BRUT (Total Încasări − Total Plăți) = {sold_curent:.2f} RON"
+    )
+    c.font = Font(name="Calibri", bold=True, size=11, color="1F3864")
+    c.fill = total_fill
+    c.alignment = center
+    c.border = header_border
+    ws.row_dimensions[row].height = 22
+    row += 1
+
+    ws.merge_cells(f"A{row}:J{row}")
+    c = ws[f"A{row}"]
+    c.value = (
+        "ℹ️ Profitul deductibil fiscal poate diferi (combustibilul auto e "
+        "deductibil 50%). Vezi raportul lunar pentru detalii."
+    )
+    c.font = small
+    c.alignment = center
+    ws.row_dimensions[row].height = 16
+    row += 2
+
     # ── Semnătură ─────────────────────────────────────────────────────────────
     ws.merge_cells(f"A{row}:E{row}")
-    ws[f"A{row}"].value = f"Data întocmirii: {datetime.now().strftime('%d.%m.%Y')}"
+    ws[f"A{row}"].value = (
+        f"Data întocmirii: {datetime.now().strftime('%d.%m.%Y')}"
+    )
     ws[f"A{row}"].font = small
     ws[f"A{row}"].alignment = left
 
@@ -352,23 +331,21 @@ def generate_registru_xlsx(
 
     ws.merge_cells(f"A{row}:J{row}")
     ws[f"A{row}"].value = (
-        "⚠️ Document generat automat de Bot Contabil PFA. "
-        "Verificați cu contabilul autorizat înainte de depunere."
+        "⚠️ Document generat automat de Bot Contabil PFA conform OMFP "
+        "170/2015. Verificați cu contabilul autorizat înainte de depunere."
     )
-    ws[f"A{row}"].font = Font(name="Calibri", size=8, color="FF0000", italic=True)
+    ws[f"A{row}"].font = Font(
+        name="Calibri", size=8, color="FF0000", italic=True
+    )
     ws[f"A{row}"].alignment = center
 
-    # ── Freeze header ─────────────────────────────────────────────────────────
     ws.freeze_panes = f"A{data_start_row}"
-
-    # ── Print setup ──────────────────────────────────────────────────────────
     ws.page_setup.orientation = "landscape"
-    ws.page_setup.paperSize = 9  # A4
+    ws.page_setup.paperSize = 9
     ws.page_setup.fitToPage = True
     ws.page_setup.fitToWidth = 1
     ws.print_title_rows = f"1:{data_start_row - 1}"
 
-    # Save to bytes
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -381,9 +358,7 @@ def generate_registru_csv(
     pfa_name: str = "IARAI STEFAN PFA",
     pfa_cui: str = "53067338",
 ) -> bytes:
-    """
-    Fallback CSV dacă openpyxl nu e disponibil.
-    """
+    """Fallback CSV dacă openpyxl nu e disponibil."""
     import csv
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
@@ -410,7 +385,7 @@ def generate_registru_csv(
         is_income = tx.tx_type == "INCOME"
 
         cat_labels = {
-            "ride_revenue": "Venituri curse Bolt/Uber",
+            "ride_revenue": "Venituri brute curse Bolt/Uber",
             "tip_revenue": "Bacșișuri",
             "fuel": "Combustibil",
             "platform_commission": "Comision Bolt/Uber",
@@ -420,11 +395,12 @@ def generate_registru_csv(
         desc = cat_labels.get(tx.category, tx.category or "")
 
         if is_income:
-            net = tx.amount_net if tx.amount_net else tx.amount_brut
+            # FOLOSIM BRUT
+            amount = tx.amount_brut
             if tx.payment_method == "CASH":
-                inc_cash, inc_bank = net, 0.0
+                inc_cash, inc_bank = amount, 0.0
             else:
-                inc_cash, inc_bank = 0.0, net
+                inc_cash, inc_bank = 0.0, amount
             total_inc = inc_cash + inc_bank
             pay_cash = pay_bank = total_pay = 0.0
             sold += total_inc
