@@ -7,6 +7,8 @@ PRINCIPIU CONTABIL:
 - Încasări = VENIT BRUT total (card + cash) — cifra de afaceri reală
 - Plăți = TOATE cheltuielile (inclusiv comisionul Bolt din raport)
 - Sold cumulat = flux real al banilor în business
+
+Suportă generare anuală (month=None) sau lunară (month=1..12).
 """
 
 import io
@@ -15,6 +17,12 @@ from datetime import date, datetime
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+LUNI_RO_UPPER = {
+    1: "IANUARIE", 2: "FEBRUARIE", 3: "MARTIE", 4: "APRILIE",
+    5: "MAI", 6: "IUNIE", 7: "IULIE", 8: "AUGUST",
+    9: "SEPTEMBRIE", 10: "OCTOMBRIE", 11: "NOIEMBRIE", 12: "DECEMBRIE"
+}
 
 
 def _parse_date(date_str: Optional[str]) -> Optional[date]:
@@ -33,7 +41,15 @@ def generate_registru_xlsx(
     year: int,
     pfa_name: str = "IARAI STEFAN PERSOANA FIZICA AUTORIZATA",
     pfa_cui: str = "53067338",
+    month: Optional[int] = None,
 ) -> bytes:
+    """
+    Generează Registrul XLSX.
+    
+    Args:
+        month: dacă None, generează registru ANUAL.
+               dacă 1..12, generează registru LUNAR (filtrează pe luna respectivă).
+    """
     try:
         import openpyxl
         from openpyxl.styles import (
@@ -41,11 +57,17 @@ def generate_registru_xlsx(
         )
     except ImportError:
         logger.error("openpyxl not installed — falling back to CSV")
-        return generate_registru_csv(transactions, year, pfa_name, pfa_cui)
+        return generate_registru_csv(transactions, year, pfa_name, pfa_cui, month)
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = f"Registru {year}"
+    
+    if month:
+        ws.title = f"Registru {LUNI_RO_UPPER.get(month, str(month))[:3].title()} {year}"
+        title_period = f"{LUNI_RO_UPPER.get(month, str(month))} {year}"
+    else:
+        ws.title = f"Registru {year}"
+        title_period = f"ANUL {year}"
 
     # ── Stiluri ──────────────────────────────────────────────────────────────
     header_fill = PatternFill("solid", fgColor="1F3864")
@@ -70,7 +92,6 @@ def generate_registru_xlsx(
 
     num_fmt = '#,##0.00 "RON"'
 
-    # ── Lățimi coloane ───────────────────────────────────────────────────────
     col_widths = {
         "A": 6, "B": 13, "C": 45,
         "D": 16, "E": 16, "F": 16,
@@ -84,7 +105,7 @@ def generate_registru_xlsx(
     # ── Titlu principal ───────────────────────────────────────────────────────
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
-    c.value = f"REGISTRU DE ÎNCASĂRI ȘI PLĂȚI — ANUL {year}"
+    c.value = f"REGISTRU DE ÎNCASĂRI ȘI PLĂȚI — {title_period}"
     c.font = Font(name="Calibri", bold=True, color="FFFFFF", size=14)
     c.fill = header_fill
     c.alignment = center
@@ -101,7 +122,6 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 20
     row += 1
 
-    # Linie goală
     row += 1
 
     # ── Header tabel ─────────────────────────────────────────────────────────
@@ -128,10 +148,11 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 35
     row += 1
 
-    # ── Procesare tranzacții ──────────────────────────────────────────────────
+    # ── Filtrare tranzacții ──────────────────────────────────────────────────
     relevant_txs = [
         tx for tx in transactions
         if tx.tx_type in ("INCOME", "EXPENSE")
+        and (month is None or (tx.occurred_on and tx.occurred_on.month == month))
     ]
     relevant_txs.sort(key=lambda tx: (
         tx.occurred_on or date(year, 1, 1),
@@ -143,6 +164,11 @@ def generate_registru_xlsx(
     data_start_row = row
 
     # ── Sold inițial ──────────────────────────────────────────────────────────
+    if month:
+        sold_label_date = f"01.{month:02d}.{year}"
+    else:
+        sold_label_date = f"01.01.{year}"
+    
     for col in ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]:
         c = ws[f"{col}{row}"]
         c.border = thin_border
@@ -151,7 +177,7 @@ def generate_registru_xlsx(
     ws.merge_cells(f"C{row}:I{row}")
     ws[f"A{row}"].value = "—"
     ws[f"A{row}"].alignment = center
-    ws[f"B{row}"].value = f"01.01.{year}"
+    ws[f"B{row}"].value = sold_label_date
     ws[f"B{row}"].alignment = center
     ws[f"C{row}"].value = "SOLD INIȚIAL"
     ws[f"C{row}"].alignment = left
@@ -167,17 +193,12 @@ def generate_registru_xlsx(
         tx_date = tx.occurred_on or date(year, 1, 1)
         tx_month = tx_date.month
 
-        # Separator lunar
-        if tx_month != current_month:
+        # Separator lunar (doar pentru registru anual)
+        if month is None and tx_month != current_month:
             current_month = tx_month
-            luni = {
-                1: "IANUARIE", 2: "FEBRUARIE", 3: "MARTIE", 4: "APRILIE",
-                5: "MAI", 6: "IUNIE", 7: "IULIE", 8: "AUGUST",
-                9: "SEPTEMBRIE", 10: "OCTOMBRIE", 11: "NOIEMBRIE", 12: "DECEMBRIE"
-            }
             ws.merge_cells(f"A{row}:J{row}")
             c = ws[f"A{row}"]
-            c.value = f"── {luni.get(tx_month, str(tx_month))} {year} ──"
+            c.value = f"── {LUNI_RO_UPPER.get(tx_month, str(tx_month))} {year} ──"
             c.font = Font(name="Calibri", bold=True, color="2E75B6", size=9)
             c.fill = PatternFill("solid", fgColor="DEEAF1")
             c.alignment = center
@@ -188,7 +209,6 @@ def generate_registru_xlsx(
         nr_crt += 1
         is_income = tx.tx_type == "INCOME"
 
-        # ── Calcul sume — FOLOSIM AMOUNT_BRUT (corect fiscal) ──
         if is_income:
             amount = tx.amount_brut
             if tx.payment_method == "CASH":
@@ -196,7 +216,6 @@ def generate_registru_xlsx(
             elif tx.payment_method == "CARD":
                 inc_cash, inc_bank = 0.0, amount
             else:
-                # Default: card/bancă
                 inc_cash, inc_bank = 0.0, amount
             total_inc = inc_cash + inc_bank
             pay_cash = pay_bank = total_pay = 0.0
@@ -211,7 +230,6 @@ def generate_registru_xlsx(
             total_pay = pay_cash + pay_bank
             sold_curent -= total_pay
 
-        # Descriere
         cat_labels = {
             "ride_revenue": "Venituri brute curse Bolt/Uber",
             "tip_revenue": "Bacșișuri",
@@ -224,7 +242,6 @@ def generate_registru_xlsx(
         if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber", "APP"):
             descriere += f" — {tx.counterparty}"
 
-        # Row fill alternant
         fill = income_fill if is_income else expense_fill
         if nr_crt % 2 == 0 and not is_income:
             fill = PatternFill("solid", fgColor="FBE9E7")
@@ -264,10 +281,10 @@ def generate_registru_xlsx(
 
     # ── Total general ─────────────────────────────────────────────────────────
     row += 1
+    period_label = f"TOTAL {title_period}"
     total_labels = {
-        "A": "TOTAL",
-        "B": "",
-        "C": f"TOTAL GENERAL {year}",
+        "A": "TOTAL", "B": "",
+        "C": period_label,
         "D": f"=SUM(D{data_start_row + 1}:D{row - 2})",
         "E": f"=SUM(E{data_start_row + 1}:E{row - 2})",
         "F": f"=SUM(F{data_start_row + 1}:F{row - 2})",
@@ -291,7 +308,6 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 22
     row += 2
 
-    # ── Sumar fiscal final ──
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
     c.value = (
@@ -315,7 +331,6 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 16
     row += 2
 
-    # ── Semnătură ─────────────────────────────────────────────────────────────
     ws.merge_cells(f"A{row}:E{row}")
     ws[f"A{row}"].value = (
         f"Data întocmirii: {datetime.now().strftime('%d.%m.%Y')}"
@@ -353,17 +368,16 @@ def generate_registru_xlsx(
 
 
 def generate_registru_csv(
-    transactions,
-    year: int,
-    pfa_name: str = "IARAI STEFAN PFA",
-    pfa_cui: str = "53067338",
+    transactions, year, pfa_name="IARAI STEFAN PFA",
+    pfa_cui="53067338", month=None,
 ) -> bytes:
-    """Fallback CSV dacă openpyxl nu e disponibil."""
+    """Fallback CSV."""
     import csv
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
 
-    writer.writerow([f"REGISTRU DE ÎNCASĂRI ȘI PLĂȚI — {year}"])
+    period = f"{LUNI_RO_UPPER.get(month, '')} {year}" if month else f"ANUL {year}"
+    writer.writerow([f"REGISTRU DE ÎNCASĂRI ȘI PLĂȚI — {period}"])
     writer.writerow([pfa_name, f"CUI: {pfa_cui}"])
     writer.writerow([])
     writer.writerow([
@@ -375,7 +389,9 @@ def generate_registru_csv(
     sold = 0.0
     nr = 0
     relevant = sorted(
-        [tx for tx in transactions if tx.tx_type in ("INCOME", "EXPENSE")],
+        [tx for tx in transactions
+         if tx.tx_type in ("INCOME", "EXPENSE")
+         and (month is None or (tx.occurred_on and tx.occurred_on.month == month))],
         key=lambda tx: (tx.occurred_on or date(year, 1, 1), tx.id)
     )
 
@@ -395,7 +411,6 @@ def generate_registru_csv(
         desc = cat_labels.get(tx.category, tx.category or "")
 
         if is_income:
-            # FOLOSIM BRUT
             amount = tx.amount_brut
             if tx.payment_method == "CASH":
                 inc_cash, inc_bank = amount, 0.0
@@ -427,5 +442,7 @@ def generate_registru_csv(
     return buf.getvalue().encode("utf-8-sig")
 
 
-def filename_registru(year: int, fmt: str = "xlsx") -> str:
+def filename_registru(year, fmt="xlsx", month=None):
+    if month:
+        return f"registru_incasari_plati_{year}_{month:02d}.{fmt}"
     return f"registru_incasari_plati_{year}.{fmt}"
