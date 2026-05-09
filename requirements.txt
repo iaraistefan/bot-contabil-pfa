@@ -1,7 +1,5 @@
 python-telegram-bot
 openai
-gspread
-oauth2client
 flask
 sqlalchemy
 psycopg2-binary
