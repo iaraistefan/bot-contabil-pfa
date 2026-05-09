@@ -36,6 +36,18 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
     return None
 
 
+def _calc_row_height(text: str, col_width_chars: int = 50) -> int:
+    """
+    Calculează înălțimea optimă a rândului în funcție de lungimea textului.
+    Aproximativ 1.6 caractere per unitate de lățime Excel.
+    """
+    if not text:
+        return 22
+    chars_per_line = int(col_width_chars * 1.4)
+    lines_needed = max(1, (len(text) + chars_per_line - 1) // chars_per_line)
+    return max(22, lines_needed * 18)
+
+
 def generate_registru_xlsx(
     transactions,
     year: int,
@@ -45,10 +57,10 @@ def generate_registru_xlsx(
 ) -> bytes:
     """
     Generează Registrul XLSX.
-    
+
     Args:
         month: dacă None, generează registru ANUAL.
-               dacă 1..12, generează registru LUNAR (filtrează pe luna respectivă).
+               dacă 1..12, generează registru LUNAR.
     """
     try:
         import openpyxl
@@ -61,7 +73,7 @@ def generate_registru_xlsx(
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    
+
     if month:
         ws.title = f"Registru {LUNI_RO_UPPER.get(month, str(month))[:3].title()} {year}"
         title_period = f"{LUNI_RO_UPPER.get(month, str(month))} {year}"
@@ -92,10 +104,18 @@ def generate_registru_xlsx(
 
     num_fmt = '#,##0.00 "RON"'
 
+    # ── Lățimi coloane (mărite pentru lizibilitate) ──────────────────────────
     col_widths = {
-        "A": 6, "B": 13, "C": 45,
-        "D": 16, "E": 16, "F": 16,
-        "G": 16, "H": 16, "I": 16, "J": 16,
+        "A": 7,    # Nr (era 6)
+        "B": 14,   # Data (era 13)
+        "C": 55,   # Explicații — MULT mai lată (era 45)
+        "D": 17,   # Încasări numerar (era 16)
+        "E": 17,   # Încasări bancă
+        "F": 17,   # Total încasări
+        "G": 17,   # Plăți numerar
+        "H": 17,   # Plăți bancă
+        "I": 17,   # Total plăți
+        "J": 17,   # Sold cumulat
     }
     for col, width in col_widths.items():
         ws.column_dimensions[col].width = width
@@ -109,7 +129,7 @@ def generate_registru_xlsx(
     c.font = Font(name="Calibri", bold=True, color="FFFFFF", size=14)
     c.fill = header_fill
     c.alignment = center
-    ws.row_dimensions[row].height = 30
+    ws.row_dimensions[row].height = 32
     row += 1
 
     # ── Info PFA ─────────────────────────────────────────────────────────────
@@ -119,7 +139,7 @@ def generate_registru_xlsx(
     c.font = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
     c.fill = subheader_fill
     c.alignment = center
-    ws.row_dimensions[row].height = 20
+    ws.row_dimensions[row].height = 22
     row += 1
 
     row += 1
@@ -145,7 +165,7 @@ def generate_registru_xlsx(
         c.fill = subheader_fill
         c.alignment = center
         c.border = header_border
-    ws.row_dimensions[row].height = 35
+    ws.row_dimensions[row].height = 42
     row += 1
 
     # ── Filtrare tranzacții ──────────────────────────────────────────────────
@@ -168,7 +188,7 @@ def generate_registru_xlsx(
         sold_label_date = f"01.{month:02d}.{year}"
     else:
         sold_label_date = f"01.01.{year}"
-    
+
     for col in ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]:
         c = ws[f"{col}{row}"]
         c.border = thin_border
@@ -184,7 +204,7 @@ def generate_registru_xlsx(
     ws[f"J{row}"].value = 0.00
     ws[f"J{row}"].number_format = num_fmt
     ws[f"J{row}"].alignment = right
-    ws.row_dimensions[row].height = 18
+    ws.row_dimensions[row].height = 24
     row += 1
 
     current_month = 0
@@ -199,11 +219,11 @@ def generate_registru_xlsx(
             ws.merge_cells(f"A{row}:J{row}")
             c = ws[f"A{row}"]
             c.value = f"── {LUNI_RO_UPPER.get(tx_month, str(tx_month))} {year} ──"
-            c.font = Font(name="Calibri", bold=True, color="2E75B6", size=9)
+            c.font = Font(name="Calibri", bold=True, color="2E75B6", size=10)
             c.fill = PatternFill("solid", fgColor="DEEAF1")
             c.alignment = center
             c.border = thin_border
-            ws.row_dimensions[row].height = 14
+            ws.row_dimensions[row].height = 20
             row += 1
 
         nr_crt += 1
@@ -242,6 +262,9 @@ def generate_registru_xlsx(
         if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber", "APP"):
             descriere += f" — {tx.counterparty}"
 
+        # Calculăm înălțimea optimă a rândului în funcție de lungimea textului
+        row_height = _calc_row_height(descriere, col_width_chars=55)
+
         fill = income_fill if is_income else expense_fill
         if nr_crt % 2 == 0 and not is_income:
             fill = PatternFill("solid", fgColor="FBE9E7")
@@ -276,7 +299,7 @@ def generate_registru_xlsx(
                     color="1F6B2A" if sold_curent >= 0 else "C00000"
                 )
 
-        ws.row_dimensions[row].height = 16
+        ws.row_dimensions[row].height = row_height
         row += 1
 
     # ── Total general ─────────────────────────────────────────────────────────
@@ -305,7 +328,7 @@ def generate_registru_xlsx(
         c.border = header_border
         if col in ("D", "E", "F", "G", "H", "I", "J"):
             c.number_format = num_fmt
-    ws.row_dimensions[row].height = 22
+    ws.row_dimensions[row].height = 28
     row += 2
 
     ws.merge_cells(f"A{row}:J{row}")
@@ -317,7 +340,7 @@ def generate_registru_xlsx(
     c.fill = total_fill
     c.alignment = center
     c.border = header_border
-    ws.row_dimensions[row].height = 22
+    ws.row_dimensions[row].height = 26
     row += 1
 
     ws.merge_cells(f"A{row}:J{row}")
@@ -328,7 +351,7 @@ def generate_registru_xlsx(
     )
     c.font = small
     c.alignment = center
-    ws.row_dimensions[row].height = 16
+    ws.row_dimensions[row].height = 20
     row += 2
 
     ws.merge_cells(f"A{row}:E{row}")
@@ -342,6 +365,7 @@ def generate_registru_xlsx(
     ws[f"F{row}"].value = "Semnătura titularului PFA: ___________________"
     ws[f"F{row}"].font = small
     ws[f"F{row}"].alignment = right
+    ws.row_dimensions[row].height = 20
     row += 1
 
     ws.merge_cells(f"A{row}:J{row}")
@@ -353,6 +377,7 @@ def generate_registru_xlsx(
         name="Calibri", size=8, color="FF0000", italic=True
     )
     ws[f"A{row}"].alignment = center
+    ws.row_dimensions[row].height = 18
 
     ws.freeze_panes = f"A{data_start_row}"
     ws.page_setup.orientation = "landscape"
