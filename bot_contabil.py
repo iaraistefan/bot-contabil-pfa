@@ -14,7 +14,7 @@ from app.services import posting
 from app.services import tax_engine
 from app.services import scheduler as sched_service
 from app.services import onboarding
-from app.integrations import sheets
+from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
@@ -42,8 +42,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-SHEET_NAME = "Contabilitate PFA 2025"
-CREDENTIALS_FILE = "credentials.json"
 DASHBOARD_URL = "https://bot-contabil-pfa.onrender.com/dashboard"
 
 # === BUTOANE MENIU PRINCIPAL ===
@@ -341,26 +339,51 @@ def persist_transactions(user_id, doc_id, item, banca):
         session.close()
 
 
-def sync_to_sheets(doc_id, row_data, date_str):
-    session = get_session()
-    try:
-        tab_name = sheets.upsert_document(
-            session, doc_id=doc_id, row_data=row_data,
-            date_str=date_str, sheet_name=SHEET_NAME,
-            credentials_file=CREDENTIALS_FILE,
-        )
-        session.commit()
-        return tab_name
-    except Exception as e:
-        session.rollback()
-        logger.error(f"sync_to_sheets failed for doc_id={doc_id}: {e}")
-        return None
-    finally:
-        session.close()
-
-
 def _tx_count_label(n: int) -> str:
     return "1 tranzacție" if n == 1 else f"{n} tranzacții"
+
+
+def _resolve_expense_meta(activity, platforma, detalii):
+    """
+    Returnează (icon, label, deductibility_pct, note) pentru o cheltuială.
+    Folosește keyword-urile activității user-ului pentru detectare.
+    Fallback elegant dacă nu match-uie nicio categorie.
+    """
+    default_icon = "🛒"
+    default_label = "Cheltuială"
+    default_pct = 100
+    default_note = ""
+
+    if activity is None:
+        return default_icon, default_label, default_pct, default_note
+
+    text = f"{platforma or ''} {detalii or ''}".lower().strip()
+    if not text:
+        return default_icon, default_label, default_pct, default_note
+
+    # Caută match pe keywords
+    for cat in activity.expense_categories:
+        if not cat.keywords:
+            continue
+        if any(kw.lower() in text for kw in cat.keywords):
+            return (
+                cat.icon or default_icon,
+                cat.label or default_label,
+                cat.get_effective_deductibility(),
+                cat.deductibility_note or "",
+            )
+
+    # No match → fallback la "other_expense" dacă există
+    other = activity.get_expense_category("other_expense")
+    if other:
+        return (
+            other.icon or default_icon,
+            other.label or default_label,
+            other.get_effective_deductibility(),
+            other.deductibility_note or "",
+        )
+
+    return default_icon, default_label, default_pct, default_note
 
 
 # ============================================================
@@ -743,8 +766,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                         "• Toate tranzacțiile\n"
                         "• Toate fișierele sursă\n"
                         "• Toate rapoartele salvate\n\n"
-                        "Profilul firmei NU va fi șters.\n"
-                        "Google Sheets NU va fi modificat.",
+                        "Profilul firmei NU va fi șters.",
                         parse_mode="Markdown",
                         reply_markup=build_reset_confirm(),
                     )
@@ -1254,7 +1276,9 @@ async def process_entry(
         text="🔄 Analizez documentul (TVA 21%)..."
     )
     extraction = ai_client.extract_document(
-        user_input=text_input, image_bytes=image_bytes,
+        user_input=text_input,
+        image_bytes=image_bytes,
+        user_id=user_id,
     )
 
     if not extraction["items"] and extraction["validation_errors"]:
@@ -1276,6 +1300,9 @@ async def process_entry(
             parse_mode="Markdown",
         )
         return
+
+    # ⭐ Activitatea user-ului — pentru personalizare mesaj
+    activity = get_activity_for_user(user_id) if user_id else None
 
     try:
         msg_confirm = "✅ *Salvat:*\n"
@@ -1302,39 +1329,60 @@ async def process_entry(
                     user_id=user_id, doc_id=doc_id, item=item, banca=banca,
                 )
 
-            row = [
-                data_doc, item.platforma or "", tip,
-                item.brut, item.comision, tva,
-                item.net, item.cash, banca, item.detalii or "",
-            ]
-            sheet_used = sync_to_sheets(
-                doc_id=doc_id, row_data=row, date_str=data_doc
-            ) if doc_id else None
-
             doc_tag = f" #{doc_id}" if doc_id else ""
             tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
 
+            # Folder label din data documentului
+            try:
+                d_obj = datetime.strptime(data_doc, "%d.%m.%Y")
+                folder_label = f"{LUNI_LONG.get(d_obj.month, '?')} {d_obj.year}"
+            except (ValueError, TypeError):
+                folder_label = "—"
+
             if tip == DocType.FACTURA_COMISION:
                 msg_confirm += (
-                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"📄 *FACTURA {item.platforma}*\n"
+                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
+                    f"📄 *FACTURA {item.platforma or 'comision'}*\n"
                     f"📅 Data: {data_doc}\n"
                     f"💵 Baza: {item.comision} RON\n"
                     f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
                 )
             elif tip == DocType.CHELTUIALA:
-                msg_confirm += (
-                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"🛒 *{item.detalii}* ({item.brut} RON)\n"
-                    f"   📅 Data: {data_doc}\n"
+                # ⭐ ACTIVITY-AWARE: detectăm categoria + iconul + deductibilitatea
+                cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(
+                    activity, item.platforma, item.detalii
                 )
+                ded_amount = round(item.brut * ded_pct / 100.0, 2)
+
+                lines = [
+                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}",
+                    f"{cat_icon} *{item.detalii or cat_label}* — {item.brut:.2f} RON",
+                    f"   📅 Data: {data_doc}",
+                ]
+                if ded_pct == 100:
+                    lines.append(f"   💡 Deductibil: {ded_amount:.2f} RON (100%)")
+                elif ded_pct == 0:
+                    lines.append(f"   ⚠️ Nedeductibil fiscal (0%)")
+                else:
+                    lines.append(
+                        f"   💡 Deductibil: {ded_amount:.2f} RON "
+                        f"({ded_pct}% din {item.brut:.2f})"
+                    )
+                if ded_note:
+                    note_short = ded_note if len(ded_note) <= 90 else ded_note[:87] + "..."
+                    lines.append(f"   ℹ️ _{note_short}_")
+                msg_confirm += "\n".join(lines) + "\n"
             else:
+                # VENIT
                 net_display = item.net if item.net > 0 else item.brut
                 card_display = round(net_display - item.cash, 2)
                 platforma_tag = f" {item.platforma}" if item.platforma else ""
+                income_icon = "💰"
+                if activity and activity.income_categories:
+                    income_icon = activity.income_categories[0].icon or "💰"
                 msg_confirm += (
-                    f"📂 Dosar: {sheet_used}{doc_tag}{tx_tag}\n"
-                    f"💰 *Venit net{platforma_tag}: {net_display:.2f} RON*\n"
+                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
+                    f"{income_icon} *Venit net{platforma_tag}: {net_display:.2f} RON*\n"
                     f"   💳 Card: {card_display:.2f} RON\n"
                     f"   💵 Cash: {item.cash:.2f} RON\n"
                     f"   📅 Data: {data_doc}\n"
@@ -1484,5 +1532,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v7 — Multi-Tenant + Onboarding ONLINE!")
+    print("🤖 Bot Contabil v8 — Multi-Tenant + Activity-Aware ONLINE!")
     app_bot.run_polling()
