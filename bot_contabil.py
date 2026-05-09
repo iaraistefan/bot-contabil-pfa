@@ -74,7 +74,6 @@ LUNI_LONG = {
 # ============================================================
 
 def build_main_menu():
-    """Reply Keyboard cu meniul principal — mereu vizibil."""
     return ReplyKeyboardMarkup([
         [KeyboardButton(BTN_RAPORT), KeyboardButton(BTN_REGISTRU)],
         [
@@ -472,6 +471,52 @@ async def send_ajutor(chat_id, context):
         chat_id=chat_id, text=msg, parse_mode="Markdown",
         reply_markup=build_main_menu(),
     )
+
+
+# ============================================================
+#                    /anafdebug — TEMPORAR pentru testare ANAF
+# ============================================================
+
+async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Comandă temporară pentru testarea integrării ANAF.
+    Va fi ștearsă după Pasul 4 (onboarding interactiv).
+
+    Utilizare: /anafdebug                → testează cu CUI 53067338
+               /anafdebug 12345678       → testează cu un CUI specific
+    """
+    args = context.args or []
+    cui = args[0] if args else "53067338"
+
+    await update.message.reply_text(f"🔄 Caut CUI `{cui}` în ANAF...", parse_mode="Markdown")
+
+    try:
+        from app.integrations.anaf_lookup import lookup_cui, format_lookup_result
+        result = lookup_cui(cui)
+        msg = format_lookup_result(result)
+
+        if result.get("found"):
+            msg += "\n\n*🔧 Date detaliate (debug):*"
+            msg += f"\n• Formă detectată: `{result.get('forma_juridica_detectata')}`"
+            msg += f"\n• Plătitor TVA: `{result.get('is_platitor_tva')}`"
+            msg += f"\n• Inactiv: `{result.get('is_inactiv')}`"
+            msg += f"\n• Județ: `{result.get('judet')}`"
+            msg += f"\n• Localitate: `{result.get('localitate')}`"
+
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    except ImportError as e:
+        await update.message.reply_text(
+            f"❌ Modulul `anaf_lookup` nu există încă.\n"
+            f"Verifică că ai creat fișierul `app/integrations/anaf_lookup.py`.\n\n"
+            f"Eroare: `{e}`",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"anafdebug error: {e}")
+        await update.message.reply_text(
+            f"❌ Eroare ANAF lookup:\n```\n{str(e)[:500]}\n```",
+            parse_mode="Markdown",
+        )
 
 
 # ============================================================
@@ -1333,25 +1378,6 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ Migrations FAILED: {e}")
 
-    # ── TEMPORAR: Test ANAF lookup la pornire ──
-    # ── ȘTERGE ACEST BLOC DUPĂ CONFIRMAREA CĂ MERGE ──
-    try:
-        from app.integrations.anaf_lookup import lookup_cui
-        logger.info("🧪 Test ANAF lookup pentru CUI 53067338...")
-        test_result = lookup_cui("53067338")
-        if test_result.get("found"):
-            logger.info(f"🧪 ANAF OK: {test_result.get('denumire')}")
-            logger.info(f"   📋 CUI: {test_result.get('cui')}")
-            logger.info(f"   🧾 Formă: {test_result.get('forma_juridica_detectata')}")
-            logger.info(f"   💰 TVA: {test_result.get('regim_tva')}")
-            logger.info(f"   📍 Adresă: {test_result.get('adresa_completa')}")
-            logger.info(f"   ⚠️  Inactiv: {test_result.get('is_inactiv')}")
-        else:
-            logger.warning(f"🧪 ANAF NOT FOUND: {test_result.get('error')}")
-    except Exception as e:
-        logger.error(f"🧪 ANAF test FAILED: {e}")
-    # ── SFÂRȘIT BLOC TEMPORAR ──
-
     try:
         storage.ensure_storage_dir()
         logger.info("✅ Storage dir OK")
@@ -1371,6 +1397,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
+    app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
 
     # Callback queries (butoane inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
