@@ -330,6 +330,27 @@
       font-size: 0.85rem;
     }
 
+    /* ── AUTH ERROR ── */
+    .auth-error {
+      max-width: 480px;
+      margin: 60px auto;
+      padding: 32px 24px;
+      background: var(--bg2);
+      border: 1px solid var(--red);
+      border-radius: 14px;
+      text-align: center;
+    }
+    .auth-error h2 {
+      color: var(--red);
+      font-size: 1.2rem;
+      margin-bottom: 12px;
+    }
+    .auth-error p {
+      color: var(--text2);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
     /* ── EXPORT BUTTON ── */
     .export-btn {
       display: flex;
@@ -379,13 +400,15 @@
 </head>
 <body>
 
+<div id="app-content" style="display:none">
+
 <!-- HEADER -->
 <div class="header">
   <div class="header-top">
     <div class="header-title">🧾 Contabil PFA Pro</div>
     <div class="header-badge" id="header-badge">—</div>
   </div>
-  <div class="header-subtitle">Dashboard fiscal · Bolt/Uber Romania</div>
+  <div class="header-subtitle" id="header-subtitle">Dashboard fiscal</div>
 </div>
 
 <!-- PERIOD CHIPS -->
@@ -405,20 +428,18 @@
     <div class="spin"></div>Se încarcă...
   </div>
   <div id="sumar-content" style="display:none">
-    <!-- Profit hero -->
     <div class="profit-card" style="margin-top:4px">
       <div class="profit-label">📈 Profit estimat</div>
       <div class="profit-value" id="s-profit">0.00 RON</div>
       <div class="profit-sub">venituri − cheltuieli deductibile</div>
     </div>
 
-    <!-- Cards -->
     <div class="cards">
       <div class="card green">
         <div class="card-icon">💰</div>
         <div class="card-label">Venituri</div>
         <div class="card-value green" id="s-income">—</div>
-        <div class="card-sub" id="s-income-sub">curse + bacșișuri</div>
+        <div class="card-sub" id="s-income-sub">total brut</div>
       </div>
       <div class="card red">
         <div class="card-icon">💸</div>
@@ -440,7 +461,6 @@
       </div>
     </div>
 
-    <!-- Chart -->
     <div class="chart-card">
       <div class="chart-title">📊 Distribuție cheltuieli</div>
       <div class="chart-wrap">
@@ -448,7 +468,6 @@
       </div>
     </div>
 
-    <!-- Detalii cheltuieli -->
     <div class="section-title">Detaliu cheltuieli</div>
     <div class="summary-list" id="expense-breakdown"></div>
   </div>
@@ -471,7 +490,6 @@
     <div class="vat-alert">
       <div class="vat-alert-title">ℹ️ Taxare inversă (Reverse Charge)</div>
       <div class="vat-alert-text">
-        Comisioanele Bolt/Uber sunt servicii intracomunitare.
         TVA-ul de mai jos trebuie declarat în <strong>D301</strong> și
         <strong>D390</strong>. Verificați cu contabilul.
       </div>
@@ -479,7 +497,7 @@
 
     <div class="summary-list">
       <div class="summary-row">
-        <div class="summary-label">🧾 Bază impozabilă comisioane</div>
+        <div class="summary-label">🧾 Bază impozabilă</div>
         <div class="summary-value" id="v-base" style="color:var(--text)">—</div>
       </div>
       <div class="summary-row">
@@ -524,28 +542,32 @@
       📋 CSV Rezumat
     </a>
   </div>
-
-  <div class="section-title" style="margin-top:20px">Instrucțiuni D301</div>
-  <div class="vat-alert" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3)">
-    <div class="vat-alert-title" style="color:var(--blue)">📄 Cum completezi D301</div>
-    <div class="vat-alert-text">
-      1. Descarcă CSV Rezumat → coloana <strong>TVA colectat</strong><br>
-      2. În ANAF ePortal → D301 → secțiunea "Achizitii intracomunitare de servicii"<br>
-      3. Completează baza impozabilă + TVA aferent<br>
-      4. Termenul de depunere: data de 25 a lunii următoare
-    </div>
-  </div>
 </div>
 
 <div class="bottom-safe"></div>
 
+</div> <!-- /app-content -->
+
+<!-- AUTH ERROR (shown if not authenticated) -->
+<div id="auth-error" class="auth-error" style="display:none">
+  <h2>🔒 Acces interzis</h2>
+  <p>
+    Acest dashboard se accesează doar prin botul Telegram.<br><br>
+    Deschide <strong>@ContabilPFA_bot</strong> și apasă pe
+    butonul <strong>🖥️ Dashboard</strong> din meniu.
+  </p>
+</div>
+
 <script>
-  // Init Telegram WebApp
+  // ==========================================================
+  //                    AUTH SETUP
+  // ==========================================================
   const tg = window.Telegram?.WebApp;
+  const initData = tg?.initData || "";
+
   if (tg) {
     tg.ready();
     tg.expand();
-    // Match color scheme
     if (tg.colorScheme === 'light') {
       document.documentElement.style.setProperty('--bg', '#f1f5f9');
       document.documentElement.style.setProperty('--bg2', '#ffffff');
@@ -557,6 +579,36 @@
     }
   }
 
+  // Custom fetch wrapper care apendizează automat header-ul Telegram init_data
+  async function authFetch(url, options = {}) {
+    const headers = options.headers || {};
+    if (initData) {
+      headers["X-Telegram-Init-Data"] = initData;
+    }
+    return fetch(url, { ...options, headers });
+  }
+
+  // Verificare inițială: e auth-ul valid?
+  async function checkAuth() {
+    try {
+      const r = await authFetch("/api/v1/documents");
+      if (r.status === 401) {
+        document.getElementById("auth-error").style.display = "block";
+        document.getElementById("app-content").style.display = "none";
+        return false;
+      }
+      document.getElementById("app-content").style.display = "block";
+      document.getElementById("auth-error").style.display = "none";
+      return true;
+    } catch (e) {
+      document.getElementById("auth-error").style.display = "block";
+      return false;
+    }
+  }
+
+  // ==========================================================
+  //                    APP STATE
+  // ==========================================================
   const MONTHS = {
     1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",
     7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"
@@ -567,16 +619,6 @@
   };
   const TX_ICONS = {
     INCOME: "💰", EXPENSE: "🛒", VAT_OUT: "🏛️", VAT_IN: "↩️", ADJUSTMENT: "⚖️"
-  };
-  const CAT_LABELS = {
-    ride_revenue: "Venituri curse",
-    tip_revenue: "Bacșișuri",
-    platform_commission: "Comision platformă",
-    fuel: "Combustibil",
-    maintenance: "Întreținere auto",
-    registration: "Autorizații/Înreg.",
-    other_expense: "Alte cheltuieli",
-    reverse_charge_vat: "TVA reverse charge",
   };
 
   let currentYear = new Date().getFullYear();
@@ -590,7 +632,6 @@
     return Number(v).toLocaleString("ro-RO", {minimumFractionDigits:2,maximumFractionDigits:2}) + " RON";
   }
 
-  // Build period chips (last 6 months)
   function buildPeriodChips() {
     const container = document.getElementById("period-chips");
     container.innerHTML = "";
@@ -612,7 +653,6 @@
     currentMonth = month;
     cachedTotals = null;
     cachedTxs = null;
-    // Update chips
     document.querySelectorAll(".period-chip").forEach(c => {
       c.classList.remove("active");
       if (c.textContent === `${MONTHS[month]} ${year}`) c.classList.add("active");
@@ -622,7 +662,6 @@
     loadCurrentTab();
   }
 
-  // Tab switching
   document.querySelectorAll(".tab").forEach(tab => {
     tab.onclick = () => {
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -647,16 +686,16 @@
 
   async function fetchTotals() {
     if (cachedTotals) return cachedTotals;
-    const r = await fetch(`/api/v1/period/${currentYear}/${currentMonth}`);
-    if (!r.ok) throw new Error("API error");
+    const r = await authFetch(`/api/v1/period/${currentYear}/${currentMonth}`);
+    if (!r.ok) throw new Error("API error " + r.status);
     cachedTotals = await r.json();
     return cachedTotals;
   }
 
   async function fetchTxs() {
     if (cachedTxs) return cachedTxs;
-    const r = await fetch(`/api/v1/transactions/${currentYear}/${currentMonth}`);
-    if (!r.ok) throw new Error("API error");
+    const r = await authFetch(`/api/v1/transactions/${currentYear}/${currentMonth}`);
+    if (!r.ok) throw new Error("API error " + r.status);
     const data = await r.json();
     cachedTxs = data.transactions || [];
     return cachedTxs;
@@ -669,47 +708,46 @@
     content.style.display = "none";
 
     try {
-      const [totals, txs] = await Promise.all([fetchTotals(), fetchTxs()]);
+      const totals = await fetchTotals();
 
-      // Profit hero
       const profitEl = document.getElementById("s-profit");
       profitEl.textContent = fmt(totals.profit_estimated);
       profitEl.className = "profit-value " + (totals.profit_estimated >= 0 ? "positive" : "negative");
 
-      // Cards
+      // Header subtitle = activitatea utilizatorului (din API)
+      if (totals.activity_name) {
+        document.getElementById("header-subtitle").textContent =
+          (totals.activity_icon || "📊") + " " + totals.activity_name;
+      }
+
       document.getElementById("s-income").textContent = fmt(totals.income_total);
       document.getElementById("s-income-sub").textContent =
-        totals.income_tips > 0 ? `bacșișuri: ${fmt(totals.income_tips)}` : "curse Bolt/Uber";
+        `${totals.tx_count || 0} tranzacții`;
       document.getElementById("s-expense").textContent = fmt(totals.expense_deductible_total);
       document.getElementById("s-expense-sub").textContent =
         `brut: ${fmt(totals.expense_total_brut)}`;
       document.getElementById("s-vat").textContent = fmt(totals.vat_out_total);
       document.getElementById("s-txcount").textContent = totals.tx_count;
 
-      // Chart
       renderExpenseChart(totals);
 
-      // Breakdown
       const breakdown = document.getElementById("expense-breakdown");
       breakdown.innerHTML = "";
-      const rows = [
-        {label: "⛽ Combustibil (brut)", val: totals.expense_fuel_brut, sub: `deductibil: ${fmt(totals.expense_fuel_deductible)}`},
-        {label: "📱 Comisioane Bolt/Uber", val: totals.expense_commission},
-        {label: "📋 Autorizații/Înreg.", val: totals.expense_registration},
-        {label: "🔧 Alte cheltuieli", val: totals.expense_other},
-      ].filter(r => r.val > 0);
-
-      if (rows.length === 0) {
+      const items = totals.expense_breakdown || [];
+      if (items.length === 0) {
         breakdown.innerHTML = '<div class="empty">📭 Nicio cheltuială înregistrată.</div>';
       } else {
-        rows.forEach(r => {
+        items.forEach(item => {
+          const subText = item.deductibility_pct < 100
+            ? `deductibil: ${fmt(item.amount_deductible)} (${item.deductibility_pct}%)`
+            : "100% deductibil";
           breakdown.innerHTML += `
             <div class="summary-row">
               <div>
-                <div class="summary-label">${r.label}</div>
-                ${r.sub ? `<div style="font-size:0.68rem;color:var(--text3)">${r.sub}</div>` : ""}
+                <div class="summary-label">${item.icon || "💸"} ${item.label}</div>
+                <div style="font-size:0.68rem;color:var(--text3)">${subText}</div>
               </div>
-              <div class="summary-value" style="color:var(--red)">${fmt(r.val)}</div>
+              <div class="summary-value" style="color:var(--red)">${fmt(item.amount_brut)}</div>
             </div>`;
         });
       }
@@ -725,27 +763,19 @@
     const ctx = document.getElementById("expense-chart").getContext("2d");
     if (expenseChart) expenseChart.destroy();
 
-    const labels = [];
-    const data = [];
-    const colors = [];
-
-    if (totals.expense_fuel_brut > 0) {
-      labels.push("Combustibil"); data.push(totals.expense_fuel_brut); colors.push("#3b82f6");
-    }
-    if (totals.expense_commission > 0) {
-      labels.push("Comisioane"); data.push(totals.expense_commission); colors.push("#8b5cf6");
-    }
-    if (totals.expense_registration > 0) {
-      labels.push("Autorizații"); data.push(totals.expense_registration); colors.push("#10b981");
-    }
-    if (totals.expense_other > 0) {
-      labels.push("Alte"); data.push(totals.expense_other); colors.push("#f59e0b");
-    }
+    const items = totals.expense_breakdown || [];
+    const labels = items.map(i => i.label);
+    const data = items.map(i => i.amount_brut);
+    const colors = [
+      "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b",
+      "#ef4444", "#06b6d4", "#ec4899", "#84cc16"
+    ];
 
     if (data.length === 0) {
       document.querySelector(".chart-card").style.display = "none";
       return;
     }
+    document.querySelector(".chart-card").style.display = "block";
 
     expenseChart = new Chart(ctx, {
       type: "doughnut",
@@ -753,7 +783,7 @@
         labels,
         datasets: [{
           data,
-          backgroundColor: colors,
+          backgroundColor: colors.slice(0, data.length),
           borderWidth: 0,
           hoverOffset: 6,
         }]
@@ -801,7 +831,7 @@
           <div class="tx-item">
             <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type] || "💱"}</div>
             <div class="tx-info">
-              <div class="tx-category">${CAT_LABELS[tx.category] || tx.category}</div>
+              <div class="tx-category">${tx.category}</div>
               <div class="tx-meta">${tx.occurred_on || "—"} · ${tx.counterparty || "—"}</div>
             </div>
             <div>
@@ -824,7 +854,8 @@
     try {
       const [totals, txs] = await Promise.all([fetchTotals(), fetchTxs()]);
 
-      document.getElementById("v-base").textContent = fmt(totals.expense_commission);
+      const baseAmount = totals.vat_out_total > 0 ? totals.vat_out_total / 0.21 : 0;
+      document.getElementById("v-base").textContent = fmt(baseAmount);
       document.getElementById("v-out").textContent = fmt(totals.vat_out_total);
       document.getElementById("v-in").textContent = fmt(totals.vat_in_total);
       document.getElementById("v-net").textContent = fmt(totals.vat_net);
@@ -862,6 +893,8 @@
       document.getElementById("exp-period").textContent =
         `${MONTHS_FULL[currentMonth]} ${currentYear}`;
       document.getElementById("exp-txcount").textContent = totals.tx_count;
+      // Notă: export-urile CSV deschise direct nu pot trimite header X-Telegram-Init-Data
+      // Pentru moment păstrăm link-uri normale; dacă nu e auth, va da 401
       document.getElementById("exp-btn-tx").href =
         `/api/v1/transactions/export/${currentYear}/${currentMonth}`;
       document.getElementById("exp-btn-rez").href =
@@ -869,11 +902,17 @@
     } catch(e) {}
   }
 
-  // Init
-  buildPeriodChips();
-  document.getElementById("header-badge").textContent =
-    `${MONTHS_FULL[currentMonth]} ${currentYear}`;
-  loadSumar();
+  // ==========================================================
+  //                    INIT
+  // ==========================================================
+  (async () => {
+    const ok = await checkAuth();
+    if (!ok) return;
+    buildPeriodChips();
+    document.getElementById("header-badge").textContent =
+      `${MONTHS_FULL[currentMonth]} ${currentYear}`;
+    loadSumar();
+  })();
 </script>
 </body>
 </html>
