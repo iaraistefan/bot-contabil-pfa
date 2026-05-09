@@ -56,6 +56,7 @@ def update_profile(
     session: Session,
     user: User,
     *,
+    name: Optional[str] = None,
     firma_nume: Optional[str] = None,
     firma_cui: Optional[str] = None,
     firma_forma_juridica: Optional[str] = None,
@@ -74,10 +75,11 @@ def update_profile(
     Doar valorile non-None sunt aplicate (None = lasă neschimbat).
     Commit la apelant.
     """
+    if name is not None:
+        user.name = name.strip()[:200] if name else None
     if firma_nume is not None:
         user.firma_nume = firma_nume.strip() if firma_nume else None
     if firma_cui is not None:
-        # Curățăm CUI-ul: păstrăm doar cifre (eliminăm RO, spații, etc.)
         cui_clean = "".join(c for c in str(firma_cui) if c.isdigit())
         user.firma_cui = cui_clean if cui_clean else None
     if firma_forma_juridica is not None:
@@ -121,7 +123,6 @@ def update_profile_by_id(
 #                   ONBOARDING WORKFLOW
 # ============================================================
 
-# Pași de onboarding (numere magice doar într-un singur loc)
 ONBOARDING_STEPS = {
     "NOT_STARTED": 0,
     "NUME_PERSONAL": 1,
@@ -138,7 +139,6 @@ ONBOARDING_STEPS = {
 
 
 def is_onboarded(session: Session, user_id: int) -> bool:
-    """True dacă user-ul a terminat onboarding-ul."""
     user = get_by_id(session, user_id)
     if user is None:
         return False
@@ -146,10 +146,6 @@ def is_onboarded(session: Session, user_id: int) -> bool:
 
 
 def get_onboarding_step(session: Session, user_id: int) -> int:
-    """
-    Returnează pasul curent de onboarding (0..99).
-    0 = neînceput. 99 = terminat.
-    """
     user = get_by_id(session, user_id)
     if user is None:
         return 0
@@ -161,10 +157,6 @@ def set_onboarding_step(
     user: User,
     step: int,
 ) -> User:
-    """
-    Setează pasul curent de onboarding.
-    Commit la apelant.
-    """
     user.onboarding_step = step
     if step == ONBOARDING_STEPS["COMPLETED"]:
         user.onboarding_completed = True
@@ -180,13 +172,6 @@ def advance_onboarding_step(
 ) -> User:
     """
     Avansează la pasul următor și (opțional) actualizează profilul în același timp.
-    Helper pentru flow-ul de onboarding.
-
-    Ex:
-        advance_onboarding_step(
-            session, user, next_step=2,
-            profile_updates={"firma_forma_juridica": "PFA"}
-        )
     """
     if profile_updates:
         update_profile(session, user, **profile_updates)
@@ -194,7 +179,6 @@ def advance_onboarding_step(
 
 
 def complete_onboarding(session: Session, user: User) -> User:
-    """Marchează onboarding-ul ca finalizat."""
     user.onboarding_completed = True
     user.onboarding_step = ONBOARDING_STEPS["COMPLETED"]
     session.flush()
@@ -202,10 +186,6 @@ def complete_onboarding(session: Session, user: User) -> User:
 
 
 def reset_onboarding(session: Session, user: User) -> User:
-    """
-    Resetează onboarding-ul (pentru editare profil de la zero).
-    NU șterge datele din profil — doar permite reluarea flow-ului.
-    """
     user.onboarding_completed = False
     user.onboarding_step = 0
     session.flush()
@@ -217,10 +197,6 @@ def reset_onboarding(session: Session, user: User) -> User:
 # ============================================================
 
 def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Returnează profilul user-ului ca dict, sau None dacă user-ul nu există.
-    Util pentru afișare în Telegram, dashboard, sau JSON export.
-    """
     user = get_by_id(session, user_id)
     if user is None:
         return None
@@ -229,40 +205,29 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "id": user.id,
         "telegram_id": user.telegram_id,
         "name": user.name,
-        # Firmă
         "firma_nume": user.firma_nume,
         "firma_cui": user.firma_cui,
         "firma_forma_juridica": user.firma_forma_juridica,
-        # Fiscal
         "regim_tva": user.regim_tva,
         "regim_impunere": user.regim_impunere,
-        # Activitate
         "caen_principal": user.caen_principal,
         "activity_code": user.activity_code,
-        # Locație
         "judet": user.judet,
         "localitate": user.localitate,
-        # Stare
         "data_inceput_activitate": (
             user.data_inceput_activitate.isoformat()
             if user.data_inceput_activitate else None
         ),
         "onboarding_completed": user.onboarding_completed,
         "onboarding_step": user.onboarding_step,
-        # Contact
         "email": user.email,
         "telefon": user.telefon,
-        # Meta
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
 
 
 def get_pfa_display_name(session: Session, user_id: int) -> str:
-    """
-    Returnează numele de afișat pe documente (Registru, CSV).
-    Folosește firma_nume dacă există, altfel name personal, altfel un fallback generic.
-    """
     user = get_by_id(session, user_id)
     if user is None:
         return "PFA"
@@ -270,10 +235,6 @@ def get_pfa_display_name(session: Session, user_id: int) -> str:
 
 
 def get_pfa_cui(session: Session, user_id: int) -> str:
-    """
-    Returnează CUI-ul de afișat pe documente.
-    Returnează șir gol dacă lipsește.
-    """
     user = get_by_id(session, user_id)
     if user is None or not user.firma_cui:
         return ""
