@@ -20,6 +20,7 @@ from app.integrations.exports.registru import (
 )
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
+from app.migrations import run_migrations
 import io as _io
 import logging
 import traceback
@@ -531,8 +532,6 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
-
-    # BTN_DASHBOARD se deschide direct prin WebApp — nu trece prin text
 
 
 # ============================================================
@@ -1343,6 +1342,12 @@ if __name__ == '__main__':
         logger.info("✅ DB init OK")
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
+
+    # ── Migrări DB (idempotent — rulează doar ce nu a fost aplicat) ──
+    try:
+        run_migrations()
+    except Exception as e:
+        logger.error(f"❌ Migrations FAILED: {e}")
 
     try:
         storage.ensure_storage_dir()
