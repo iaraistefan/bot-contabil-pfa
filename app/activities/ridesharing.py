@@ -5,9 +5,14 @@ Specific contabil:
 - Venit BRUT = card + cash + bacșișuri (cifra de afaceri reală)
 - Comision platformă = cheltuială deductibilă 100%
 - Combustibil auto = deductibil 50% (auto mixt — uz personal+business)
-- Service auto = deductibil 50% (auto mixt)
+- Service auto + ulei + filtre = deductibil 50% (auto mixt)
 - Autorizații, ecusoane, taxe = deductibile 100%
 - TVA reverse charge pe factura comision Bolt (intracomunitar)
+
+NOTĂ FISCALĂ: Conform art. 25 alin. (3) lit. l) Cod Fiscal,
+TOATE cheltuielile auto (combustibil + service + ulei + asigurări) sunt
+limitate la 50% pentru autoturisme cu utilizare mixtă.
+Pentru deductibilitate 100% e nevoie de FOAIE DE PARCURS.
 """
 
 from app.activities.base import (
@@ -50,14 +55,21 @@ class RidesharingActivity(BaseActivity):
     # ============================================================
     expense_categories = [
         # ── Combustibil — DEDUCTIBIL 50% (auto mixt) ──
+        # IMPORTANT: keywords pure pentru combustibil — fără brand-uri
+        # Brand-urile (Lukoil, OMV, etc.) merg ca keyword secundar SLAB,
+        # ca să poată fi depășite de "ulei motor" care e mai specific.
         ExpenseCategory(
             code="fuel",
             label="Combustibil auto",
             icon="⛽",
             keywords=[
+                # Tipuri de combustibil — keywords PUTERNICE
+                "motorina", "benzina", "carburant", "combustibil",
+                "diesel", "gpl", "petrol",
+                "euro diesel", "euro premium", "euro 5", "euro 6",
+                # Brand-uri benzinării — keywords SLABE (numai pentru fallback)
                 "lukoil", "omv", "petrom", "mol", "rompetrol",
-                "socar", "shell", "benzina", "motorina", "carburant",
-                "combustibil", "petrol", "diesel",
+                "socar", "shell",
             ],
             deductibility=DeductibilityRule.HALF,
             deductibility_note=(
@@ -87,18 +99,32 @@ class RidesharingActivity(BaseActivity):
             accounting_code="628",
         ),
 
-        # ── Service auto — DEDUCTIBIL 50% ──
+        # ── Service auto / consumabile — DEDUCTIBIL 50% ──
+        # IMPORTANT: keyword-urile compuse au scor mare → învingg "lukoil"
+        # când bonul conține "ulei motor", "schimb ulei", etc.
         ExpenseCategory(
             code="car_service",
-            label="Service / Reparații auto",
+            label="Service / Consumabile auto",
             icon="🔧",
             keywords=[
-                "service auto", "reparatii", "anvelope", "ulei motor",
-                "filtru", "schimb ulei", "vulcanizare", "mecanic",
-                "vidanj", "diagnostic auto",
+                # Compuse — au prioritate (scor mare datorită spațiilor)
+                "ulei motor", "ulei auto", "schimb ulei", "filtru ulei",
+                "filtru aer", "filtru polen", "filtru combustibil",
+                "service auto", "reparatii auto", "diagnostic auto",
+                "schimb anvelope", "lichid parbriz", "lichid frana",
+                "lichid racire", "ad blue", "adblue",
+                # Simple
+                "ulei", "filtru", "filtre", "anvelope", "anvelopa",
+                "antigel", "vulcanizare", "mecanic", "vidanj",
+                "reparatii", "service", "ITP", "itp",
+                "placute frana", "discuri frana", "amortizoare",
+                "bujii", "curea", "pompa", "bateria auto",
             ],
             deductibility=DeductibilityRule.HALF,
-            deductibility_note="50% deductibil (auto mixt)",
+            deductibility_note=(
+                "50% deductibil (auto mixt, art. 25 alin. (3) lit. l) Cod Fiscal). "
+                "Include: ulei, filtre, anvelope, reparații, ITP, consumabile auto."
+            ),
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="611",
         ),
@@ -109,9 +135,16 @@ class RidesharingActivity(BaseActivity):
             label="Autorizații / Înregistrare",
             icon="📋",
             keywords=[
-                "autorizatie", "ecusoane", "transport alternativ",
-                "primaria", "rar", "atestat", "categoria",
-                "permis", "viza", "consultanta autorizatie",
+                # Compuse — prioritate
+                "autorizatie transport", "atestat profesional",
+                "consultanta autorizatie", "ecusoane RAR",
+                "ecuson rutier", "tahograf",
+                # Simple
+                "autorizatie", "ecusoane", "ecuson", "atestat",
+                "transport alternativ", "primaria",
+                "rar", "categoria", "permis",
+                "viza", "registrul", "anaf", "fisc",
+                "certificat", "semnatura digitala", "digisign",
             ],
             deductibility=DeductibilityRule.FULL,
             default_vat_treatment=VATTreatment.STANDARD_21,
@@ -124,8 +157,14 @@ class RidesharingActivity(BaseActivity):
             label="Asigurări auto (RCA, CASCO)",
             icon="🛡️",
             keywords=[
-                "rca", "casco", "asigurare", "asigurari auto",
-                "polita", "allianz", "groupama", "city insurance",
+                # Compuse — prioritate
+                "asigurare auto", "asigurari auto", "polita rca",
+                "polita casco", "polita auto", "city insurance",
+                "asirom auto", "groupama auto", "allianz auto",
+                # Simple
+                "rca", "casco", "asigurare", "asigurari",
+                "polita", "allianz", "groupama", "asirom",
+                "omniasig", "euroins",
             ],
             deductibility=DeductibilityRule.HALF,
             deductibility_note="50% deductibil (auto mixt)",
@@ -138,8 +177,12 @@ class RidesharingActivity(BaseActivity):
             code="car_wash",
             label="Spălătorie auto",
             icon="🧽",
-            keywords=["spalatorie", "car wash", "spalat masina"],
+            keywords=[
+                "spalatorie auto", "car wash", "spalat masina",
+                "spalatorie", "spalat auto", "auto detail",
+            ],
             deductibility=DeductibilityRule.HALF,
+            deductibility_note="50% deductibil (auto mixt)",
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="611",
         ),
@@ -150,8 +193,11 @@ class RidesharingActivity(BaseActivity):
             label="Onorarii notar/contabil/avocat",
             icon="📑",
             keywords=[
+                "onorariu notarial", "onorariu contabil", "onorariu avocat",
+                "consultanta juridica", "consultanta contabila",
+                "notariat", "biroul notarial",
                 "notar", "notarial", "contabil", "avocat",
-                "consultanta juridica", "legalizare",
+                "legalizare",
             ],
             deductibility=DeductibilityRule.FULL,
             default_vat_treatment=VATTreatment.STANDARD_21,
@@ -164,8 +210,11 @@ class RidesharingActivity(BaseActivity):
             label="Telefon / Internet",
             icon="📱",
             keywords=[
+                "abonament telefon", "internet mobil", "internet fix",
+                "telefonie mobila", "fibra optica",
                 "orange", "vodafone", "digi", "telekom",
-                "telefon", "internet", "abonament telefon",
+                "rcs", "rds",
+                "telefon", "internet", "abonament",
             ],
             deductibility=DeductibilityRule.HALF,
             deductibility_note="50% deductibil (uz mixt)",
@@ -173,26 +222,29 @@ class RidesharingActivity(BaseActivity):
             accounting_code="626",
         ),
 
-        # ── Materiale / Accesorii auto ──
+        # ── Materiale / Accesorii auto — DEDUCTIBIL 50% ──
         ExpenseCategory(
             code="car_supplies",
             label="Accesorii auto / Consumabile",
             icon="🔩",
             keywords=[
-                "suport telefon", "incarcator masina",
-                "stergator", "antigel", "lichid parbriz",
+                "suport telefon auto", "incarcator masina",
+                "incarcator auto", "stergator parbriz",
+                "covor auto", "covorase auto", "becuri auto",
+                "suport telefon", "stergator",
+                "covor", "becuri", "tergatoare",
             ],
             deductibility=DeductibilityRule.HALF,
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="6028",
         ),
 
-        # ── Alte cheltuieli ──
+        # ── Alte cheltuieli — fallback final ──
         ExpenseCategory(
             code="other_expense",
             label="Alte cheltuieli",
             icon="📦",
-            keywords=[],
+            keywords=[],  # ← gol intentionat: e fallback când nimic nu match-uie
             deductibility=DeductibilityRule.FULL,
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="628",
@@ -210,14 +262,20 @@ class RidesharingActivity(BaseActivity):
 - Atenție: venitul BRUT include card+cash+tips. Comisionul Bolt e cheltuială separată.
 
 ### Cheltuieli (mapează la code):
-- `fuel` (Combustibil auto) — keywords: lukoil, omv, mol, petrom, shell, rompetrol, motorina, benzina
+
+🔴 **IMPORTANT — Detecție specifică**:
+Dacă bonul e de la o benzinărie (Lukoil, OMV, Petrom, MOL, Rompetrol, Shell)
+DAR menționează "ulei", "filtru", "lichid", "antigel" → categoria e `car_service` (NU `fuel`)!
+Doar dacă bonul e CLAR doar pentru combustibil (motorină/benzină) → `fuel`.
+
+- `fuel` (Combustibil auto) — DOAR pentru motorină, benzină, GPL la pompă
+- `car_service` (Service / Consumabile auto) — ulei motor, filtre, anvelope, reparații, ITP, lichid parbriz, AdBlue
 - `platform_commission` (Comision Bolt/Uber) — facturi de la Bolt Operations OU sau Uber B.V.
-- `car_service` (Service auto) — anvelope, ulei, reparații, schimb piese
-- `registration` (Autorizații) — autorizație transport, ecusoane, RAR, atestate
-- `car_insurance` (RCA/CASCO) — Allianz, Groupama, City Insurance
+- `registration` (Autorizații) — autorizație transport, ecusoane, RAR, atestate, ITP
+- `car_insurance` (RCA/CASCO) — Allianz, Groupama, City Insurance, Asirom
 - `car_wash` (Spălătorie) — spălătorie auto, car wash
 - `professional_fees` (Notar/contabil) — onorariu notarial, contabil, avocat
 - `telecom` (Telefon/internet) — Orange, Vodafone, Digi, Telekom
-- `car_supplies` (Accesorii auto) — suporturi telefon, încărcătoare auto
+- `car_supplies` (Accesorii auto) — suport telefon, încărcător auto
 - `other_expense` (Alte cheltuieli) — fallback pentru categorii ne-identificate
 """
