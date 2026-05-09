@@ -24,6 +24,50 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     name = Column(String(200), nullable=True)
 
+    # === Profil firmă (NOI) ===
+    firma_nume = Column(String(255), nullable=True)
+    firma_cui = Column(String(20), nullable=True, index=True)
+    firma_forma_juridica = Column(String(20), nullable=True)
+    # Valori: PFA / II / IF / SRL_MICRO / SRL_NORMAL / PROFESIE_LIBERALA
+
+    # === Regim fiscal (NOI) ===
+    regim_tva = Column(String(20), nullable=True)
+    # Valori: NEPLATITOR / PLATITOR_21 / SPECIAL_INTRACOM
+    regim_impunere = Column(String(20), nullable=True)
+    # Valori: SISTEM_REAL / NORMA_VENIT / MICRO_1 / MICRO_3
+
+    # === Activitate (NOI) ===
+    caen_principal = Column(String(10), nullable=True)
+    activity_code = Column(String(50), nullable=True)
+    # Valori: ridesharing / it_freelance / ecommerce / consulting /
+    #         construction / medical / transport / real_estate / education / generic
+
+    # === Locație (NOI) ===
+    judet = Column(String(50), nullable=True)
+    localitate = Column(String(100), nullable=True)
+
+    # === Stare (NOI) ===
+    data_inceput_activitate = Column(Date, nullable=True)
+    onboarding_completed = Column(Boolean, nullable=False, default=False)
+    onboarding_step = Column(Integer, nullable=False, default=0)
+    # 0 = neînceput
+    # 1 = primul nume colectat
+    # 2 = formă juridică selectată
+    # 3 = denumire firmă completată
+    # 4 = CUI completat și validat
+    # 5 = CAEN selectat
+    # 6 = activitate aleasă
+    # 7 = regim TVA confirmat
+    # 8 = regim impunere confirmat
+    # 9 = județ/localitate
+    # 10 = data început
+    # 99 = COMPLETED
+
+    # === Contact (NOI, opțional) ===
+    email = Column(String(150), nullable=True)
+    telefon = Column(String(30), nullable=True)
+
+    # === Relations (existente) ===
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
@@ -31,7 +75,7 @@ class User(Base):
     fiscal_alerts = relationship("FiscalAlert", back_populates="user")
 
     def __repr__(self):
-        return f"<User id={self.id} telegram_id={self.telegram_id} name={self.name!r}>"
+        return f"<User id={self.id} telegram_id={self.telegram_id} firma={self.firma_nume!r}>"
 
 
 class SourceFile(Base):
@@ -135,35 +179,19 @@ class TaxPeriod(Base):
 
 
 class FiscalAlert(Base):
-    """
-    Alertă fiscală generată de monitorizarea lunară.
-    Stochează ce a găsit AI-ul + sursele citate.
-    """
     __tablename__ = "fiscal_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-
-    # Luna pentru care s-a făcut research-ul
     research_year = Column(Integer, nullable=False, index=True)
     research_month = Column(Integer, nullable=False, index=True)
-
-    # Conținutul alertei
     title = Column(String(300), nullable=False)
-    summary = Column(Text, nullable=False)          # rezumat concis
-    full_response = Column(Text, nullable=True)     # răspunsul complet AI
-    sources_json = Column(JSON, nullable=True)      # lista URL-uri sursă
-
-    # Clasificare
+    summary = Column(Text, nullable=False)
+    full_response = Column(Text, nullable=True)
+    sources_json = Column(JSON, nullable=True)
     urgency = Column(String(20), nullable=False, default="info")
-    # info | warning | critical
-
     has_changes = Column(Boolean, nullable=False, default=False)
-    # True dacă AI-ul a găsit modificări relevante
-
-    # Utilizator a văzut alerta?
     seen = Column(Boolean, nullable=False, default=False)
 
     user = relationship("User", back_populates="fiscal_alerts")
