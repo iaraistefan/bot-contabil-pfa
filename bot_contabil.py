@@ -13,6 +13,7 @@ from app.ai import fiscal_monitor as fiscal_mon
 from app.services import posting
 from app.services import tax_engine
 from app.services import scheduler as sched_service
+from app.services import onboarding
 from app.integrations import sheets
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -25,7 +26,7 @@ import io as _io
 import logging
 import traceback
 from datetime import datetime
-from typing import Optional, List
+from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
@@ -127,12 +128,8 @@ def build_month_picker(action: str, year: int, available_months: List[int] = Non
 def build_registru_type_picker():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "📅 Lunar", callback_data="registru|type|monthly"
-            ),
-            InlineKeyboardButton(
-                "📆 Anual", callback_data="registru|type|annual"
-            ),
+            InlineKeyboardButton("📅 Lunar", callback_data="registru|type|monthly"),
+            InlineKeyboardButton("📆 Anual", callback_data="registru|type|annual"),
         ],
         [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
     ])
@@ -140,45 +137,28 @@ def build_registru_type_picker():
 
 def build_settings_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "🔔 Alerte fiscale", callback_data="settings|alerts"
-        )],
-        [InlineKeyboardButton(
-            "⏰ Trimite reminder manual", callback_data="settings|reminder"
-        )],
-        [InlineKeyboardButton(
-            "📥 Export CSV", callback_data="settings|export"
-        )],
-        [InlineKeyboardButton(
-            "🗑️ Reset (șterge toate datele)", callback_data="settings|reset|ask"
-        )],
+        [InlineKeyboardButton("👤 Vezi profilul meu", callback_data="settings|profil")],
+        [InlineKeyboardButton("🔔 Alerte fiscale", callback_data="settings|alerts")],
+        [InlineKeyboardButton("⏰ Trimite reminder manual", callback_data="settings|reminder")],
+        [InlineKeyboardButton("📥 Export CSV", callback_data="settings|export")],
+        [InlineKeyboardButton("🗑️ Reset (șterge toate datele)", callback_data="settings|reset|ask")],
         [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
     ])
 
 
 def build_alerts_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "🔄 Verifică modificări acum", callback_data="alerts|run"
-        )],
-        [InlineKeyboardButton(
-            "📋 Vezi istoric alerte", callback_data="alerts|history"
-        )],
-        [InlineKeyboardButton(
-            "⬅️ Înapoi", callback_data="settings|menu"
-        )],
+        [InlineKeyboardButton("🔄 Verifică modificări acum", callback_data="alerts|run")],
+        [InlineKeyboardButton("📋 Vezi istoric alerte", callback_data="alerts|history")],
+        [InlineKeyboardButton("⬅️ Înapoi", callback_data="settings|menu")],
     ])
 
 
 def build_reset_confirm():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "✅ DA, șterge tot", callback_data="settings|reset|do"
-            ),
-            InlineKeyboardButton(
-                "❌ Nu, anulează", callback_data="settings|menu"
-            ),
+            InlineKeyboardButton("✅ DA, șterge tot", callback_data="settings|reset|do"),
+            InlineKeyboardButton("❌ Nu, anulează", callback_data="settings|menu"),
         ],
     ])
 
@@ -423,22 +403,33 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 # ============================================================
-#                    /start și /ajutor
+#                    /start, /ajutor, /profil, /reset_profil
 # ============================================================
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /start — verifică status onboarding:
+    - Dacă user e onboarded → afișează meniul principal
+    - Altfel → începe/continuă onboarding-ul
+    """
     ensure_user(update)
-    name = update.effective_user.first_name or "șofer"
-    await update.message.reply_text(
-        f"👋 Bun venit, *{name}*!\n\n"
-        f"Folosește meniul de mai jos pentru navigare rapidă.\n\n"
-        f"📸 *Cum încarci documente:*\n"
-        f"• Trimite poze cu bonuri/facturi → procesate automat\n"
-        f"• Sau text: `bon 05.04.2026 Lukoil 300 lei motorina`\n"
-        f"• Sau text: `venit bolt aprilie: net 1878 lei, cash 1081 lei`",
-        parse_mode="Markdown",
-        reply_markup=build_main_menu(),
-    )
+    tg_id = update.effective_user.id
+
+    if onboarding.user_is_onboarded(tg_id):
+        # Utilizator existent — meniu normal
+        name = update.effective_user.first_name or "șofer"
+        await update.message.reply_text(
+            f"👋 Bun venit înapoi, *{name}*!\n\n"
+            f"Folosește meniul de mai jos pentru navigare rapidă.\n\n"
+            f"📸 *Cum încarci documente:*\n"
+            f"• Trimite poze cu bonuri/facturi → procesate automat\n"
+            f"• Sau text: `bon 05.04.2026 Lukoil 300 lei motorina`",
+            parse_mode="Markdown",
+            reply_markup=build_main_menu(),
+        )
+    else:
+        # Utilizator nou sau în mijloc onboarding — pornim flow-ul
+        await onboarding.start_onboarding(update, context)
 
 
 async def handle_ajutor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -461,11 +452,12 @@ async def send_ajutor(chat_id, context):
         "• 📂 *Registru* — Excel pentru bancă/ANAF\n"
         "• 🖥️ *Dashboard* — interfață vizuală\n"
         "• 📋 *Calendar* — termene fiscale\n"
-        "• ⚙️ *Setări* — alerte, export, reset\n\n"
-        "💬 *Comenzi text suplimentare*\n"
-        "• `/delete <ID>` — șterge un document\n"
-        "• `/start` — reafișează meniul\n\n"
-        "_Toate datele se sortează cronologic după data de pe document._"
+        "• ⚙️ *Setări* — alerte, profil, export, reset\n\n"
+        "💬 *Comenzi text*\n"
+        "• `/start` — meniul principal\n"
+        "• `/profil` — vezi profilul tău\n"
+        "• `/reset_profil` — refă onboarding\n"
+        "• `/delete <ID>` — șterge un document"
     )
     await context.bot.send_message(
         chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -473,50 +465,80 @@ async def send_ajutor(chat_id, context):
     )
 
 
-# ============================================================
-#                    /anafdebug — TEMPORAR pentru testare ANAF
-# ============================================================
+async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/profil — afișează profilul curent al utilizatorului."""
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
 
-async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Comandă temporară pentru testarea integrării ANAF.
-    Va fi ștearsă după Pasul 4 (onboarding interactiv).
-
-    Utilizare: /anafdebug                → testează cu CUI 53067338
-               /anafdebug 12345678       → testează cu un CUI specific
-    """
-    args = context.args or []
-    cui = args[0] if args else "53067338"
-
-    await update.message.reply_text(f"🔄 Caut CUI `{cui}` în ANAF...", parse_mode="Markdown")
-
+    session = get_session()
     try:
-        from app.integrations.anaf_lookup import lookup_cui, format_lookup_result
-        result = lookup_cui(cui)
-        msg = format_lookup_result(result)
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
 
-        if result.get("found"):
-            msg += "\n\n*🔧 Date detaliate (debug):*"
-            msg += f"\n• Formă detectată: `{result.get('forma_juridica_detectata')}`"
-            msg += f"\n• Plătitor TVA: `{result.get('is_platitor_tva')}`"
-            msg += f"\n• Inactiv: `{result.get('is_inactiv')}`"
-            msg += f"\n• Județ: `{result.get('judet')}`"
-            msg += f"\n• Localitate: `{result.get('localitate')}`"
+    forma_label = onboarding.FORME_BY_CODE.get(
+        profile.get("firma_forma_juridica") or "", {}
+    ).get("label", "—")
+    activitate_label = onboarding.ACTIVITIES_BY_CODE.get(
+        profile.get("activity_code") or "", {}
+    ).get("label", "—")
+    regim_tva = profile.get("regim_tva")
+    regim_tva_label = (
+        "Plătitor (21%)" if regim_tva == "PLATITOR_21"
+        else "Neplătitor" if regim_tva == "NEPLATITOR"
+        else "—"
+    )
+    regim_imp_label = onboarding.regim_impunere_label(profile.get("regim_impunere") or "")
+    onb_status = "✅ Completat" if profile.get("onboarding_completed") else "⏳ Incomplet"
 
-        await update.message.reply_text(msg, parse_mode="Markdown")
-    except ImportError as e:
-        await update.message.reply_text(
-            f"❌ Modulul `anaf_lookup` nu există încă.\n"
-            f"Verifică că ai creat fișierul `app/integrations/anaf_lookup.py`.\n\n"
-            f"Eroare: `{e}`",
-            parse_mode="Markdown",
-        )
+    msg = (
+        "*👤 Profilul tău*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 *Nume:* {profile.get('name') or '—'}\n"
+        f"🏢 *Firmă:* {profile.get('firma_nume') or '—'}\n"
+        f"📋 *CUI:* `{profile.get('firma_cui') or '—'}`\n"
+        f"🧾 *Formă juridică:* {forma_label}\n"
+        f"🏷️ *CAEN:* `{profile.get('caen_principal') or '—'}`\n"
+        f"📊 *Activitate:* {activitate_label}\n"
+        f"💰 *Regim TVA:* {regim_tva_label}\n"
+        f"📈 *Regim impunere:* {regim_imp_label}\n"
+        f"📍 *Județ:* {profile.get('judet') or '—'}\n"
+        f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
+        f"*Status onboarding:* {onb_status}\n\n"
+        f"_Pentru editare folosește /reset_profil_"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/reset_profil — relansează onboarding-ul (pentru editare profil)."""
+    ensure_user(update)
+    tg_id = update.effective_user.id
+
+    session = get_session()
+    try:
+        user = users_repo.get_by_telegram_id(session, telegram_id=tg_id)
+        if not user:
+            await update.message.reply_text("⚠️ Utilizator inexistent.")
+            return
+        users_repo.reset_onboarding(session, user)
+        session.commit()
     except Exception as e:
-        logger.error(f"anafdebug error: {e}")
-        await update.message.reply_text(
-            f"❌ Eroare ANAF lookup:\n```\n{str(e)[:500]}\n```",
-            parse_mode="Markdown",
-        )
+        session.rollback()
+        logger.error(f"reset_profil error: {e}")
+        await update.message.reply_text("❌ Eroare la reset profil.")
+        return
+    finally:
+        session.close()
+
+    await update.message.reply_text(
+        "🔄 *Reluăm configurarea profilului...*\n\n"
+        "_Datele existente vor fi suprascrise pe măsură ce completezi din nou._",
+        parse_mode="Markdown",
+    )
+    await onboarding.start_onboarding(update, context)
 
 
 # ============================================================
@@ -543,16 +565,13 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode="Markdown",
             reply_markup=build_year_picker("report", years),
         )
-
     elif text == BTN_REGISTRU:
         await update.message.reply_text(
             "📂 *Registru de Încasări și Plăți*\n"
-            "Excel formatat pentru bancă și ANAF.\n\n"
-            "Alege tipul:",
+            "Excel formatat pentru bancă și ANAF.\n\nAlege tipul:",
             parse_mode="Markdown",
             reply_markup=build_registru_type_picker(),
         )
-
     elif text == BTN_CALENDAR:
         years = [datetime.now().year, datetime.now().year - 1, datetime.now().year + 1]
         years = sorted(set(years), reverse=True)
@@ -561,20 +580,18 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode="Markdown",
             reply_markup=build_year_picker("fiscal", years),
         )
-
     elif text == BTN_SETARI:
         await update.message.reply_text(
             "⚙️ *Setări*",
             parse_mode="Markdown",
             reply_markup=build_settings_menu(),
         )
-
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
 
 
 # ============================================================
-#                    CALLBACK QUERY HANDLER
+#                    CALLBACK QUERY HANDLER (router)
 # ============================================================
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -589,6 +606,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     parts = data.split("|")
     namespace = parts[0]
+
+    # === ONBOARDING ===
+    if namespace == "onb":
+        await onboarding.handle_onboarding_callback(update, context, parts)
+        return
 
     try:
         if namespace == "nav":
@@ -695,6 +717,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     parse_mode="Markdown",
                     reply_markup=build_settings_menu(),
                 )
+            elif parts[1] == "profil":
+                await execute_show_profil(query, context, user_id)
             elif parts[1] == "alerts":
                 await query.edit_message_text(
                     "🔔 *Alerte fiscale*\n\n"
@@ -721,6 +745,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                         "• Toate tranzacțiile\n"
                         "• Toate fișierele sursă\n"
                         "• Toate rapoartele salvate\n\n"
+                        "Profilul firmei NU va fi șters.\n"
                         "Google Sheets NU va fi modificat.",
                         parse_mode="Markdown",
                         reply_markup=build_reset_confirm(),
@@ -760,9 +785,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"Callback handler error data={data}: {e}")
         try:
-            await query.edit_message_text(
-                f"❌ Eroare: {str(e)[:200]}",
-            )
+            await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
         except Exception:
             pass
 
@@ -770,6 +793,45 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 # ============================================================
 #                    EXECUTORS
 # ============================================================
+
+async def execute_show_profil(query, context, user_id):
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+
+    forma_label = onboarding.FORME_BY_CODE.get(
+        profile.get("firma_forma_juridica") or "", {}
+    ).get("label", "—")
+    activitate_label = onboarding.ACTIVITIES_BY_CODE.get(
+        profile.get("activity_code") or "", {}
+    ).get("label", "—")
+    regim_tva = profile.get("regim_tva")
+    regim_tva_label = (
+        "Plătitor (21%)" if regim_tva == "PLATITOR_21"
+        else "Neplătitor" if regim_tva == "NEPLATITOR"
+        else "—"
+    )
+    regim_imp_label = onboarding.regim_impunere_label(profile.get("regim_impunere") or "")
+
+    msg = (
+        "*👤 Profilul tău*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 *Nume:* {profile.get('name') or '—'}\n"
+        f"🏢 *Firmă:* {profile.get('firma_nume') or '—'}\n"
+        f"📋 *CUI:* `{profile.get('firma_cui') or '—'}`\n"
+        f"🧾 *Formă:* {forma_label}\n"
+        f"🏷️ *CAEN:* `{profile.get('caen_principal') or '—'}`\n"
+        f"📊 *Activitate:* {activitate_label}\n"
+        f"💰 *Regim TVA:* {regim_tva_label}\n"
+        f"📈 *Regim impunere:* {regim_imp_label}\n"
+        f"📍 *Județ:* {profile.get('judet') or '—'}\n"
+        f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
+        f"_Pentru editare: /reset_profil_"
+    )
+    await query.edit_message_text(msg, parse_mode="Markdown")
+
 
 async def execute_raport(query, context, user_id, year, month):
     await query.edit_message_text(
@@ -782,8 +844,7 @@ async def execute_raport(query, context, user_id, year, month):
         )
         if totals["tx_count"] == 0:
             await query.edit_message_text(
-                f"📭 Nu am găsit tranzacții pentru "
-                f"{LUNI_LONG[month]} {year}."
+                f"📭 Nu am găsit tranzacții pentru {LUNI_LONG[month]} {year}."
             )
             return
         tp = tax_periods_repo.get_or_create(
@@ -813,6 +874,11 @@ async def execute_registru(query, context, user_id, year, month=None):
 
     session = get_session()
     try:
+        # Folosim numele firmei din profil (sau fallback)
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        pfa_name = profile.get("firma_nume") or "PFA"
+        pfa_cui = profile.get("firma_cui") or ""
+
         from app.models import Transaction as TxModel
         q = session.query(TxModel).filter(
             TxModel.user_id == user_id,
@@ -830,10 +896,7 @@ async def execute_registru(query, context, user_id, year, month=None):
             return
 
         xlsx_bytes = generate_registru_xlsx(
-            txs, year,
-            pfa_name="IARAI STEFAN PERSOANA FIZICA AUTORIZATA",
-            pfa_cui="53067338",
-            month=month,
+            txs, year, pfa_name=pfa_name, pfa_cui=pfa_cui, month=month,
         )
         fname = filename_registru(year, month=month)
 
@@ -849,39 +912,28 @@ async def execute_registru(query, context, user_id, year, month=None):
             ),
             parse_mode="Markdown",
         )
-        await query.edit_message_text(
-            f"✅ Registru generat pentru {period_label}.",
-        )
+        await query.edit_message_text(f"✅ Registru generat pentru {period_label}.")
     except Exception as e:
         session.rollback()
         logger.error(f"execute_registru error: {e}")
-        await query.edit_message_text(
-            "❌ Eroare la generarea registrului.",
-        )
+        await query.edit_message_text("❌ Eroare la generarea registrului.")
     finally:
         session.close()
 
 
 async def execute_export(query, context, user_id, year, month):
     period_label = f"{LUNI_LONG[month]} {year}"
-    await query.edit_message_text(
-        f"🔄 Generez CSV pentru {period_label}...",
-    )
+    await query.edit_message_text(f"🔄 Generez CSV pentru {period_label}...")
 
     session = get_session()
     try:
-        txs = tx_repo.list_for_period(
-            session, user_id=user_id, year=year, month=month
-        )
+        txs = tx_repo.list_for_period(session, user_id=user_id, year=year, month=month)
         if not txs:
             await query.edit_message_text(
                 f"📭 Nu am găsit tranzacții pentru {period_label}."
             )
             return
-
-        totals = tax_engine.compute_period(
-            session, user_id=user_id, year=year, month=month
-        )
+        totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
         csv_tx = csv_export.generate_transactions_csv(txs, year, month)
         csv_rez = csv_export.generate_rezumat_csv(totals)
         fname_tx = csv_export.filename_transactions(year, month)
@@ -898,9 +950,7 @@ async def execute_export(query, context, user_id, year, month):
             caption=f"📋 Rezumat fiscal {period_label}",
         )
         session.commit()
-        await query.edit_message_text(
-            f"✅ Export CSV generat pentru {period_label}.",
-        )
+        await query.edit_message_text(f"✅ Export CSV generat pentru {period_label}.")
     except Exception as e:
         session.rollback()
         logger.error(f"execute_export error: {e}")
@@ -957,9 +1007,7 @@ async def execute_alerts_run(query, context, user_id):
         try:
             from app.models import FiscalAlert
             alert = FiscalAlert(
-                user_id=user_id,
-                research_year=now.year,
-                research_month=now.month,
+                user_id=user_id, research_year=now.year, research_month=now.month,
                 title=result.get("title", "Research manual"),
                 summary=result.get("summary", ""),
                 full_response=result.get("raw_response", "")[:5000],
@@ -985,8 +1033,7 @@ async def execute_alerts_run(query, context, user_id):
         else:
             await query.edit_message_text(
                 "✅ *Monitorizare finalizată*\n\n"
-                "Nu am găsit modificări legislative relevante pentru "
-                "luna curentă.\n\n"
+                "Nu am găsit modificări legislative relevante pentru luna curentă.\n\n"
                 "_Surse: ANAF.ro, Monitorul Oficial, legislatie.just.ro_",
                 parse_mode="Markdown",
             )
@@ -1006,7 +1053,6 @@ async def execute_alerts_history(query, context, user_id):
             .limit(5)
             .all()
         )
-
         if not alerts:
             await query.edit_message_text(
                 "📭 Nu există alerte fiscale înregistrate.\n\n"
@@ -1014,11 +1060,7 @@ async def execute_alerts_history(query, context, user_id):
             )
             return
 
-        urgency_icon = {
-            "critical": "🔴", "warning": "🟡",
-            "info": "🟢", "none": "✅"
-        }
-
+        urgency_icon = {"critical": "🔴", "warning": "🟡", "info": "🟢", "none": "✅"}
         msg = "📋 *Istoric alerte fiscale:*\n\n"
         for a in alerts:
             icon = urgency_icon.get(a.urgency, "ℹ️")
@@ -1027,7 +1069,6 @@ async def execute_alerts_history(query, context, user_id):
             msg += f"{icon} *{period}*{status} — {a.title}\n"
             msg += f"   _{a.summary[:100]}..._\n\n"
             a.seen = True
-
         session.commit()
         await query.edit_message_text(msg, parse_mode="Markdown")
     except Exception as e:
@@ -1104,21 +1145,19 @@ async def execute_reset(query, context, user_id):
             f"• {doc_count} documente eliminate\n"
             f"• {tx_count} tranzacții eliminate\n"
             f"• {sf_count} fișiere sursă eliminate\n\n"
-            f"Poți acum să încarci documentele de la zero.",
+            f"Profilul firmei e păstrat. Poți încărca documente de la zero.",
             parse_mode="Markdown",
         )
     except Exception as e:
         session.rollback()
         logger.error(f"execute_reset error: {e}")
-        await query.edit_message_text(
-            f"❌ Eroare la ștergere: {str(e)[:200]}",
-        )
+        await query.edit_message_text(f"❌ Eroare la ștergere: {str(e)[:200]}")
     finally:
         session.close()
 
 
 # ============================================================
-#                    /delete
+#                    /delete și /anafdebug
 # ============================================================
 
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1150,9 +1189,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"ℹ️ Documentul #{doc_id} este deja anulat.")
             return
         if doc.status == "exported":
-            await update.message.reply_text(
-                f"⚠️ Documentul #{doc_id} a fost deja exportat."
-            )
+            await update.message.reply_text(f"⚠️ Documentul #{doc_id} a fost deja exportat.")
             return
 
         before_snapshot = documents_repo.to_dict(doc)
@@ -1181,6 +1218,31 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 
+async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Test ANAF — îl păstrăm pentru debug. Va fi eliminat ulterior."""
+    args = context.args or []
+    cui = args[0] if args else "53067338"
+    await update.message.reply_text(f"🔄 Caut CUI `{cui}` în ANAF...", parse_mode="Markdown")
+
+    try:
+        from app.integrations.anaf_lookup import lookup_cui, format_lookup_result
+        result = lookup_cui(cui)
+        msg = format_lookup_result(result)
+        if result.get("found"):
+            msg += "\n\n*🔧 Date detaliate (debug):*"
+            msg += f"\n• Formă detectată: `{result.get('forma_juridica_detectata')}`"
+            msg += f"\n• Plătitor TVA: `{result.get('is_platitor_tva')}`"
+            msg += f"\n• Inactiv: `{result.get('is_inactiv')}`"
+            msg += f"\n• Județ: `{result.get('judet')}`"
+            msg += f"\n• Localitate: `{result.get('localitate')}`"
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"anafdebug error: {e}")
+        await update.message.reply_text(
+            f"❌ Eroare ANAF: `{str(e)[:300]}`", parse_mode="Markdown",
+        )
+
+
 # ============================================================
 #                    PROCESARE INTRARI (poză/text)
 # ============================================================
@@ -1194,7 +1256,6 @@ async def process_entry(
         chat_id=update.effective_chat.id,
         text="🔄 Analizez documentul (TVA 21%)..."
     )
-
     extraction = ai_client.extract_document(
         user_input=text_input, image_bytes=image_bytes,
     )
@@ -1300,6 +1361,16 @@ async def process_entry(
 # ============================================================
 
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = update.effective_user.id
+
+    # Dacă user e în mijloc onboarding, nu acceptăm poze
+    if onboarding.user_is_in_onboarding(tg_id):
+        await update.message.reply_text(
+            "⚠️ Te rog termină mai întâi configurarea profilului.\n"
+            "Folosește butoanele de mai sus, sau /start pentru a relua."
+        )
+        return
+
     tg_file = await update.message.photo[-1].get_file()
     file_bytes = bytes(await tg_file.download_as_bytearray())
     caption = update.message.caption
@@ -1333,10 +1404,7 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
-                        text=(
-                            f"⚠️ Imagine deja înregistrată "
-                            f"pe {created_at_str}."
-                        ),
+                        text=f"⚠️ Imagine deja înregistrată pe {created_at_str}.",
                     )
                     return
                 else:
@@ -1353,11 +1421,20 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
+    tg_id = update.effective_user.id
 
+    # 1. Verificăm dacă user e în onboarding și așteaptă text
+    if onboarding.user_is_in_onboarding(tg_id):
+        handled = await onboarding.handle_onboarding_text(update, context)
+        if handled:
+            return
+
+    # 2. Buton meniu principal?
     if text in MAIN_MENU_BUTTONS:
         await handle_menu_button(update, context, text)
         return
 
+    # 3. Altfel — procesăm ca document
     await process_entry(update, context, text_input=text)
 
 
@@ -1372,7 +1449,6 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
 
-    # ── Migrări DB (idempotent) ──
     try:
         run_migrations()
     except Exception as e:
@@ -1396,10 +1472,12 @@ if __name__ == '__main__':
     # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
+    app_bot.add_handler(CommandHandler("profil", handle_profil))
+    app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
 
-    # Callback queries (butoane inline)
+    # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
 
     # Mesaje
@@ -1410,5 +1488,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v6 — UI Interactive ONLINE!")
+    print("🤖 Bot Contabil v7 — Multi-Tenant + Onboarding ONLINE!")
     app_bot.run_polling()
