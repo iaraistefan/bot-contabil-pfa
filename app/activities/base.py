@@ -1,0 +1,221 @@
+"""
+Clasa abstractă pentru activități și tipuri de bază.
+
+Fiecare activitate concretă moștenește BaseActivity și definește:
+  - code, name, caen_codes
+  - expense_categories (lista de ExpenseCategory)
+  - vat_treatments per categorie
+  - deductibility_rules per categorie
+  - hint pentru AI extraction
+"""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Dict, Optional
+
+
+class VATTreatment(str, Enum):
+    """Tratamentul TVA pentru o tranzacție."""
+    NA = "NA"                              # Nu se aplică (PFA neplătitor)
+    STANDARD_21 = "STANDARD_21"            # TVA standard 21% (după 01.08.2025)
+    STANDARD_19 = "STANDARD_19"            # TVA standard 19% (înainte de 01.08.2025)
+    REDUCED_9 = "REDUCED_9"                # TVA redus 9% (alimente, medicamente)
+    REDUCED_5 = "REDUCED_5"                # TVA redus 5% (cărți, locuințe sociale)
+    REVERSE_CHARGE = "REVERSE_CHARGE"      # Taxare inversă (intracom: Bolt, Uber, AWS)
+    EXEMPT_ART_292 = "EXEMPT_ART_292"      # Scutit fără drept de deducere (educație, medical)
+    EXEMPT_ART_294 = "EXEMPT_ART_294"      # Scutit cu drept de deducere (export)
+
+
+class DeductibilityRule(str, Enum):
+    """Cum se aplică deductibilitatea pentru o cheltuială."""
+    FULL = "FULL"              # 100% deductibil
+    HALF = "HALF"              # 50% deductibil (auto mixt, protocol)
+    LIMITED = "LIMITED"        # Plafonat (ex: 4.5 RON/zi diurnă)
+    NON_DEDUCTIBLE = "NON_DEDUCTIBLE"  # Nedeductibil
+    CUSTOM = "CUSTOM"          # Procent custom (definit în percent)
+
+
+@dataclass
+class ExpenseCategory:
+    """
+    O categorie de cheltuială specifică unei activități.
+
+    Ex: pentru Ridesharing — "combustibil_auto", "comision_platforma"
+    Ex: pentru IT — "servicii_cloud", "hardware", "licente_software"
+    """
+    code: str                   # ID intern (ex: "fuel", "platform_commission")
+    label: str                  # Nume afișat user (ex: "Combustibil auto")
+    icon: str = "📌"            # Emoji pentru UI
+    keywords: List[str] = field(default_factory=list)
+    # Cuvinte cheie pentru AI/regex matching (lukoil, omv, mol → fuel)
+
+    # Deductibilitate
+    deductibility: DeductibilityRule = DeductibilityRule.FULL
+    deductibility_percent: int = 100  # Folosit dacă deductibility=CUSTOM
+    deductibility_note: str = ""      # Explicație pentru user
+
+    # TVA
+    default_vat_treatment: VATTreatment = VATTreatment.STANDARD_21
+    vat_note: str = ""
+
+    # Tip tranzacție (pentru clasificare automată)
+    is_income: bool = False  # True = venit, False = cheltuială
+
+    # Cont contabil (pentru export contabil viitor)
+    accounting_code: str = ""   # ex: "6022" pentru combustibil
+
+    def get_effective_deductibility(self) -> int:
+        """Returnează procentul efectiv de deductibilitate (0-100)."""
+        if self.deductibility == DeductibilityRule.FULL:
+            return 100
+        if self.deductibility == DeductibilityRule.HALF:
+            return 50
+        if self.deductibility == DeductibilityRule.NON_DEDUCTIBLE:
+            return 0
+        if self.deductibility == DeductibilityRule.CUSTOM:
+            return max(0, min(100, self.deductibility_percent))
+        if self.deductibility == DeductibilityRule.LIMITED:
+            return 100  # Plafonarea se face în altă parte
+        return 100
+
+
+@dataclass
+class IncomeCategory:
+    """O categorie de venit specifică unei activități."""
+    code: str
+    label: str
+    icon: str = "💰"
+    keywords: List[str] = field(default_factory=list)
+    default_vat_treatment: VATTreatment = VATTreatment.STANDARD_21
+    accounting_code: str = ""   # ex: "704" pentru servicii prestate
+
+
+# ============================================================
+#                    BASE ACTIVITY
+# ============================================================
+
+class BaseActivity:
+    """
+    Clasă de bază pentru toate activitățile.
+
+    Subclasele trebuie să suprascrie:
+      - code (str): identificator intern
+      - name (str): nume afișat
+      - caen_codes (List[str]): coduri CAEN asociate
+      - expense_categories (List[ExpenseCategory])
+      - income_categories (List[IncomeCategory])
+
+    Pot suprascrie opțional:
+      - ai_prompt_hints() pentru a personaliza extracția AI
+      - get_fiscal_obligations() pentru calendar fiscal personalizat
+    """
+
+    # === Atribute ce TREBUIE suprascrise ===
+    code: str = ""
+    name: str = ""
+    caen_codes: List[str] = []
+    description: str = ""
+    icon: str = "📌"
+
+    # === Categorii (suprascrise în subclase) ===
+    expense_categories: List[ExpenseCategory] = []
+    income_categories: List[IncomeCategory] = []
+
+    # ========================================================
+    #                    METHODS
+    # ========================================================
+
+    @classmethod
+    def get_expense_category(cls, code: str) -> Optional[ExpenseCategory]:
+        """Returnează categoria de cheltuieli după cod."""
+        for cat in cls.expense_categories:
+            if cat.code == code:
+                return cat
+        return None
+
+    @classmethod
+    def get_income_category(cls, code: str) -> Optional[IncomeCategory]:
+        """Returnează categoria de venituri după cod."""
+        for cat in cls.income_categories:
+            if cat.code == code:
+                return cat
+        return None
+
+    @classmethod
+    def get_all_expense_codes(cls) -> List[str]:
+        """Listă cu toate codurile de cheltuieli."""
+        return [c.code for c in cls.expense_categories]
+
+    @classmethod
+    def get_all_income_codes(cls) -> List[str]:
+        """Listă cu toate codurile de venituri."""
+        return [c.code for c in cls.income_categories]
+
+    @classmethod
+    def categorize_by_keywords(cls, text: str) -> Optional[ExpenseCategory]:
+        """
+        Încearcă să găsească o categorie de cheltuieli pe baza keywords.
+        Folosit ca fallback când AI-ul nu e sigur.
+        """
+        if not text:
+            return None
+        text_lower = text.lower()
+        # Iterăm și căutăm match
+        for cat in cls.expense_categories:
+            for kw in cat.keywords:
+                if kw.lower() in text_lower:
+                    return cat
+        return None
+
+    @classmethod
+    def get_deductibility_for_category(cls, category_code: str) -> int:
+        """Returnează procentul de deductibilitate pentru o categorie."""
+        cat = cls.get_expense_category(category_code)
+        if cat is None:
+            return 100  # Default: 100%
+        return cat.get_effective_deductibility()
+
+    @classmethod
+    def get_vat_treatment_for_category(cls, category_code: str) -> VATTreatment:
+        """Returnează tratamentul TVA default pentru o categorie."""
+        cat = cls.get_expense_category(category_code)
+        if cat is None:
+            cat = cls.get_income_category(category_code)
+        if cat is None:
+            return VATTreatment.STANDARD_21
+        return cat.default_vat_treatment
+
+    @classmethod
+    def ai_prompt_hints(cls) -> str:
+        """
+        Returnează hint-uri specifice activității pentru promptul AI.
+        Folosit la extracția documentelor.
+
+        Subclase pot suprascrie cu hint-uri specifice:
+          - Pentru Ridesharing: "Combustibil = lukoil/omv/mol/petrom"
+          - Pentru IT: "Servicii cloud = AWS/Google/Microsoft/DigitalOcean"
+        """
+        if not cls.expense_categories:
+            return ""
+
+        lines = [f"\n## Categorii specifice {cls.name}:\n"]
+        for cat in cls.expense_categories:
+            kw_str = ", ".join(cat.keywords[:5]) if cat.keywords else ""
+            line = f"- *{cat.label}* (code: `{cat.code}`)"
+            if kw_str:
+                line += f" — keywords: {kw_str}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    @classmethod
+    def get_summary(cls) -> Dict:
+        """Returnează un sumar al activității (pentru UI/dashboard)."""
+        return {
+            "code": cls.code,
+            "name": cls.name,
+            "icon": cls.icon,
+            "description": cls.description,
+            "caen_codes": cls.caen_codes,
+            "expense_count": len(cls.expense_categories),
+            "income_count": len(cls.income_categories),
+        }
