@@ -2,11 +2,11 @@
 Client pentru API-ul public ANAF — căutare informații firmă după CUI.
 
 API V9: https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva
-Documentație oficială: https://static.anaf.ro/static/10/Anaf/Informatii_R/Servicii_web/doc_WS_V9.txt
+Documentație: https://static.anaf.ro/static/10/Anaf/Informatii_R/Servicii_web/doc_WS_V9.txt
 """
 
-import json
 import logging
+import unicodedata
 from datetime import date
 from typing import Optional, Dict, Any
 
@@ -39,11 +39,42 @@ def _normalize_cui(cui: str) -> str:
     return "".join(c for c in str(cui) if c.isdigit())
 
 
+def _strip_diacritics(text: str) -> str:
+    """
+    Elimină diacriticele românești pentru comparare.
+    'PERSOANĂ FIZICĂ AUTORIZATĂ' -> 'PERSOANA FIZICA AUTORIZATA'
+    """
+    if not text:
+        return ""
+    nfd = unicodedata.normalize("NFD", text)
+    return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+
+
+def _strip_strada_prefix(strada: str) -> str:
+    """
+    Elimină prefixele 'Str.', 'STRADA', 'STR' din numele străzii.
+    'Str. Mesteacănului' -> 'Mesteacănului'
+    'STR Principală'     -> 'Principală'
+    """
+    if not strada:
+        return ""
+    s = strada.strip()
+    s_no_diac = _strip_diacritics(s).upper()
+
+    prefixes = ["STR.", "STR ", "STRADA ", "STR-DA "]
+    for p in prefixes:
+        if s_no_diac.startswith(p):
+            return s[len(p):].strip()
+    return s
+
+
 def _detect_forma_juridica_from_name(denumire: str) -> Optional[str]:
+    """Detectează forma juridică din denumire (cu diacritice ignorate)."""
     if not denumire:
         return None
-    upper = denumire.upper()
-    if "PERSOANA FIZICA AUTORIZATA" in upper or " PFA" in upper:
+    upper = _strip_diacritics(denumire).upper()
+
+    if "PERSOANA FIZICA AUTORIZATA" in upper or " PFA" in upper or upper.endswith(" PFA"):
         return "PFA"
     if "INTREPRINDERE INDIVIDUALA" in upper or " II " in upper:
         return "II"
@@ -62,7 +93,7 @@ def _detect_forma_juridica_from_name(denumire: str) -> Optional[str]:
 
 def _map_forma_juridica(forma_anaf: str, denumire: str) -> Optional[str]:
     if forma_anaf:
-        upper = forma_anaf.strip().upper()
+        upper = _strip_diacritics(forma_anaf).strip().upper()
         if upper in ANAF_FORMA_JURIDICA_MAP:
             return ANAF_FORMA_JURIDICA_MAP[upper]
         for key, val in ANAF_FORMA_JURIDICA_MAP.items():
@@ -96,10 +127,13 @@ def _parse_anaf_response(item: Dict[str, Any]) -> Dict[str, Any]:
         sediu.get("sdenumire_Localitate")
         or domiciliu.get("ddenumire_Localitate") or ""
     ).strip()
-    strada = (
+    strada_raw = (
         sediu.get("sdenumire_Strada")
         or domiciliu.get("ddenumire_Strada") or ""
     ).strip()
+    # Eliminăm prefixul "Str." dacă există în răspunsul ANAF
+    strada = _strip_strada_prefix(strada_raw)
+
     numar = (
         sediu.get("snumar_Strada")
         or domiciliu.get("dnumar_Strada") or ""
@@ -174,8 +208,6 @@ def lookup_cui(cui: str) -> Dict[str, Any]:
                 f"for CUI {cui_normalized}"
             )
             response.raise_for_status()
-            raw_text = response.text
-            logger.info(f"ANAF raw response (first 500 chars): {raw_text[:500]}")
             data = response.json()
     except httpx.TimeoutException:
         logger.warning(f"ANAF timeout for CUI={cui_normalized}")
@@ -187,11 +219,9 @@ def lookup_cui(cui: str) -> Dict[str, Any]:
         logger.error(f"ANAF unexpected error: {e}")
         return {"found": False, "error": f"Eroare API: {str(e)[:100]}"}
 
-    # === Logică tolerantă: prioritate la conținut, nu la cod ===
     found_items = data.get("found", []) or []
     not_found_items = data.get("notFound", []) or data.get("notfound", []) or []
 
-    # Dacă avem item în "found" → succes, indiferent de cod
     if found_items:
         item = found_items[0]
         parsed = _parse_anaf_response(item)
@@ -203,20 +233,15 @@ def lookup_cui(cui: str) -> Dict[str, Any]:
         )
         return parsed
 
-    # Dacă CUI-ul e explicit în "notFound"
     if not_found_items:
         return {
             "found": False,
             "error": f"CUI {cui_normalized} nu există în registrul ANAF",
-            "_raw_response": raw_text[:500],
         }
 
-    # Caz necunoscut: returnăm raw response pentru debug
     return {
         "found": False,
-        "error": "Răspuns ANAF neașteptat",
-        "_raw_response": raw_text[:500],
-        "_keys": list(data.keys()) if isinstance(data, dict) else "not dict",
+        "error": "Răspuns ANAF gol",
     }
 
 
@@ -224,18 +249,7 @@ def format_lookup_result(result: Dict[str, Any]) -> str:
     """Formatează rezultatul ANAF ca mesaj Telegram (Markdown)."""
     if not result.get("found"):
         err = result.get("error", "necunoscut")
-        msg = f"❌ Nu am găsit firma în registrul ANAF.\n_Motiv: {err}_"
-
-        # Dacă avem raw response (pentru debug), îl adăugăm
-        raw = result.get("_raw_response")
-        if raw:
-            msg += f"\n\n*🔧 DEBUG — răspuns brut ANAF:*\n```\n{raw[:300]}\n```"
-
-        keys = result.get("_keys")
-        if keys:
-            msg += f"\n*Chei JSON:* `{keys}`"
-
-        return msg
+        return f"❌ Nu am găsit firma în registrul ANAF.\n_Motiv: {err}_"
 
     lines = [
         f"✅ *Firma găsită în ANAF:*",
