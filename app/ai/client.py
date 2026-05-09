@@ -1,5 +1,9 @@
 """
 Wrapper subțire peste OpenAI pentru extragere documente.
+
+Suportă acum activități plug-in: dacă primește user_id, prompt-ul AI va
+include hint-uri specifice activității utilizatorului (ex: pentru Ridesharing,
+AI-ul știe că "Lukoil" → categoria 'fuel').
 """
 
 import base64
@@ -24,13 +28,47 @@ def _clean_json_response(text: str) -> str:
     return text.replace("```json", "").replace("```", "").strip()
 
 
+def _get_activity_hints(user_id: Optional[int]) -> str:
+    """
+    Returnează hint-urile specifice activității utilizatorului.
+    Dacă user_id e None sau nu are activitate, returnează șir gol.
+
+    Hint-urile sunt apendizate la promptul de extracție pentru a ajuta
+    AI-ul să clasifice corect cheltuielile (ex: Lukoil → fuel pentru Ridesharing).
+    """
+    if user_id is None:
+        return ""
+
+    try:
+        from app.activities import get_activity_for_user
+        activity_cls = get_activity_for_user(user_id)
+        hints = activity_cls.ai_prompt_hints()
+        if hints:
+            logger.debug(
+                f"Loaded AI hints for user_id={user_id} "
+                f"activity={activity_cls.code}"
+            )
+        return hints or ""
+    except Exception as e:
+        logger.warning(f"Could not load activity hints for user_id={user_id}: {e}")
+        return ""
+
+
 def extract_document(
     user_input: Optional[str] = None,
     image_bytes: Optional[bytes] = None,
     today_str: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> dict:
     """
     Rulează extragerea pe text și/sau imagine, apoi validează.
+
+    Args:
+        user_input: textul scris de utilizator
+        image_bytes: bytes-urile imaginii (poză bon/factură)
+        today_str: data de azi (default: now)
+        user_id: ID intern user — dacă e setat, AI-ul primește hint-uri
+                 specifice activității utilizatorului
 
     Returns dict cu:
         - "ok": bool
@@ -42,6 +80,11 @@ def extract_document(
     """
     today_str = today_str or datetime.now().strftime("%d.%m.%Y")
     system_prompt = build_extraction_system_prompt(today_str)
+
+    # === Adăugăm hint-uri specifice activității utilizatorului ===
+    activity_hints = _get_activity_hints(user_id)
+    if activity_hints:
+        system_prompt = f"{system_prompt}\n\n{activity_hints}"
 
     user_content = [
         {"type": "text", "text": user_input if user_input else "Analizeaza imaginea"}
