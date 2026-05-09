@@ -11,7 +11,7 @@ Fiecare activitate concretă moștenește BaseActivity și definește:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 
 class VATTreatment(str, Enum):
@@ -151,21 +151,93 @@ class BaseActivity:
         """Listă cu toate codurile de venituri."""
         return [c.code for c in cls.income_categories]
 
+    # ========================================================
+    #          DETECȚIE SEMANTICĂ (algoritm cu scor)
+    # ========================================================
+
+    @classmethod
+    def _score_keyword_match(cls, keyword: str, text: str) -> int:
+        """
+        Calculează scorul unui keyword pentru un text.
+
+        Reguli:
+        - Keyword nu apare în text → 0
+        - Keyword cu spații (compus, ex: "ulei motor", "schimb ulei") → scor mare (10 + lungime)
+        - Keyword simplu (ex: "lukoil", "ulei") → scor mediu (lungime caracterelor)
+        - Match pe cuvânt întreg (delimitat de spații/punctuație) → bonus +5
+
+        Asta înseamnă:
+        - "ulei motor" în "Lukoil ulei motor 5W30" → scor mare (12)
+        - "lukoil" în același text → scor mai mic (6)
+        - Câștigă "ulei motor" → categoria car_service ✅
+        """
+        kw_lower = keyword.lower().strip()
+        text_lower = text.lower()
+
+        if not kw_lower or kw_lower not in text_lower:
+            return 0
+
+        # Score de bază = lungimea keyword-ului
+        score = len(kw_lower)
+
+        # BONUS 1: keyword compus (cu spațiu) — mult mai specific
+        if " " in kw_lower:
+            score += 10
+
+        # BONUS 2: match pe cuvânt întreg
+        # Verificăm că nu e o substring accidentală (ex: "ulei" în "uleios")
+        idx = text_lower.find(kw_lower)
+        before_ok = (idx == 0) or not text_lower[idx - 1].isalnum()
+        end_idx = idx + len(kw_lower)
+        after_ok = (end_idx >= len(text_lower)) or not text_lower[end_idx].isalnum()
+        if before_ok and after_ok:
+            score += 5
+
+        return score
+
+    @classmethod
+    def detect_expense_category(
+        cls, platforma: Optional[str], detalii: Optional[str]
+    ) -> Tuple[Optional[ExpenseCategory], int]:
+        """
+        Detectează categoria de cheltuieli pe baza textului furnizor + detalii.
+
+        Algoritm:
+        1. Pentru fiecare categorie, calculează scorul cumulat al keyword-urilor match-uite
+        2. Câștigă categoria cu cel mai mare scor
+        3. Returnează (categorie, scor_total) sau (None, 0) dacă niciun match
+
+        Exemplu: bon "Lukoil - ulei auto 52.99 lei"
+        - fuel: "lukoil"=6 → total 6 (sau 11 cu word-bound bonus)
+        - car_service: "ulei"=4 + "ulei auto"=14 → total 18+ → CÂȘTIGĂ ✅
+        """
+        text = f"{platforma or ''} {detalii or ''}".strip()
+        if not text:
+            return None, 0
+
+        best_cat = None
+        best_score = 0
+
+        for cat in cls.expense_categories:
+            if not cat.keywords:
+                continue
+            cat_score = 0
+            for kw in cat.keywords:
+                cat_score += cls._score_keyword_match(kw, text)
+            if cat_score > best_score:
+                best_score = cat_score
+                best_cat = cat
+
+        return best_cat, best_score
+
     @classmethod
     def categorize_by_keywords(cls, text: str) -> Optional[ExpenseCategory]:
         """
-        Încearcă să găsească o categorie de cheltuieli pe baza keywords.
-        Folosit ca fallback când AI-ul nu e sigur.
+        DEPRECATED — folosit pentru compatibilitate.
+        Folosește detect_expense_category() pentru detecție corectă.
         """
-        if not text:
-            return None
-        text_lower = text.lower()
-        # Iterăm și căutăm match
-        for cat in cls.expense_categories:
-            for kw in cat.keywords:
-                if kw.lower() in text_lower:
-                    return cat
-        return None
+        cat, _ = cls.detect_expense_category(None, text)
+        return cat
 
     @classmethod
     def get_deductibility_for_category(cls, category_code: str) -> int:
@@ -174,6 +246,11 @@ class BaseActivity:
         if cat is None:
             return 100  # Default: 100%
         return cat.get_effective_deductibility()
+
+    # Alias-uri pentru compatibilitate
+    @classmethod
+    def get_deductibility_pct(cls, category_code: str) -> int:
+        return cls.get_deductibility_for_category(category_code)
 
     @classmethod
     def get_vat_treatment_for_category(cls, category_code: str) -> VATTreatment:
