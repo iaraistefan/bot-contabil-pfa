@@ -55,9 +55,6 @@ class RidesharingActivity(BaseActivity):
     # ============================================================
     expense_categories = [
         # ── Combustibil — DEDUCTIBIL 50% (auto mixt) ──
-        # IMPORTANT: keywords pure pentru combustibil — fără brand-uri
-        # Brand-urile (Lukoil, OMV, etc.) merg ca keyword secundar SLAB,
-        # ca să poată fi depășite de "ulei motor" care e mai specific.
         ExpenseCategory(
             code="fuel",
             label="Combustibil auto",
@@ -100,8 +97,6 @@ class RidesharingActivity(BaseActivity):
         ),
 
         # ── Service auto / consumabile — DEDUCTIBIL 50% ──
-        # IMPORTANT: keyword-urile compuse au scor mare → învingg "lukoil"
-        # când bonul conține "ulei motor", "schimb ulei", etc.
         ExpenseCategory(
             code="car_service",
             label="Service / Consumabile auto",
@@ -253,21 +248,28 @@ class RidesharingActivity(BaseActivity):
 
     @classmethod
     def ai_prompt_hints(cls) -> str:
-        """Hint-uri specifice ridesharing pentru promptul AI."""
+        """
+        Hint-uri specifice ridesharing pentru promptul AI.
+
+        Acest text e apendizat la system prompt-ul generic. Conține:
+        - Categorii și keywords specifice Ridesharing
+        - Regula importantă: Lukoil + ulei → car_service (NU fuel)
+        - Exemple concrete cu rapoarte Bolt/Uber și facturi de comision
+        """
         return """
-## Categorii specifice Ridesharing (Bolt/Uber):
 
-### Venituri:
-- **Curse** — screenshot raport Bolt/Uber: cash + card brut, comisionul platformei
-- Atenție: venitul BRUT include card+cash+tips. Comisionul Bolt e cheltuială separată.
+═══════════════════════════════════════════════════════════
+ACTIVITATE: 🚗 RIDESHARING (Bolt / Uber)
+═══════════════════════════════════════════════════════════
 
-### Cheltuieli (mapează la code):
+CATEGORII SPECIFICE (mapează la code):
 
-🔴 **IMPORTANT — Detecție specifică**:
+🔴 IMPORTANT — Detecție specifică:
 Dacă bonul e de la o benzinărie (Lukoil, OMV, Petrom, MOL, Rompetrol, Shell)
 DAR menționează "ulei", "filtru", "lichid", "antigel" → categoria e `car_service` (NU `fuel`)!
 Doar dacă bonul e CLAR doar pentru combustibil (motorină/benzină) → `fuel`.
 
+CHELTUIELI:
 - `fuel` (Combustibil auto) — DOAR pentru motorină, benzină, GPL la pompă
 - `car_service` (Service / Consumabile auto) — ulei motor, filtre, anvelope, reparații, ITP, lichid parbriz, AdBlue
 - `platform_commission` (Comision Bolt/Uber) — facturi de la Bolt Operations OU sau Uber B.V.
@@ -278,4 +280,38 @@ Doar dacă bonul e CLAR doar pentru combustibil (motorină/benzină) → `fuel`.
 - `telecom` (Telefon/internet) — Orange, Vodafone, Digi, Telekom
 - `car_supplies` (Accesorii auto) — suport telefon, încărcător auto
 - `other_expense` (Alte cheltuieli) — fallback pentru categorii ne-identificate
+
+VENITURI:
+- Curse — screenshot raport Bolt/Uber: cash + card brut, comisionul platformei
+- Atenție: venitul BRUT include card+cash+tips. Comisionul Bolt e cheltuială separată.
+
+EXEMPLE CONCRETE:
+
+Input: "am dat 50 lei bacsis cash azi"
+Output:
+[{"data":"<azi>","platforma":null,"tip":"VENIT","brut":50,"comision":0,"tva":0,"net":50,"cash":50,"detalii":"Bacsis cash"}]
+
+Input: "cheltuiala 15.03.2026 service auto 800 lei"
+Output:
+[{"data":"15.03.2026","platforma":null,"tip":"CHELTUIALA","brut":800,"comision":0,"tva":0,"net":800,"cash":0,"detalii":"Service auto"}]
+
+Input: "bon 05.02.2026 Lukoil motorina 450 lei"
+Output:
+[{"data":"05.02.2026","platforma":"Lukoil","tip":"CHELTUIALA","brut":450,"comision":0,"tva":0,"net":450,"cash":450,"detalii":"Combustibil Lukoil"}]
+
+Input: "bon 05.04.2026 Lukoil ulei motor 200 lei"
+Output:
+[{"data":"05.04.2026","platforma":"Lukoil","tip":"CHELTUIALA","brut":200,"comision":0,"tva":0,"net":200,"cash":0,"detalii":"Lukoil - ulei motor"}]
+
+Input: (screenshot Bolt cu titlu "februarie", Castiguri 1147 lei, Numerar 717.80 lei, Comision -378 lei)
+Output:
+[{"data":"28.02.2026","platforma":"Bolt","tip":"VENIT","brut":1525,"comision":378,"tva":0,"net":1147,"cash":717.80,"detalii":"Venituri Bolt februarie 2026"}]
+
+Input: (screenshot Bolt cu titlu "decembrie", Castiguri 2909.29 lei, Numerar 1826.20 lei, Comision -939.28 lei)
+Output:
+[{"data":"31.12.2025","platforma":"Bolt","tip":"VENIT","brut":3848.57,"comision":939.28,"tva":0,"net":2909.29,"cash":1826.20,"detalii":"Venituri Bolt decembrie 2025"}]
+
+Input: (factura Bolt pentru 346.81 RON, data 31.12.2025)
+Output:
+[{"data":"31.12.2025","platforma":"Bolt","tip":"FACTURA_COMISION","brut":346.81,"comision":346.81,"tva":72.83,"net":346.81,"cash":0,"detalii":"Comision Bolt decembrie 2025"}]
 """
