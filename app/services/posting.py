@@ -3,8 +3,7 @@ Serviciu de posting: transformă un Document validat în tranzacții contabile.
 
 ACTIVITY-AWARE (din Pas 7.3):
 - Categoria + deductibilitatea NU mai sunt hardcoded
-- Detectarea se face din keyword-urile activității user-ului (ex: ridesharing,
-  it_freelance, generic)
+- Detectarea folosește scoring semantic (BaseActivity.detect_expense_category)
 - Deductibilitatea vine din BaseActivity.get_deductibility_pct(code)
 
 PRINCIPIU FISCAL CORECT (PFA Ridesharing 2026):
@@ -15,7 +14,7 @@ VENIT (din raport Bolt/Uber):
   → 1x EXPENSE platform_commission (dacă comision > 0; deductibil 100%)
 
 CHELTUIALA:
-  → 1x EXPENSE pe categoria detectată din activitate, cu pct deductibilitate
+  → 1x EXPENSE pe categoria detectată cu scoring semantic, cu pct deductibilitate
     automat din BaseActivity.
 
 FACTURA_COMISION (Bolt/Uber intracomunitare):
@@ -69,24 +68,24 @@ def _detect_expense_category(
     detalii: Optional[str],
 ) -> Optional[str]:
     """
-    Detectează codul de categorie din keyword-urile activității user-ului.
-    Returnează codul (ex: 'fuel', 'cloud_services') sau None dacă nu match.
-    Prima categorie care match-uie un keyword câștigă.
-    """
-    text = f"{platforma or ''} {detalii or ''}".lower().strip()
-    if not text:
-        return None
+    Detectează codul de categorie folosind algoritmul semantic cu scor.
 
-    for cat in activity.expense_categories:
-        if not cat.keywords:
-            continue
-        if any(kw.lower() in text for kw in cat.keywords):
-            logger.debug(
-                f"Matched category '{cat.code}' "
-                f"(activity={activity.code}) for text='{text[:60]}...'"
-            )
-            return cat.code
-    return None
+    Folosește BaseActivity.detect_expense_category() care:
+    - Calculează scor pe keyword-uri (cele compuse câștigă peste cele simple)
+    - Câștigă categoria cu cel mai mare scor cumulat
+
+    Exemplu: "Lukoil ulei motor 52.99"
+    - fuel (lukoil=11) → 11
+    - car_service (ulei=4 + ulei motor=15 = 19) → CÂȘTIGĂ ✅
+    """
+    cat, score = activity.detect_expense_category(platforma, detalii)
+    if cat is None:
+        return None
+    logger.info(
+        f"Detected category '{cat.code}' (score={score}, "
+        f"activity={activity.code}) for text='{platforma} {detalii}'"
+    )
+    return cat.code
 
 
 def _pick_income_category(activity: Type[BaseActivity]) -> str:
@@ -149,7 +148,7 @@ def post_document(
     period_month = occurred_on.month if occurred_on else None
     tx_ids: List[int] = []
 
-    # ⭐ NOU: încărcăm activitatea user-ului o singură dată
+    # Încărcăm activitatea user-ului o singură dată
     activity = _get_user_activity(session, user_id)
     logger.info(
         f"post_document: doc_id={document_id} user_id={user_id} "
@@ -286,7 +285,6 @@ def _post_venit(
 
     # ── 3. EXPENSE comisionul Bolt din raport (deductibil 100%) ──
     if comision > 0:
-        # Folosim pct din activitate dacă există categoria, altfel 100%
         comm_pct = activity.get_deductibility_pct(CAT_PLATFORM_COMMISSION) or 100
         tx_comm = tx_repo.create(
             session,
@@ -317,7 +315,7 @@ def _post_venit(
 
 
 # ============================================================
-#                     CHELTUIALA  ⭐ ACTIVITY-AWARE
+#                  CHELTUIALA  ⭐ ACTIVITY-AWARE + SEMANTIC SCORING
 # ============================================================
 
 def _post_cheltuiala(
@@ -326,9 +324,9 @@ def _post_cheltuiala(
 ) -> List[int]:
     """
     CHELTUIALA → 1x EXPENSE.
-    Categoria + deductibilitatea vin AUTOMAT din activitatea user-ului.
+    Categoria + deductibilitatea vin AUTOMAT din scoring-ul semantic.
     """
-    # ⭐ DETECT din keyword-urile activității
+    # ⭐ DETECT cu scoring semantic
     category_code = _detect_expense_category(activity, platforma, detalii)
 
     if category_code is None:
