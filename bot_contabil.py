@@ -86,7 +86,6 @@ def build_main_menu():
 
 
 def build_year_picker(action: str, years: List[int]):
-    """Inline keyboard cu anii."""
     if not years:
         years = [datetime.now().year]
     rows = []
@@ -103,7 +102,6 @@ def build_year_picker(action: str, years: List[int]):
 
 
 def build_month_picker(action: str, year: int, available_months: List[int] = None):
-    """Inline keyboard cu lunile (opțional doar cele disponibile)."""
     rows = []
     for i in range(0, 12, 3):
         row = []
@@ -225,7 +223,6 @@ def ensure_user(update: Update):
 
 
 def get_available_years(user_id: int) -> List[int]:
-    """Returnează anii cu tranzacții pentru user."""
     session = get_session()
     try:
         from app.models import Transaction
@@ -250,7 +247,6 @@ def get_available_years(user_id: int) -> List[int]:
 
 
 def get_available_months(user_id: int, year: int) -> List[int]:
-    """Returnează lunile cu tranzacții pentru user/an."""
     session = get_session()
     try:
         from app.models import Transaction
@@ -447,7 +443,6 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_ajutor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/ajutor (comandă) — afișează help-ul"""
     await send_ajutor(update.effective_chat.id, context)
 
 
@@ -484,7 +479,6 @@ async def send_ajutor(chat_id, context):
 # ============================================================
 
 async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
-    """Procesează apăsarea unui buton din meniul principal."""
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Eroare identificare utilizator.")
@@ -539,7 +533,6 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # ============================================================
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Procesează apăsările pe butoane Inline."""
     query = update.callback_query
     await query.answer()
 
@@ -553,7 +546,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     namespace = parts[0]
 
     try:
-        # ── Navigare ──
         if namespace == "nav":
             if parts[1] == "close":
                 await query.edit_message_text("✅ Meniu închis.")
@@ -561,7 +553,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 pass
             return
 
-        # ── RAPORT ──
         if namespace == "report":
             if parts[1] == "year":
                 year = int(parts[2])
@@ -584,7 +575,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
-        # ── REGISTRU ──
         if namespace == "registru":
             if parts[1] == "type":
                 kind = parts[2]
@@ -631,7 +621,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
-        # ── FISCAL CALENDAR ──
         if namespace == "fiscal":
             if parts[1] == "year":
                 year = int(parts[2])
@@ -654,7 +643,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
-        # ── SETĂRI ──
         if namespace == "settings":
             if parts[1] == "menu":
                 await query.edit_message_text(
@@ -696,7 +684,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     await execute_reset(query, context, user_id)
             return
 
-        # ── ALERTS ──
         if namespace == "alerts":
             if parts[1] == "run":
                 await execute_alerts_run(query, context, user_id)
@@ -704,7 +691,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await execute_alerts_history(query, context, user_id)
             return
 
-        # ── EXPORT CSV ──
         if namespace == "export":
             if parts[1] == "year":
                 year = int(parts[2])
@@ -737,7 +723,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 # ============================================================
-#                    EXECUTORS (logica reală)
+#                    EXECUTORS
 # ============================================================
 
 async def execute_raport(query, context, user_id, year, month):
@@ -1087,7 +1073,7 @@ async def execute_reset(query, context, user_id):
 
 
 # ============================================================
-#                    /delete (rămâne comandă)
+#                    /delete
 # ============================================================
 
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1323,12 +1309,10 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
 
-    # Detectăm dacă e buton meniu
     if text in MAIN_MENU_BUTTONS:
         await handle_menu_button(update, context, text)
         return
 
-    # Altfel, procesăm ca document
     await process_entry(update, context, text_input=text)
 
 
@@ -1343,11 +1327,30 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
 
-    # ── Migrări DB (idempotent — rulează doar ce nu a fost aplicat) ──
+    # ── Migrări DB (idempotent) ──
     try:
         run_migrations()
     except Exception as e:
         logger.error(f"❌ Migrations FAILED: {e}")
+
+    # ── TEMPORAR: Test ANAF lookup la pornire ──
+    # ── ȘTERGE ACEST BLOC DUPĂ CONFIRMAREA CĂ MERGE ──
+    try:
+        from app.integrations.anaf_lookup import lookup_cui
+        logger.info("🧪 Test ANAF lookup pentru CUI 53067338...")
+        test_result = lookup_cui("53067338")
+        if test_result.get("found"):
+            logger.info(f"🧪 ANAF OK: {test_result.get('denumire')}")
+            logger.info(f"   📋 CUI: {test_result.get('cui')}")
+            logger.info(f"   🧾 Formă: {test_result.get('forma_juridica_detectata')}")
+            logger.info(f"   💰 TVA: {test_result.get('regim_tva')}")
+            logger.info(f"   📍 Adresă: {test_result.get('adresa_completa')}")
+            logger.info(f"   ⚠️  Inactiv: {test_result.get('is_inactiv')}")
+        else:
+            logger.warning(f"🧪 ANAF NOT FOUND: {test_result.get('error')}")
+    except Exception as e:
+        logger.error(f"🧪 ANAF test FAILED: {e}")
+    # ── SFÂRȘIT BLOC TEMPORAR ──
 
     try:
         storage.ensure_storage_dir()
