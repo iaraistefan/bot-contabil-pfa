@@ -39,8 +39,6 @@ class User(Base):
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)
     activity_code = Column(String(50), nullable=True)
-    # Valori: ridesharing / it_freelance / ecommerce / consulting /
-    #         construction / medical / transport / real_estate / education / generic
 
     # === Locație ===
     judet = Column(String(50), nullable=True)
@@ -50,20 +48,8 @@ class User(Base):
     data_inceput_activitate = Column(Date, nullable=True)
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     onboarding_step = Column(Integer, nullable=False, default=0)
-    # 0 = neînceput
-    # 1 = primul nume colectat
-    # 2 = formă juridică selectată
-    # 3 = denumire firmă completată
-    # 4 = CUI completat și validat
-    # 5 = CAEN selectat
-    # 6 = activitate aleasă
-    # 7 = regim TVA confirmat
-    # 8 = regim impunere confirmat
-    # 9 = județ/localitate
-    # 10 = data început
-    # 99 = COMPLETED
 
-    # === Contact (opțional) ===
+    # === Contact ===
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
@@ -103,7 +89,6 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    # ⭐ FIX BUG #4: user_id NOT NULL pentru integritate multi-tenant
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     source_file_id = Column(Integer, ForeignKey("source_files.id"), nullable=True, index=True)
     data_doc = Column(String(20), index=True)
@@ -121,6 +106,11 @@ class Document(Base):
     confidence = Column(Float, default=1.0)
     status = Column(String(20), nullable=False, default="posted", index=True)
     prompt_version = Column(String(50), nullable=True)
+
+    # === VAT_ID al furnizorului (Pas 8.2) ===
+    # Format: prefix țară (2 litere) + cifre. Ex: "EE102094445", "RO12345678"
+    # Nullable: nu apare pe bonuri fiscale RO simple, dar pe facturi UE/comerciale da
+    vat_id = Column(String(20), nullable=True, index=True)
 
     user = relationship("User", back_populates="documents")
     source_file = relationship("SourceFile", back_populates="documents")
