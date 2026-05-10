@@ -1,25 +1,34 @@
 """
 Tax engine — agregare din transactions pentru rapoarte fiscale.
 
-ACTIVITY-AWARE: folosește activitatea user-ului pentru:
+ACTIVITY-AWARE + PROFILE-AWARE (Pas 8.4a):
   - Etichete/icon-uri categorii (din BaseActivity)
   - Reguli de deductibilitate per categorie (din tx.deductibility_pct)
+  - Calcul fiscal corect per FORMĂ JURIDICĂ (PFA/SRL/Micro/Normal)
+  - Estimare CAS/CASS pentru PFA (cu plafoane 2026)
+  - Mesaj de raport DINAMIC adaptat profilului fiscal
 
-PRINCIPII CONTABILE (PFA sistem real, OMFP 170/2015):
+PRINCIPII CONTABILE:
 - Venitul = BRUT (cifra de afaceri reală)
 - Cheltuielile au deductibilitate per-categorie (stocată în tx.deductibility_pct)
 - Profit fiscal = Venit brut − Σ(amount_brut × deductibility_pct / 100)
+- Impozit calculat conform FiscalProfile (10%/16%/1%/3% pe baza corectă)
+- CAS/CASS calculate doar pentru PFA, cu plafoane anualizate
 """
 
 import logging
 from collections import defaultdict
-from typing import Dict, Any, List, Type
+from typing import Dict, Any, List, Type, Optional
 
 from sqlalchemy.orm import Session
 
 from app.models import Transaction, User
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
+
+# === NEW (Pas 8.4a) — Rule Engine fiscal ===
+from app.domain.fiscal_profile import FiscalProfile, FormaJuridica, TaxBase
+from app.domain.tax_calculator import compute_full_estimate, TaxEstimate
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +56,7 @@ def compute_period(
 ) -> Dict[str, Any]:
     """
     Calculează totalurile fiscale pentru o perioadă.
-    Folosește activitatea user-ului pentru deductibilitate și labels.
+    Folosește activitatea + profilul fiscal al user-ului.
     """
     activity = _get_user_activity(session, user_id)
 
@@ -83,7 +92,7 @@ def compute_period(
                 income_bank += tx.amount_brut
 
         elif tx.tx_type == "EXPENSE":
-            # ⭐ CHEIA: folosim pct stocat în DB (din regula activității la momentul salvării)
+            # ⭐ folosim pct stocat în DB (din regula activității la momentul salvării)
             pct = tx.deductibility_pct if tx.deductibility_pct is not None else 100
             deductible = round(tx.amount_brut * pct / 100.0, 2)
 
@@ -131,6 +140,26 @@ def compute_period(
     vat_net = round(vat_out - vat_in, 2)
     profit_estimated = round(income_total - expense_deductible_total, 2)
 
+    # ════════════════════════════════════════════════════════
+    # === NEW (Pas 8.4a) — Estimare fiscală inteligentă ===
+    # ════════════════════════════════════════════════════════
+    fiscal_estimate: Optional[TaxEstimate] = None
+    try:
+        profile = FiscalProfile.from_user_id(session, user_id)
+        fiscal_estimate = compute_full_estimate(
+            profile=profile,
+            totals={
+                "income_brut": income_total,
+                "expenses_deductible": expense_deductible_total,
+            },
+            period_label=f"{LUNI_RO.get(month, str(month))} {year}",
+            # CAS/CASS sunt anuale → multiplicăm lunar × 12 pentru estimare anuală
+            annualize_factor=12.0,
+        )
+    except Exception as e:
+        logger.warning(f"Could not compute fiscal estimate for user {user_id}: {e}")
+        fiscal_estimate = None
+
     return {
         "year": year,
         "month": month,
@@ -155,7 +184,80 @@ def compute_period(
         # ── Final ──
         "profit_estimated": profit_estimated,
         "tx_count": len(txs),
+        # ── NEW: Estimare fiscală pe profil ──
+        "fiscal_estimate": fiscal_estimate.to_dict() if fiscal_estimate else None,
     }
+
+
+def _format_fiscal_estimate_section(totals: Dict[str, Any]) -> List[str]:
+    """
+    Formatează secțiunea de estimare fiscală adaptată formei juridice.
+    Returnează listă de linii (sau goală dacă nu există estimare).
+    """
+    fe = totals.get("fiscal_estimate")
+    if not fe:
+        return []
+
+    lines = []
+    income_tax = fe.get("income_tax", {})
+    cas = fe.get("cas", {})
+    cass = fe.get("cass", {})
+    base_method = income_tax.get("base_method", "")
+    rate = income_tax.get("rate_pct", 0)
+    tax_amount = income_tax.get("amount", 0)
+    tax_base = income_tax.get("base", 0)
+
+    # ── Header pe formă juridică ──
+    profile = fe.get("profile_summary") or {}
+    forma = profile.get("forma_juridica", "PFA")
+
+    # ── Impozit ──
+    if base_method == "venit_net":
+        # PFA Sistem Real
+        if tax_base > 0:
+            lines.append(
+                f"  💰 Impozit ({rate}% × venit net): "
+                f"`{tax_amount:.2f} RON`"
+            )
+        else:
+            lines.append(
+                f"  💰 Impozit: `0 RON` _(fără venit net pozitiv)_"
+            )
+    elif base_method == "norma":
+        # PFA Normă
+        lines.append(
+            f"  💰 Impozit ({rate}% × normă anuală): "
+            f"`{tax_amount:.2f} RON`"
+        )
+    elif base_method == "profit":
+        # SRL Normal
+        lines.append(
+            f"  💰 Impozit profit ({rate}% × profit): "
+            f"`{tax_amount:.2f} RON`"
+        )
+    elif base_method == "cifra_afaceri":
+        # SRL Micro
+        lines.append(
+            f"  💰 Impozit micro ({rate}% × cifra afaceri): "
+            f"`{tax_amount:.2f} RON`"
+        )
+
+    # ── CAS / CASS (doar pentru PFA-uri) ──
+    if cas.get("applicable"):
+        lines.append(
+            f"  🏥 CAS ({cas['rate_pct']}%): `{cas['amount']:.2f} RON` _anual_"
+        )
+    if cass.get("applicable"):
+        lines.append(
+            f"  ⚕️ CASS ({cass['rate_pct']}%): `{cass['amount']:.2f} RON` _anual_"
+        )
+
+    # ── Avertismente plafoane ──
+    warnings = fe.get("warnings", [])
+    for w in warnings:
+        lines.append(f"  ⚠️ {w}")
+
+    return lines
 
 
 def format_report_message(totals: Dict[str, Any]) -> str:
@@ -223,11 +325,24 @@ def format_report_message(totals: Dict[str, Any]) -> str:
             "",
         ]
 
-    # ── FINAL ──
+    # ── PROFIT / BAZĂ FISCALĂ ──
     lines += [
         "━━━━━━━━━━━━━━━━━━━━",
         f"📈 *Profit estimat: {t['profit_estimated']:.2f} RON*",
         f"  _(venit brut − cheltuieli deductibile)_",
+    ]
+
+    # ════════════════════════════════════════════════════════
+    # === NEW (Pas 8.4a) — Secțiune fiscală pe profil ===
+    # ════════════════════════════════════════════════════════
+    fiscal_lines = _format_fiscal_estimate_section(t)
+    if fiscal_lines:
+        lines.append("")
+        lines.append("🧾 *ESTIMARE FISCALĂ*")
+        lines.extend(fiscal_lines)
+
+    # ── FOOTER ──
+    lines += [
         "",
         f"_📋 {t['tx_count']} tranzacții procesate_",
         f"_⚠️ Estimat — verificați cu contabilul._",
