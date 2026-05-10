@@ -6,6 +6,12 @@ ACTIVITY-AWARE (din Pas 7.3):
 - Detectarea folosește scoring semantic (BaseActivity.detect_expense_category)
 - Deductibilitatea vine din BaseActivity.get_deductibility_pct(code)
 
+VAT-ENGINE-AWARE (Pas 8.4b):
+- Cheltuielile primesc tratament TVA inteligent prin vat_engine.analyze()
+- FACTURA_COMISION → detectare automată RO/UE/non-UE (nu mai e hardcodat reverse charge)
+- vat_id detectat se salvează în Document pentru audit
+- Logică SOFT: dacă vat_engine returnează confidence < 65, folosim logica veche
+
 PRINCIPIU FISCAL CORECT (PFA Ridesharing 2026):
 
 VENIT (din raport Bolt/Uber):
@@ -15,11 +21,11 @@ VENIT (din raport Bolt/Uber):
 
 CHELTUIALA:
   → 1x EXPENSE pe categoria detectată cu scoring semantic, cu pct deductibilitate
-    automat din BaseActivity.
+    automat din BaseActivity. vat_treatment determinat de vat_engine.
 
-FACTURA_COMISION (Bolt/Uber intracomunitare):
-  → 1x VAT_OUT reverse charge
-  → 1x VAT_IN  reverse charge
+FACTURA_COMISION (Bolt/Uber/AWS/Etsy intracomunitare/import):
+  → 1x VAT_OUT cu treatment determinat de vat_engine (REVERSE_CHARGE / IMPORT_NON_EU)
+  → 1x VAT_IN  oglindă
 
 NOTE: Funcțiile nu fac commit — sesiunea e la apelant.
 """
@@ -35,7 +41,15 @@ from app.repositories import audit as audit_repo
 from app.domain import tax_rules
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
-from app.models import User
+from app.models import User, Document
+
+# === NEW (Pas 8.4b) — VAT Engine ===
+from app.domain.vat_engine import (
+    analyze as vat_analyze,
+    VATDecision,
+    VATTreatment,
+    CountryGroup,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +63,9 @@ CAT_OTHER_EXPENSE = "other_expense"
 INCOME_FALLBACK_CODE = "ride_revenue"  # pentru ridesharing
 INCOME_GENERIC_FALLBACK = "service_revenue"
 
+# Confidence threshold pentru a accepta decizia vat_engine
+VAT_ENGINE_MIN_CONFIDENCE = 65
+
 
 # ============================================================
 #                    HELPER-I ACTIVITY-AWARE
@@ -60,6 +77,14 @@ def _get_user_activity(session: Session, user_id: int) -> Type[BaseActivity]:
     if not user or not user.activity_code:
         return get_activity(None)
     return get_activity(user.activity_code)
+
+
+def _is_user_vat_payer(session: Session, user_id: int) -> bool:
+    """True dacă user-ul e plătitor TVA (din profil)."""
+    user = session.query(User).filter(User.id == user_id).first()
+    if not user:
+        return False
+    return user.regim_tva in ("PLATITOR_21", "SPECIAL_INTRACOM")
 
 
 def _detect_expense_category(
@@ -107,6 +132,57 @@ def _pick_income_category(activity: Type[BaseActivity]) -> str:
 
 
 # ============================================================
+#              NEW (Pas 8.4b) — VAT ENGINE HELPERS
+# ============================================================
+
+def _analyze_vat_safely(
+    *,
+    platforma: Optional[str],
+    detalii: Optional[str],
+    user_is_vat_payer: bool,
+    transaction_type: str,
+) -> Optional[VATDecision]:
+    """
+    Wrapper safe peste vat_engine.analyze().
+    Returnează None dacă analizat-ul aruncă (orice).
+    """
+    try:
+        decision = vat_analyze(
+            platforma=platforma,
+            detalii=detalii,
+            user_is_vat_payer=user_is_vat_payer,
+            transaction_type=transaction_type,
+        )
+        logger.info(
+            f"VAT engine: '{platforma}' → {decision.treatment.value} "
+            f"({decision.country_code}, conf={decision.confidence}, "
+            f"brand={decision.detected_brand})"
+        )
+        return decision
+    except Exception as e:
+        logger.warning(f"VAT engine failed for '{platforma}': {e}")
+        return None
+
+
+def _save_document_vat_id(
+    session: Session,
+    document_id: int,
+    vat_id: Optional[str],
+) -> None:
+    """Salvează vat_id detectat în Document (best-effort)."""
+    if not vat_id:
+        return
+    try:
+        doc = session.query(Document).filter(Document.id == document_id).first()
+        if doc and not doc.vat_id:
+            doc.vat_id = vat_id
+            session.flush()
+            logger.info(f"Saved vat_id={vat_id} for document_id={document_id}")
+    except Exception as e:
+        logger.warning(f"Could not save vat_id for doc {document_id}: {e}")
+
+
+# ============================================================
 #                       UTILS
 # ============================================================
 
@@ -148,11 +224,12 @@ def post_document(
     period_month = occurred_on.month if occurred_on else None
     tx_ids: List[int] = []
 
-    # Încărcăm activitatea user-ului o singură dată
+    # Încărcăm activitatea + statusul TVA al user-ului o singură dată
     activity = _get_user_activity(session, user_id)
+    user_is_vat_payer = _is_user_vat_payer(session, user_id)
     logger.info(
         f"post_document: doc_id={document_id} user_id={user_id} "
-        f"activity={activity.code} tip={tip}"
+        f"activity={activity.code} tip={tip} vat_payer={user_is_vat_payer}"
     )
 
     try:
@@ -168,6 +245,7 @@ def post_document(
         elif tip == "CHELTUIALA":
             tx_ids += _post_cheltuiala(
                 session, user_id=user_id, activity=activity,
+                user_is_vat_payer=user_is_vat_payer,
                 document_id=document_id, platforma=platforma,
                 detalii=detalii, brut=brut, tva=tva,
                 occurred_on=occurred_on,
@@ -176,8 +254,11 @@ def post_document(
 
         elif tip == "FACTURA_COMISION":
             tx_ids += _post_factura_comision(
-                session, user_id=user_id, document_id=document_id,
-                platforma=platforma, comision=comision,
+                session, user_id=user_id,
+                user_is_vat_payer=user_is_vat_payer,
+                document_id=document_id,
+                platforma=platforma, detalii=detalii,
+                comision=comision,
                 occurred_on=occurred_on,
                 period_year=period_year, period_month=period_month,
             )
@@ -205,7 +286,7 @@ def post_document(
 
 
 # ============================================================
-#                       VENIT
+#                       VENIT (NESCHIMBAT)
 # ============================================================
 
 def _post_venit(
@@ -315,16 +396,18 @@ def _post_venit(
 
 
 # ============================================================
-#                  CHELTUIALA  ⭐ ACTIVITY-AWARE + SEMANTIC SCORING
+#       CHELTUIALA  ⭐ ACTIVITY-AWARE + SEMANTIC + VAT-ENGINE
 # ============================================================
 
 def _post_cheltuiala(
-    session, *, user_id, activity, document_id, platforma, detalii, brut, tva,
+    session, *, user_id, activity, user_is_vat_payer,
+    document_id, platforma, detalii, brut, tva,
     occurred_on, period_year, period_month,
 ) -> List[int]:
     """
     CHELTUIALA → 1x EXPENSE.
-    Categoria + deductibilitatea vin AUTOMAT din scoring-ul semantic.
+    Categoria + deductibilitatea vin din scoring-ul semantic.
+    vat_treatment vine din vat_engine (cu fallback la logica veche).
     """
     # ⭐ DETECT cu scoring semantic
     category_code = _detect_expense_category(activity, platforma, detalii)
@@ -341,7 +424,28 @@ def _post_cheltuiala(
         # ⭐ DEDUCTIBILITY DINAMICĂ din activitate
         deductibility_pct = activity.get_deductibility_pct(category_code)
 
-    vat_treatment = "STANDARD" if tva > 0 else "NA"
+    # ════════════════════════════════════════════════════════
+    # === NEW (Pas 8.4b) — VAT Engine pentru tratament TVA ===
+    # ════════════════════════════════════════════════════════
+    vat_decision = _analyze_vat_safely(
+        platforma=platforma,
+        detalii=detalii,
+        user_is_vat_payer=user_is_vat_payer,
+        transaction_type="EXPENSE",
+    )
+
+    # Decizia finală: vat_engine dacă confidence ≥ 65, altfel logica veche
+    if vat_decision and vat_decision.confidence >= VAT_ENGINE_MIN_CONFIDENCE:
+        vat_treatment = vat_decision.treatment.value
+        # Salvăm vat_id detectat (dacă există)
+        _save_document_vat_id(session, document_id, vat_decision.detected_vat_id)
+        logger.info(
+            f"VAT decision (confidence={vat_decision.confidence}): "
+            f"{vat_treatment} for '{platforma}'"
+        )
+    else:
+        # Fallback la logica veche
+        vat_treatment = "STANDARD" if tva > 0 else "NA"
 
     tx = tx_repo.create(
         session,
@@ -365,23 +469,58 @@ def _post_cheltuiala(
     logger.info(
         f"CHELTUIALA doc_id={document_id}: category={category_code} "
         f"brut={brut} pct={deductibility_pct}% "
-        f"(activity={activity.code})"
+        f"vat_treatment={vat_treatment} (activity={activity.code})"
     )
 
     return [tx.id]
 
 
 # ============================================================
-#                  FACTURA_COMISION (neschimbat)
+#       FACTURA_COMISION  ⭐ VAT-ENGINE-AWARE (Pas 8.4b)
 # ============================================================
 
 def _post_factura_comision(
-    session, *, user_id, document_id, platforma, comision,
+    session, *, user_id, user_is_vat_payer, document_id,
+    platforma, detalii, comision,
     occurred_on, period_year, period_month,
 ) -> List[int]:
-    """FACTURA_COMISION → 2 tranzacții TVA reverse charge."""
+    """
+    FACTURA_COMISION → 2 tranzacții TVA (VAT_OUT + VAT_IN).
+
+    Tratament determinat de vat_engine:
+    - UE (Bolt EE / Uber NL / Etsy IE) → REVERSE_CHARGE (D301 + D390)
+    - Non-UE (AWS US / OpenAI US) → IMPORT_NON_EU (doar D301, fără D390)
+    - RO (rar pentru facturi comision) → STANDARD_21
+    - Necunoscut → fallback REVERSE_CHARGE (compatibilitate cu logica veche)
+    """
+    # ════════════════════════════════════════════════════════
+    # === Analiză VAT (înainte de orice calcul) ===
+    # ════════════════════════════════════════════════════════
+    vat_decision = _analyze_vat_safely(
+        platforma=platforma,
+        detalii=detalii,
+        user_is_vat_payer=user_is_vat_payer,
+        transaction_type="FACTURA_COMISION",
+    )
+
+    # Determinăm tratamentul final
+    if vat_decision and vat_decision.confidence >= VAT_ENGINE_MIN_CONFIDENCE:
+        vat_treatment = vat_decision.treatment.value
+        country_group = vat_decision.country_group
+        _save_document_vat_id(session, document_id, vat_decision.detected_vat_id)
+    else:
+        # Fallback la comportamentul vechi (REVERSE_CHARGE pentru orice intracom)
+        vat_treatment = "REVERSE_CHARGE"
+        country_group = CountryGroup.EU
+        logger.info(
+            f"FACTURA_COMISION: vat_engine confidence too low or failed, "
+            f"fallback to REVERSE_CHARGE"
+        )
+
+    # Calcul TVA — același pentru toate scenariile (21% la momentul actual)
     vat_amount = tax_rules.apply_reverse_charge(comision)
 
+    # ── 1. VAT_OUT (TVA colectat — datorat) ──
     tx_vat_out = tx_repo.create(
         session,
         user_id=user_id,
@@ -395,12 +534,13 @@ def _post_factura_comision(
         deductibility_pct=0,
         payment_method="CARD",
         counterparty=platforma or "Platform",
-        vat_treatment="REVERSE_CHARGE",
+        vat_treatment=vat_treatment,
         occurred_on=occurred_on,
         period_year=period_year,
         period_month=period_month,
     )
 
+    # ── 2. VAT_IN (TVA deductibil — oglindă) ──
     tx_vat_in = tx_repo.create(
         session,
         user_id=user_id,
@@ -414,7 +554,7 @@ def _post_factura_comision(
         deductibility_pct=100,
         payment_method="CARD",
         counterparty=platforma or "Platform",
-        vat_treatment="REVERSE_CHARGE",
+        vat_treatment=vat_treatment,
         occurred_on=occurred_on,
         period_year=period_year,
         period_month=period_month,
@@ -422,7 +562,8 @@ def _post_factura_comision(
 
     logger.info(
         f"FACTURA_COMISION doc_id={document_id}: "
-        f"factura={comision} RON, VAT_reverse={vat_amount} RON"
+        f"factura={comision} RON, VAT={vat_amount} RON, "
+        f"treatment={vat_treatment}, country={country_group.value}"
     )
 
     return [tx_vat_out.id, tx_vat_in.id]
