@@ -3,7 +3,7 @@ VAT Engine — Motor de detecție automată TVA pentru orice tranzacție.
 
 Determină automat tratamentul TVA bazat pe:
 1. VAT_ID al furnizorului (dacă apare pe factură)
-2. Brand recognition (matching pe ~50 furnizori populari în România)
+2. Brand recognition (matching pe ~70 furnizori populari în România)
 3. Categoria tranzacției (din activitate)
 4. Profilul fiscal al user-ului (plătitor/neplătitor TVA)
 
@@ -19,7 +19,12 @@ CONTEXT LEGAL (2026):
 - Reverse charge intracomunitar: art. 307 alin. 2 Cod Fiscal
 - Scutire fără drept deducere (educație/medical): art. 292
 - Scutire cu drept deducere (export): art. 294
-- Operațiuni financiare scutite: art. 292 alin. 2 lit. a (crypto inclus)
+
+CHANGELOG:
+- Pas 8.2: Versiunea inițială cu brand_database + extract_vat_id
+- Pas 8.4b-fix:
+  * extract_vat_id: validare cifre minime (evită false-positives gen "ROMPETROL")
+  * detect_brand: 2 strategii (substring + first-word) pentru a prinde brand-uri scurte
 """
 
 import logging
@@ -62,9 +67,13 @@ VAT_RATE_STANDARD = 21
 VAT_RATE_REDUCED_9 = 9
 VAT_RATE_REDUCED_5 = 5
 
+# Validare VAT_ID — minim cifre (anti false-positive)
+VAT_ID_MIN_DIGITS = 2
+VAT_ID_MIN_LENGTH = 4
+
 
 # ============================================================
-#         BRAND RECOGNITION DATABASE (~50 furnizori)
+#         BRAND RECOGNITION DATABASE (~70 furnizori)
 # ============================================================
 
 # Format: cuvinte_cheie -> (country_code, vat_id_known, brand_name)
@@ -99,7 +108,7 @@ BRAND_DATABASE = {
     "stripe payments europe": ("IE", "IE3206488LH", "Stripe"),
     "stripe ireland": ("IE", "IE3206488LH", "Stripe"),
     "shopify international": ("IE", "IE3568998CH", "Shopify"),
-    "vercel inc.": ("IE", None, "Vercel"),  # uneori IE, uneori US
+    "vercel inc.": ("IE", None, "Vercel"),
     "notion labs": ("IE", None, "Notion"),
     "figma ireland": ("IE", None, "Figma"),
     "slack technologies": ("IE", "IE9806660R", "Slack"),
@@ -123,6 +132,7 @@ BRAND_DATABASE = {
     "adobe inc": ("US", None, "Adobe US"),
     "cloudflare": ("US", None, "Cloudflare"),
     "digitalocean": ("US", None, "DigitalOcean"),
+    "moonshot ai": ("SG", None, "Moonshot AI"),  # Singapore (non-UE pentru România)
 
     # ─── 🇷🇴 ROMÂNIA — MARKETPLACE & RETAIL ─────────────────
     "emag": ("RO", None, "eMAG"),
@@ -177,15 +187,15 @@ BRAND_DATABASE = {
 
 class VATTreatment(str, Enum):
     """Tipul de tratament TVA aplicat."""
-    NA = "NA"                              # Nu se aplică (PFA neplătitor + furnizor RO neplătitor)
-    STANDARD_21 = "STANDARD_21"            # TVA standard 21% (RO sau plătitor RO)
-    REDUCED_9 = "REDUCED_9"                # TVA redus 9% (alimente, medicamente)
-    REDUCED_5 = "REDUCED_5"                # TVA redus 5% (cărți, etc.)
-    REVERSE_CHARGE = "REVERSE_CHARGE"      # Taxare inversă intracomunitar (UE)
-    IMPORT_NON_EU = "IMPORT_NON_EU"        # Import servicii non-UE (US, UK, CH)
-    EXEMPT_ART_292 = "EXEMPT_ART_292"      # Scutit fără drept deducere
-    EXEMPT_ART_294 = "EXEMPT_ART_294"      # Scutit cu drept deducere (export)
-    UNKNOWN = "UNKNOWN"                    # Detecție incertă — verificare manuală
+    NA = "NA"
+    STANDARD_21 = "STANDARD_21"
+    REDUCED_9 = "REDUCED_9"
+    REDUCED_5 = "REDUCED_5"
+    REVERSE_CHARGE = "REVERSE_CHARGE"
+    IMPORT_NON_EU = "IMPORT_NON_EU"
+    EXEMPT_ART_292 = "EXEMPT_ART_292"
+    EXEMPT_ART_294 = "EXEMPT_ART_294"
+    UNKNOWN = "UNKNOWN"
 
 
 class CountryGroup(str, Enum):
@@ -205,20 +215,18 @@ class VATDecision:
     """Rezultatul analizei TVA pentru o tranzacție."""
 
     treatment: VATTreatment
-    country_code: Optional[str] = None       # "RO", "EE", "US", etc.
+    country_code: Optional[str] = None
     country_group: CountryGroup = CountryGroup.UNKNOWN
-    vat_rate: int = 0                        # 0 / 5 / 9 / 21
-    detected_brand: Optional[str] = None     # Numele brand-ului recunoscut
-    detected_vat_id: Optional[str] = None    # VAT_ID extras sau cunoscut
+    vat_rate: int = 0
+    detected_brand: Optional[str] = None
+    detected_vat_id: Optional[str] = None
 
-    # Obligații declarative
-    requires_d300: bool = False              # Decont TVA standard
-    requires_d301: bool = False              # Decont special (reverse charge)
-    requires_d390: bool = False              # Recapitulativ VIES
+    requires_d300: bool = False
+    requires_d301: bool = False
+    requires_d390: bool = False
 
-    # Confidence și explicație umană
-    confidence: int = 0                      # 0-100
-    explanation: str = ""                    # text uman
+    confidence: int = 0
+    explanation: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -255,6 +263,12 @@ def extract_vat_id(text: Optional[str]) -> Optional[str]:
     - "VAT: EE102094445"
     - "CUI: RO12345678"
 
+    Validare strictă (Pas 8.4b-fix):
+    - Prefix trebuie să fie țară cunoscută (RO/UE/non-UE specific)
+    - Lungime minimă: 4 caractere alfanumerice după prefix
+    - CEL PUȚIN 2 CIFRE (anti false-positive: "ROMPETROL" rejectat,
+      "ROBINSON" rejectat, "EE102094445" acceptat)
+
     Returnează VAT_ID-ul în format normalizat (FĂRĂ spații/dash-uri).
     """
     if not text:
@@ -264,13 +278,24 @@ def extract_vat_id(text: Optional[str]) -> Optional[str]:
     matches = VAT_ID_PATTERN.findall(text_upper)
 
     for prefix, number in matches:
-        # Validare: prefix trebuie să fie țară cunoscută
-        if (prefix in EU_VAT_PREFIXES or
+        # Validare 1: prefix trebuie să fie țară cunoscută
+        if not (prefix in EU_VAT_PREFIXES or
                 prefix in NON_EU_VAT_PREFIXES or
                 prefix == RO_VAT_PREFIX):
-            # Validare: numărul trebuie să aibă cel puțin 4 cifre/caractere alfanumerice
-            if len(number) >= 4:
-                return f"{prefix}{number}"
+            continue
+
+        # Validare 2: lungime minimă
+        if len(number) < VAT_ID_MIN_LENGTH:
+            continue
+
+        # Validare 3 (NEW Pas 8.4b-fix): CEL PUȚIN 2 cifre
+        # VAT_ID-uri reale au cifre. Cuvintele românești (ROMPETROL, ROBINSON)
+        # sau alte coincidențe de litere nu sunt VAT_ID-uri valide.
+        digit_count = sum(1 for c in number if c.isdigit())
+        if digit_count < VAT_ID_MIN_DIGITS:
+            continue
+
+        return f"{prefix}{number}"
 
     return None
 
@@ -307,26 +332,55 @@ def detect_brand(text: Optional[str]) -> Optional[Tuple[str, str, Optional[str],
     """
     Recunoaște brand-ul dintr-un text liber.
 
-    Algoritm: caută în BRAND_DATABASE keyword-uri ca substring în text.
+    Strategie cu 2 nivele (Pas 8.4b-fix):
+    1. Substring match — cea mai specifică (ex: "bolt operations" în "Bolt Operations OU")
+    2. First-word match — pentru cazul când AI returnează doar primul cuvânt
+       (ex: "Bolt" simplu → match cu keyword "bolt operations")
+
     Returnează tuple (matched_keyword, country_code, vat_id_known, brand_name)
     sau None dacă nu match-uie.
 
-    Ex: "Bolt Operations OU" → ("bolt operations", "EE", "EE102094445", "Bolt")
-    Ex: "AWS hosting" → ("amazon web services", "US", None, "AWS")  [după keyword expansion]
-    Ex: "Lukoil benzinărie" → ("lukoil", "RO", None, "Lukoil")
+    Ex:
+    - "Bolt Operations OU" → ("bolt operations", "EE", "EE...", "Bolt")  [substring]
+    - "Bolt" → ("bolt operations", "EE", "EE...", "Bolt")  [first-word, NEW]
+    - "AWS hosting EC2" → ("amazon web services", "US", None, "AWS")  [first-word AWS=3 chars... NU prinde, trebuie >= 4]
+    - "Lukoil benzinărie" → ("lukoil", "RO", None, "Lukoil")  [substring]
+    - "Rompetrol" → ("rompetrol", "RO", None, "Rompetrol")  [substring]
     """
     if not text:
         return None
 
     text_lower = text.lower()
+    text_words = set(text_lower.split())  # cuvinte separate
     best_match = None
-    best_match_len = 0  # preferăm cel mai specific match (cel mai lung)
+    best_match_score = 0
 
     for keyword, (country, vat_id, brand_name) in BRAND_DATABASE.items():
+        # ── Strategy 1: Substring match (cel mai specific) ──
         if keyword in text_lower:
-            if len(keyword) > best_match_len:
+            # Priority dublă pentru substring match (e mai specific decât first-word)
+            score = len(keyword) * 2
+            if score > best_match_score:
                 best_match = (keyword, country, vat_id, brand_name)
-                best_match_len = len(keyword)
+                best_match_score = score
+            continue  # nu mai testăm strategy 2 dacă strategy 1 a match-uit
+
+        # ── Strategy 2: First-word match (NEW Pas 8.4b-fix) ──
+        # Util când AI returnează "Bolt" în loc de "Bolt Operations OU"
+        keyword_words = keyword.split()
+        if not keyword_words:
+            continue
+
+        primary_word = keyword_words[0]
+
+        # Cerințe pentru a evita false positives:
+        # - primary word ≥ 4 caractere (evită "aws", "olx" cu doar 3)
+        # - primary word să fie un cuvânt SEPARAT în text (nu doar substring)
+        if len(primary_word) >= 4 and primary_word in text_words:
+            score = len(primary_word)  # priority simplă (mai mică decât substring)
+            if score > best_match_score:
+                best_match = (keyword, country, vat_id, brand_name)
+                best_match_score = score
 
     return best_match
 
@@ -341,7 +395,7 @@ def analyze(
     detalii: Optional[str] = None,
     vat_id: Optional[str] = None,
     user_is_vat_payer: bool = False,
-    transaction_type: str = "EXPENSE",   # "INCOME" / "EXPENSE" / "FACTURA_COMISION"
+    transaction_type: str = "EXPENSE",
 ) -> VATDecision:
     """
     Analizează o tranzacție și returnează tratamentul TVA corect.
@@ -351,15 +405,16 @@ def analyze(
         detalii: descrierea tranzacției
         vat_id: VAT_ID dacă e disponibil pe factură
         user_is_vat_payer: True dacă user-ul nostru e plătitor TVA
-        transaction_type: tipul tranzacției
+        transaction_type: tipul tranzacției ("INCOME" / "EXPENSE" / "FACTURA_COMISION")
 
     Returns:
         VATDecision cu tratament + obligații + explicație
 
     Strategia:
-    1. Dacă avem vat_id explicit → cea mai sigură detecție
-    2. Altfel, brand recognition pe text combinat
-    3. Altfel, presupunem RO (fallback sigur)
+    1. Dacă avem vat_id explicit → cea mai sigură detecție (95%)
+    2. Altfel, extragere VAT_ID din text (cu validare strictă) (85%)
+    3. Altfel, brand recognition pe text combinat (75/65%)
+    4. Altfel, presupunem RO (fallback sigur, confidence 30%)
     """
     full_text = f"{platforma or ''} {detalii or ''}".strip()
 
@@ -372,7 +427,7 @@ def analyze(
 
     if vat_id:
         country_code, country_group = detect_country_from_vat_id(vat_id)
-        confidence = 95  # Highest confidence — VAT_ID e oficial
+        confidence = 95
 
     # ── Strategy 2: Extract VAT_ID from text ───────────────
     if not country_code:
@@ -402,7 +457,7 @@ def analyze(
     if not country_code:
         country_code = "RO"
         country_group = CountryGroup.ROMANIA
-        confidence = 30  # Low confidence — pure assumption
+        confidence = 30
 
     # ────────────────────────────────────────────────────────
     # APLICĂM REGULILE FISCALE PE GRUP COUNTRY
@@ -454,7 +509,7 @@ def _apply_vat_rules(
     if country_group == CountryGroup.ROMANIA:
         decision.treatment = VATTreatment.STANDARD_21
         decision.vat_rate = VAT_RATE_STANDARD
-        decision.requires_d300 = user_is_vat_payer  # doar dacă user e plătitor
+        decision.requires_d300 = user_is_vat_payer
         decision.explanation = (
             f"Furnizor RO ({brand_label}) — TVA 21% standard. "
             f"{'Deductibil prin D300.' if user_is_vat_payer else 'Inclus în preț (neplătitor TVA).'}"
@@ -463,9 +518,9 @@ def _apply_vat_rules(
     # ─── UE — REVERSE CHARGE ────────────────────────────────
     elif country_group == CountryGroup.EU:
         decision.treatment = VATTreatment.REVERSE_CHARGE
-        decision.vat_rate = VAT_RATE_STANDARD  # 21% se aplică tot, dar prin reverse
-        decision.requires_d301 = True   # decont special TVA — OBLIGATORIU
-        decision.requires_d390 = True   # recapitulativ VIES — OBLIGATORIU
+        decision.vat_rate = VAT_RATE_STANDARD
+        decision.requires_d301 = True
+        decision.requires_d390 = True
         country_name = EU_VAT_PREFIXES.get(country_code, country_code)
         decision.explanation = (
             f"Furnizor UE — {brand_label} ({country_name}). "
@@ -477,7 +532,7 @@ def _apply_vat_rules(
     elif country_group == CountryGroup.NON_EU:
         decision.treatment = VATTreatment.IMPORT_NON_EU
         decision.vat_rate = VAT_RATE_STANDARD
-        decision.requires_d301 = True   # tot D301, dar fără D390 (non-UE)
+        decision.requires_d301 = True
         decision.requires_d390 = False
         country_name = NON_EU_VAT_PREFIXES.get(country_code, country_code)
         decision.explanation = (
@@ -503,11 +558,7 @@ def _apply_vat_rules(
 # ============================================================
 
 def is_intracom_supplier(vat_id: Optional[str], platforma: Optional[str] = None) -> bool:
-    """
-    Quick check: e furnizor intracomunitar (UE)?
-
-    Folosit de tax_engine pentru a decide afișarea D301/D390 alerts.
-    """
+    """Quick check: e furnizor intracomunitar (UE)?"""
     if vat_id:
         _, group = detect_country_from_vat_id(vat_id)
         return group == CountryGroup.EU
