@@ -9,12 +9,17 @@ PRINCIPIU CONTABIL:
 - Sold cumulat = flux real al banilor în business
 
 Suportă generare anuală (month=None) sau lunară (month=1..12).
+
+⚠️ MULTI-TENANT (Bug #7 fix):
+- Default-urile sunt GENERICE ("PFA", "") — niciun nume hardcodat
+- Apelantul TREBUIE să furnizeze pfa_name și pfa_cui din profilul user-ului
+- Logăm warning dacă lipsește pfa_cui (pentru a depista apeluri greșite)
 """
 
 import io
 import logging
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,20 +53,45 @@ def _calc_row_height(text: str, col_width_chars: int = 50) -> int:
     return max(22, lines_needed * 18)
 
 
+def _validate_pfa_info(pfa_name: str, pfa_cui: str) -> tuple:
+    """
+    Validează și normalizează info PFA. Returnează (name, cui).
+    Loghează warning dacă valorile sunt generice (probabil apel fără profil).
+    """
+    name = (pfa_name or "").strip() or "PFA — Nume nesetat"
+    cui = (pfa_cui or "").strip() or ""
+
+    if not pfa_cui:
+        logger.warning(
+            "generate_registru_xlsx called without pfa_cui — "
+            "user profile probably missing"
+        )
+
+    return name, cui
+
+
 def generate_registru_xlsx(
     transactions,
     year: int,
-    pfa_name: str = "IARAI STEFAN PERSOANA FIZICA AUTORIZATA",
-    pfa_cui: str = "53067338",
+    pfa_name: str = "PFA",
+    pfa_cui: str = "",
     month: Optional[int] = None,
 ) -> bytes:
     """
     Generează Registrul XLSX.
 
     Args:
+        transactions: lista de Transaction din DB
+        year: anul perioadei
+        pfa_name: numele firmei (din profilul user-ului) — OBLIGATORIU pentru
+                  un Registru valid; default-ul "PFA" e folosit doar ca
+                  fallback de siguranță
+        pfa_cui: CUI-ul firmei (din profilul user-ului)
         month: dacă None, generează registru ANUAL.
                dacă 1..12, generează registru LUNAR.
     """
+    pfa_name, pfa_cui = _validate_pfa_info(pfa_name, pfa_cui)
+
     try:
         import openpyxl
         from openpyxl.styles import (
@@ -104,12 +134,12 @@ def generate_registru_xlsx(
 
     num_fmt = '#,##0.00 "RON"'
 
-    # ── Lățimi coloane (mărite pentru lizibilitate) ──────────────────────────
+    # ── Lățimi coloane ───────────────────────────────────────────────────────
     col_widths = {
-        "A": 7,    # Nr (era 6)
-        "B": 14,   # Data (era 13)
-        "C": 55,   # Explicații — MULT mai lată (era 45)
-        "D": 17,   # Încasări numerar (era 16)
+        "A": 7,    # Nr
+        "B": 14,   # Data
+        "C": 55,   # Explicații
+        "D": 17,   # Încasări numerar
         "E": 17,   # Încasări bancă
         "F": 17,   # Total încasări
         "G": 17,   # Plăți numerar
@@ -132,10 +162,11 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 32
     row += 1
 
-    # ── Info PFA ─────────────────────────────────────────────────────────────
+    # ── Info PFA (din profil) ────────────────────────────────────────────────
+    cui_display = f"CUI: {pfa_cui}" if pfa_cui else "CUI: nesetat"
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
-    c.value = f"{pfa_name}  |  CUI: {pfa_cui}  |  Sistem real de impunere"
+    c.value = f"{pfa_name}  |  {cui_display}  |  Sistem real de impunere"
     c.font = Font(name="Calibri", bold=True, color="FFFFFF", size=10)
     c.fill = subheader_fill
     c.alignment = center
@@ -250,16 +281,30 @@ def generate_registru_xlsx(
             total_pay = pay_cash + pay_bank
             sold_curent -= total_pay
 
+        # Etichete generice (valabile pentru orice activitate)
+        # Pentru categorii non-standard, folosim direct codul
         cat_labels = {
-            "ride_revenue": "Venituri brute curse Bolt/Uber",
+            "ride_revenue": "Venituri brute curse",
             "tip_revenue": "Bacșișuri",
             "fuel": "Combustibil auto",
-            "platform_commission": "Comision platformă Bolt/Uber",
+            "platform_commission": "Comision platformă",
+            "car_service": "Service / Consumabile auto",
+            "car_insurance": "Asigurări auto (RCA, CASCO)",
+            "car_wash": "Spălătorie auto",
             "registration": "Taxe autorizații/înregistrare",
+            "professional_fees": "Onorariu notar/contabil/avocat",
+            "telecom": "Telefon / Internet",
+            "car_supplies": "Accesorii auto / Consumabile",
             "other_expense": "Alte cheltuieli",
+            "services_revenue": "Venituri din servicii",
+            "materials": "Materiale",
+            "services": "Servicii (utilități, abonamente)",
         }
-        descriere = cat_labels.get(tx.category, tx.category or "—")
-        if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber", "APP"):
+        descriere = cat_labels.get(
+            tx.category,
+            (tx.category or "—").replace("_", " ").title()
+        )
+        if tx.counterparty and tx.counterparty not in ("N/A", "Bolt", "Uber", "APP", "Platform"):
             descriere += f" — {tx.counterparty}"
 
         # Calculăm înălțimea optimă a rândului în funcție de lungimea textului
@@ -346,8 +391,9 @@ def generate_registru_xlsx(
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
     c.value = (
-        "ℹ️ Profitul deductibil fiscal poate diferi (combustibilul auto e "
-        "deductibil 50%). Vezi raportul lunar pentru detalii."
+        "ℹ️ Profitul deductibil fiscal poate diferi (anumite cheltuieli "
+        "auto/telecom sunt deductibile parțial 50%). "
+        "Vezi raportul lunar pentru detalii."
     )
     c.font = small
     c.alignment = center
@@ -362,7 +408,7 @@ def generate_registru_xlsx(
     ws[f"A{row}"].alignment = left
 
     ws.merge_cells(f"F{row}:J{row}")
-    ws[f"F{row}"].value = "Semnătura titularului PFA: ___________________"
+    ws[f"F{row}"].value = "Semnătura titularului: ___________________"
     ws[f"F{row}"].font = small
     ws[f"F{row}"].alignment = right
     ws.row_dimensions[row].height = 20
@@ -393,17 +439,23 @@ def generate_registru_xlsx(
 
 
 def generate_registru_csv(
-    transactions, year, pfa_name="IARAI STEFAN PFA",
-    pfa_cui="53067338", month=None,
+    transactions, year,
+    pfa_name="PFA",
+    pfa_cui="",
+    month=None,
 ) -> bytes:
-    """Fallback CSV."""
+    """Fallback CSV — folosit dacă openpyxl nu e disponibil."""
+    pfa_name, pfa_cui = _validate_pfa_info(pfa_name, pfa_cui)
+
     import csv
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
 
     period = f"{LUNI_RO_UPPER.get(month, '')} {year}" if month else f"ANUL {year}"
     writer.writerow([f"REGISTRU DE ÎNCASĂRI ȘI PLĂȚI — {period}"])
-    writer.writerow([pfa_name, f"CUI: {pfa_cui}"])
+    writer.writerow([
+        pfa_name, f"CUI: {pfa_cui}" if pfa_cui else "CUI: nesetat"
+    ])
     writer.writerow([])
     writer.writerow([
         "Nr.", "Data", "Explicații",
@@ -420,20 +472,29 @@ def generate_registru_csv(
         key=lambda tx: (tx.occurred_on or date(year, 1, 1), tx.id)
     )
 
+    cat_labels = {
+        "ride_revenue": "Venituri brute curse",
+        "tip_revenue": "Bacșișuri",
+        "fuel": "Combustibil auto",
+        "platform_commission": "Comision platformă",
+        "car_service": "Service / Consumabile auto",
+        "car_insurance": "Asigurări auto",
+        "car_wash": "Spălătorie auto",
+        "registration": "Autorizații",
+        "professional_fees": "Onorariu profesional",
+        "telecom": "Telefon / Internet",
+        "car_supplies": "Accesorii auto",
+        "other_expense": "Alte cheltuieli",
+    }
+
     for tx in relevant:
         nr += 1
         tx_date = tx.occurred_on.strftime("%d.%m.%Y") if tx.occurred_on else ""
         is_income = tx.tx_type == "INCOME"
-
-        cat_labels = {
-            "ride_revenue": "Venituri brute curse Bolt/Uber",
-            "tip_revenue": "Bacșișuri",
-            "fuel": "Combustibil",
-            "platform_commission": "Comision Bolt/Uber",
-            "registration": "Autorizații",
-            "other_expense": "Alte cheltuieli",
-        }
-        desc = cat_labels.get(tx.category, tx.category or "")
+        desc = cat_labels.get(
+            tx.category,
+            (tx.category or "").replace("_", " ").title()
+        )
 
         if is_income:
             amount = tx.amount_brut
