@@ -58,32 +58,34 @@ MIGRATIONS = [
             "for multi-tenant data integrity"
         ),
         "sql": [
-            # Pas 1: Identifică documentele orfane (user_id NULL) și le marchează ca rejected
-            # Acestea sunt documente vechi din înainte de multi-tenant.
-            # Le păstrăm în DB (pentru audit) dar le marcăm 'rejected' ca să nu apară nicăieri.
             """
             UPDATE documents
             SET status = 'rejected'
             WHERE user_id IS NULL AND status != 'rejected'
             """,
-
-            # Pas 2: Tranzacțiile orfane (legate de Document fără user) — șterse
-            # (NU putem face NOT NULL pe Transaction fără să curățăm întâi orphan-urile)
             """
             DELETE FROM transactions
             WHERE document_id IN (SELECT id FROM documents WHERE user_id IS NULL)
             """,
-
-            # Pas 3: Pentru documentele orfane RĂMASE (rejected), le atribuim
-            # user-ului cu cel mai mic ID (admin/owner) ca să respecte FK-ul NOT NULL
             """
             UPDATE documents
             SET user_id = (SELECT MIN(id) FROM users)
             WHERE user_id IS NULL
             """,
-
-            # Pas 4: ENFORCE NOT NULL pe documents.user_id
             "ALTER TABLE documents ALTER COLUMN user_id SET NOT NULL",
+        ],
+    },
+    {
+        "id": "003_documents_vat_id",
+        "description": (
+            "Add vat_id field to Document for VAT engine — automatic detection "
+            "of supplier country (RO/UE/non-UE) and VAT treatment"
+        ),
+        "sql": [
+            # Câmp pentru VAT_ID al furnizorului (ex: "EE102094445", "IE6388047V", "RO12345678")
+            # Nullable pentru că nu apare pe toate documentele (ex: bonuri fiscale RO)
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS vat_id VARCHAR(20)",
+            "CREATE INDEX IF NOT EXISTS ix_documents_vat_id ON documents(vat_id)",
         ],
     },
     # Aici vom adăuga migrări noi în viitor
