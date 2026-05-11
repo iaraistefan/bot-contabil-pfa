@@ -14,6 +14,13 @@ Suportă generare anuală (month=None) sau lunară (month=1..12).
 - Default-urile sunt GENERICE ("PFA", "") — niciun nume hardcodat
 - Apelantul TREBUIE să furnizeze pfa_name și pfa_cui din profilul user-ului
 - Logăm warning dacă lipsește pfa_cui (pentru a depista apeluri greșite)
+
+CHANGELOG:
+- v1: Versiune inițială cu rând "💡 PROFIT BRUT" la final
+- v2 (cererea băncii): Înlocuit cu SECȚIUNE SUMAR FINANCIAR vizibilă la final:
+  • TOTAL ÎNCASĂRI (verde)
+  • TOTAL CHELTUIELI (roșu)
+  • PROFIT NET / PIERDERE (galben, font mare 14pt, imposibil de ratat)
 """
 
 import io
@@ -117,6 +124,8 @@ def generate_registru_xlsx(
     income_fill = PatternFill("solid", fgColor="E2EFDA")
     expense_fill = PatternFill("solid", fgColor="FCE4D6")
     total_fill = PatternFill("solid", fgColor="FFF2CC")
+    profit_positive_fill = PatternFill("solid", fgColor="FFF2CC")
+    profit_negative_fill = PatternFill("solid", fgColor="FFD7D7")
 
     white_bold = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
     dark_bold = Font(name="Calibri", bold=True, color="1F3864", size=10)
@@ -126,6 +135,9 @@ def generate_registru_xlsx(
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
     right = Alignment(horizontal="right", vertical="center")
+    left_indent = Alignment(
+        horizontal="left", vertical="center", wrap_text=True, indent=2
+    )
 
     thin = Side(style="thin", color="BFBFBF")
     thick = Side(style="medium", color="1F3864")
@@ -347,7 +359,7 @@ def generate_registru_xlsx(
         ws.row_dimensions[row].height = row_height
         row += 1
 
-    # ── Total general ─────────────────────────────────────────────────────────
+    # ── Total general (rândul existing pe coloane) ────────────────────────────
     row += 1
     period_label = f"TOTAL {title_period}"
     total_labels = {
@@ -376,30 +388,114 @@ def generate_registru_xlsx(
     ws.row_dimensions[row].height = 28
     row += 2
 
+    # ════════════════════════════════════════════════════════════════════════
+    # ── 📊 SUMAR FINANCIAR (NOU v2 — cererea băncii) ──────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    # Calculăm totalurile separat pentru afișare clară
+    total_incasari_all = sum(
+        tx.amount_brut for tx in relevant_txs if tx.tx_type == "INCOME"
+    )
+    total_plati_all = sum(
+        tx.amount_brut for tx in relevant_txs if tx.tx_type == "EXPENSE"
+    )
+    profit_net = total_incasari_all - total_plati_all
+
+    # ── Header SUMAR FINANCIAR ─────────────────────────────────────────────
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
-    c.value = (
-        f"💡 PROFIT BRUT (Total Încasări − Total Plăți) = {sold_curent:.2f} RON"
-    )
-    c.font = Font(name="Calibri", bold=True, size=11, color="1F3864")
-    c.fill = total_fill
+    c.value = f"📊 SUMAR FINANCIAR — {title_period}"
+    c.font = Font(name="Calibri", bold=True, color="FFFFFF", size=13)
+    c.fill = header_fill
     c.alignment = center
     c.border = header_border
-    ws.row_dimensions[row].height = 26
+    ws.row_dimensions[row].height = 30
     row += 1
 
+    # ── Rând 1: TOTAL ÎNCASĂRI (verde) ────────────────────────────────────
+    ws.merge_cells(f"A{row}:F{row}")
+    cA = ws[f"A{row}"]
+    cA.value = "💰 TOTAL ÎNCASĂRI"
+    cA.font = Font(name="Calibri", bold=True, size=12, color="1F6B2A")
+    cA.fill = income_fill
+    cA.alignment = left_indent
+    cA.border = thin_border
+
+    ws.merge_cells(f"G{row}:J{row}")
+    cG = ws[f"G{row}"]
+    cG.value = total_incasari_all
+    cG.font = Font(name="Calibri", bold=True, size=12, color="1F6B2A")
+    cG.fill = income_fill
+    cG.alignment = right
+    cG.number_format = num_fmt
+    cG.border = thin_border
+    ws.row_dimensions[row].height = 28
+    row += 1
+
+    # ── Rând 2: TOTAL CHELTUIELI (roșu) ───────────────────────────────────
+    ws.merge_cells(f"A{row}:F{row}")
+    cA = ws[f"A{row}"]
+    cA.value = "💸 TOTAL CHELTUIELI"
+    cA.font = Font(name="Calibri", bold=True, size=12, color="C00000")
+    cA.fill = expense_fill
+    cA.alignment = left_indent
+    cA.border = thin_border
+
+    ws.merge_cells(f"G{row}:J{row}")
+    cG = ws[f"G{row}"]
+    cG.value = total_plati_all
+    cG.font = Font(name="Calibri", bold=True, size=12, color="C00000")
+    cG.fill = expense_fill
+    cG.alignment = right
+    cG.number_format = num_fmt
+    cG.border = thin_border
+    ws.row_dimensions[row].height = 28
+    row += 1
+
+    # ── Rând 3: PROFIT NET / PIERDERE (galben/roșu, font MARE) ────────────
+    if profit_net >= 0:
+        profit_color = "1F6B2A"
+        profit_fill = profit_positive_fill
+        profit_emoji = "💎"
+        profit_label = "PROFIT NET (cash flow)"
+    else:
+        profit_color = "C00000"
+        profit_fill = profit_negative_fill
+        profit_emoji = "⚠️"
+        profit_label = "PIERDERE (cash flow)"
+
+    ws.merge_cells(f"A{row}:F{row}")
+    cA = ws[f"A{row}"]
+    cA.value = f"{profit_emoji} {profit_label}"
+    cA.font = Font(name="Calibri", bold=True, size=14, color=profit_color)
+    cA.fill = profit_fill
+    cA.alignment = left_indent
+    cA.border = header_border
+
+    ws.merge_cells(f"G{row}:J{row}")
+    cG = ws[f"G{row}"]
+    cG.value = profit_net
+    cG.font = Font(name="Calibri", bold=True, size=14, color=profit_color)
+    cG.fill = profit_fill
+    cG.alignment = right
+    cG.number_format = num_fmt
+    cG.border = header_border
+    ws.row_dimensions[row].height = 36
+    row += 2
+
+    # ── Note explicative ───────────────────────────────────────────────────
     ws.merge_cells(f"A{row}:J{row}")
     c = ws[f"A{row}"]
     c.value = (
-        "ℹ️ Profitul deductibil fiscal poate diferi (anumite cheltuieli "
-        "auto/telecom sunt deductibile parțial 50%). "
-        "Vezi raportul lunar pentru detalii."
+        "ℹ️ Profitul deductibil fiscal (pentru ANAF) poate diferi: "
+        "anumite cheltuieli auto/telecom sunt deductibile parțial (50%). "
+        "Vezi raportul lunar al botului pentru detalii."
     )
     c.font = small
     c.alignment = center
-    ws.row_dimensions[row].height = 20
+    ws.row_dimensions[row].height = 22
     row += 2
 
+    # ── Footer ────────────────────────────────────────────────────────────
     ws.merge_cells(f"A{row}:E{row}")
     ws[f"A{row}"].value = (
         f"Data întocmirii: {datetime.now().strftime('%d.%m.%Y')}"
@@ -487,6 +583,10 @@ def generate_registru_csv(
         "other_expense": "Alte cheltuieli",
     }
 
+    # Totaluri pentru sumar
+    total_incasari = 0.0
+    total_plati = 0.0
+
     for tx in relevant:
         nr += 1
         tx_date = tx.occurred_on.strftime("%d.%m.%Y") if tx.occurred_on else ""
@@ -505,6 +605,7 @@ def generate_registru_csv(
             total_inc = inc_cash + inc_bank
             pay_cash = pay_bank = total_pay = 0.0
             sold += total_inc
+            total_incasari += total_inc
         else:
             inc_cash = inc_bank = total_inc = 0.0
             if tx.payment_method == "CASH":
@@ -513,6 +614,7 @@ def generate_registru_csv(
                 pay_cash, pay_bank = 0.0, tx.amount_brut
             total_pay = pay_cash + pay_bank
             sold -= total_pay
+            total_plati += total_pay
 
         writer.writerow([
             nr, tx_date, desc,
@@ -524,6 +626,15 @@ def generate_registru_csv(
             f"{total_pay:.2f}" if total_pay else "",
             f"{sold:.2f}",
         ])
+
+    # ── SUMAR FINANCIAR la final (CSV) ────────────────────────────────────
+    profit_net = total_incasari - total_plati
+    writer.writerow([])
+    writer.writerow([f"=== SUMAR FINANCIAR — {period} ==="])
+    writer.writerow(["TOTAL INCASARI:", "", "", "", "", "", "", "", "", f"{total_incasari:.2f}"])
+    writer.writerow(["TOTAL CHELTUIELI:", "", "", "", "", "", "", "", "", f"{total_plati:.2f}"])
+    profit_label = "PROFIT NET (cash flow):" if profit_net >= 0 else "PIERDERE (cash flow):"
+    writer.writerow([profit_label, "", "", "", "", "", "", "", "", f"{profit_net:.2f}"])
 
     return buf.getvalue().encode("utf-8-sig")
 
