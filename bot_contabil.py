@@ -14,6 +14,7 @@ from app.services import posting
 from app.services import tax_engine
 from app.services import scheduler as sched_service
 from app.services import onboarding
+from app.services import plata_fiscala  # ⭐ Pas 11.4
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -49,12 +50,13 @@ BTN_RAPORT = "📊 Raport"
 BTN_REGISTRU = "📂 Registru"
 BTN_DASHBOARD = "🖥️ Dashboard"
 BTN_CALENDAR = "📋 Calendar Fiscal"
+BTN_PLATA = plata_fiscala.BTN_PLATA  # ⭐ Pas 11.4: "💳 Plată Fiscală"
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
-    BTN_CALENDAR, BTN_SETARI, BTN_AJUTOR,
+    BTN_CALENDAR, BTN_PLATA, BTN_SETARI, BTN_AJUTOR,
 }
 
 LUNI_SHORT = {
@@ -79,6 +81,7 @@ def build_main_menu():
             KeyboardButton(BTN_DASHBOARD, web_app=WebAppInfo(url=DASHBOARD_URL)),
             KeyboardButton(BTN_CALENDAR),
         ],
+        [KeyboardButton(BTN_PLATA)],  # ⭐ Pas 11.4
         [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
@@ -473,11 +476,13 @@ async def send_ajutor(chat_id, context):
         "• 📂 *Registru* — Excel pentru bancă/ANAF\n"
         "• 🖥️ *Dashboard* — interfață vizuală\n"
         "• 📋 *Calendar* — termene fiscale\n"
+        "• 💳 *Plată Fiscală* — IBAN + sumă pre-calculate\n"
         "• ⚙️ *Setări* — alerte, profil, export, reset\n\n"
         "💬 *Comenzi text*\n"
         "• `/start` — meniul principal\n"
         "• `/profil` — vezi profilul tău\n"
         "• `/reset_profil` — refă onboarding\n"
+        "• `/plata_fiscala` — wizard plată ANAF\n"
         "• `/delete <ID>` — șterge un document"
     )
     await context.bot.send_message(
@@ -509,6 +514,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     regim_tva_label = (
         "Plătitor (21%)" if regim_tva == "PLATITOR_21"
         else "Neplătitor" if regim_tva == "NEPLATITOR"
+        else "Cod special intracom" if regim_tva == "SPECIAL_INTRACOM"
         else "—"
     )
     regim_imp_label = onboarding.regim_impunere_label(profile.get("regim_impunere") or "")
@@ -601,6 +607,8 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode="Markdown",
             reply_markup=build_year_picker("fiscal", years),
         )
+    elif text == BTN_PLATA:  # ⭐ Pas 11.4
+        await plata_fiscala.handle_menu_button(update, context)
     elif text == BTN_SETARI:
         await update.message.reply_text(
             "⚙️ *Setări*",
@@ -802,6 +810,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
+        # ⭐ Pas 11.4: Plată Fiscală
+        if namespace == "plata":
+            await plata_fiscala.handle_callback(update, context, parts)
+            return
+
     except Exception as e:
         logger.error(f"Callback handler error data={data}: {e}")
         try:
@@ -831,6 +844,7 @@ async def execute_show_profil(query, context, user_id):
     regim_tva_label = (
         "Plătitor (21%)" if regim_tva == "PLATITOR_21"
         else "Neplătitor" if regim_tva == "NEPLATITOR"
+        else "Cod special intracom" if regim_tva == "SPECIAL_INTRACOM"
         else "—"
     )
     regim_imp_label = onboarding.regim_impunere_label(profile.get("regim_impunere") or "")
@@ -1520,6 +1534,8 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
+    # ⭐ Pas 11.4: comanda /plata_fiscala
+    app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
 
     # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
@@ -1532,5 +1548,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v8 — Multi-Tenant + Activity-Aware ONLINE!")
+    print("🤖 Bot Contabil v9 — Compliance Engine Ready (Pas 11 COMPLET)")
     app_bot.run_polling()
