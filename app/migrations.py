@@ -88,6 +88,57 @@ MIGRATIONS = [
             "CREATE INDEX IF NOT EXISTS ix_documents_vat_id ON documents(vat_id)",
         ],
     },
+    {
+        "id": "004_proactive_alerts",
+        "description": (
+            "Pas 10.1: Proactive Alerts — adaugă tabelul fiscal_alert_sent "
+            "(anti-spam) și 3 coloane în users pentru configurare alerte"
+        ),
+        "sql": [
+            # ── Tabel nou pentru tracking alerte trimise (anti-spam) ─────
+            """
+            CREATE TABLE IF NOT EXISTS fiscal_alert_sent (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                obligation_code VARCHAR(50) NOT NULL,
+                period_year     INTEGER NOT NULL,
+                period_month    INTEGER NOT NULL,
+                alert_type      VARCHAR(30) NOT NULL,
+                sent_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                status          VARCHAR(20) NOT NULL DEFAULT 'delivered'
+            )
+            """,
+            # Index UNIQUE compus: previne trimiterea aceleiași alerte de două ori
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_fas_unique
+                ON fiscal_alert_sent (
+                    user_id, obligation_code, period_year,
+                    period_month, alert_type
+                )
+            """,
+            # Index secundar pentru lookup pe user + dată
+            """
+            CREATE INDEX IF NOT EXISTS ix_fas_user_sent_at
+                ON fiscal_alert_sent (user_id, sent_at DESC)
+            """,
+            # ── Coloane noi în users pentru configurare alerte ───────────
+            """
+            ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS proactive_alerts_enabled
+                BOOLEAN NOT NULL DEFAULT TRUE
+            """,
+            """
+            ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS proactive_alerts_hour
+                INTEGER NOT NULL DEFAULT 8
+            """,
+            """
+            ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS proactive_alerts_advance_days
+                INTEGER NOT NULL DEFAULT 7
+            """,
+        ],
+    },
     # Aici vom adăuga migrări noi în viitor
 ]
 
