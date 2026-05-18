@@ -7,7 +7,8 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger, Boolean, Column, Date, DateTime,
-    Float, ForeignKey, Integer, JSON, String, Text,
+    Float, ForeignKey, Index, Integer, JSON, String, Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -53,12 +54,26 @@ class User(Base):
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
+    # === ⭐ Pas 10.1 — Configurare Proactive Alerts ===
+    # Pornește activate (default True) — user poate dezactiva din meniu
+    proactive_alerts_enabled = Column(Boolean, nullable=False, default=True)
+    # Ora la care primește alertele zilnice (0-23). Default 08:00
+    proactive_alerts_hour = Column(Integer, nullable=False, default=8)
+    # Câte zile înainte de termen să primească prima alertă (1-30). Default 7
+    proactive_alerts_advance_days = Column(Integer, nullable=False, default=7)
+
     # === Relations ===
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
     tax_periods = relationship("TaxPeriod", back_populates="user")
     fiscal_alerts = relationship("FiscalAlert", back_populates="user")
+    # ⭐ Pas 10.1
+    fiscal_alerts_sent = relationship(
+        "FiscalAlertSent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<User id={self.id} telegram_id={self.telegram_id} firma={self.firma_nume!r}>"
@@ -170,6 +185,10 @@ class TaxPeriod(Base):
 
 
 class FiscalAlert(Base):
+    """
+    Alerte legislative (modificări ANAF/MOf) — generate de AI fiscal_monitor.
+    NU sunt confundate cu FiscalAlertSent (anti-spam pentru proactive_alerts).
+    """
     __tablename__ = "fiscal_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -226,3 +245,64 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog {self.entity_type}:{self.entity_id} {self.action}>"
+
+
+# ============================================================
+# ⭐ Pas 10.1 — FiscalAlertSent (Proactive Alerts anti-spam)
+# ============================================================
+
+class FiscalAlertSent(Base):
+    """
+    Pas 10.1 — Tracking pentru alerte proactive trimise.
+
+    Folosit ca ANTI-SPAM de către `app.services.proactive_alerts`:
+    înainte să trimită o alertă, verifică dacă există deja înregistrare
+    cu aceeași combinație (user, obligație, perioadă, tip_alertă).
+
+    NU se confundă cu FiscalAlert (alerte legislative ANAF/MOf).
+
+    alert_type values:
+      - "advance_7d"    → 7 zile rămase până la termen
+      - "advance_3d"    → 3 zile rămase
+      - "due_today"     → ziua termenului
+      - "overdue_d1".."overdue_d7" → 1-7 zile depășit (zilnic)
+      - "overdue_w2", "overdue_w3", ... → săptămânile 2, 3, ... (săptămânal)
+    """
+    __tablename__ = "fiscal_alert_sent"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    obligation_code = Column(String(50), nullable=False)
+    # Ex: "D100" (din "D100 poz. 634"), "D301", "D212", "D207"
+
+    period_year = Column(Integer, nullable=False)
+    period_month = Column(Integer, nullable=False)
+    alert_type = Column(String(30), nullable=False)
+
+    sent_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    status = Column(String(20), nullable=False, default="delivered")
+    # Valori: "delivered" / "failed"
+
+    user = relationship("User", back_populates="fiscal_alerts_sent")
+
+    __table_args__ = (
+        # Unique compus: previne trimiterea aceleiași alerte de două ori
+        UniqueConstraint(
+            "user_id", "obligation_code", "period_year",
+            "period_month", "alert_type",
+            name="ix_fas_unique",
+        ),
+        # Lookup pe user + dată (pentru istoricul alertelor)
+        Index("ix_fas_user_sent_at", "user_id", "sent_at"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<FiscalAlertSent user={self.user_id} "
+            f"{self.obligation_code} {self.period_year}/{self.period_month:02d} "
+            f"type={self.alert_type}>"
+        )
