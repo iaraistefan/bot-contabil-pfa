@@ -2,14 +2,16 @@
 Scheduler pentru reminder-uri și monitorizare fiscală.
 
 JOBS:
-  • Luni 08:00   — reminder săptămânal generic (check_and_remind) — EXISTENT
-  • Ziua 20, 09:00 — alerte termene fiscale (legacy) — EXISTENT
-  • Ziua 1, 07:00  — monitorizare legislativă AI — EXISTENT
-  • Zilnic 08:00  — alerte proactive obligații (Pas 10.1) ← NOU
+  • Luni 08:00   — reminder săptămânal generic (check_and_remind)
+  • Luni 08:30   — dashboard compliance săptămânal (Pas 10.3) ← NOU
+  • Ziua 20, 09:00 — alerte termene fiscale (legacy)
+  • Ziua 1, 07:00  — monitorizare legislativă AI
+  • Zilnic 08:00  — alerte proactive obligații (Pas 10.1)
 
 CHANGELOG:
   • v1: Reminder săptămânal + alerte termene + monitorizare AI
-  • v2 (Pas 10.1, 16.05.2026): Adăugat job zilnic check_and_send_proactive_alerts
+  • v2 (Pas 10.1): + job zilnic check_and_send_proactive_alerts
+  • v3 (Pas 10.3): + job Luni 08:30 send_weekly_compliance_dashboard
 """
 
 import logging
@@ -108,8 +110,7 @@ def check_and_remind(bot_token: str) -> None:
 # ============================================================
 #         JOB 2: ALERTĂ TERMENE FISCALE (Ziua 20, 09:00)
 # ============================================================
-# LEGACY — păstrat pentru compatibilitate. Versiunea PROACTIVĂ
-# (Pas 10.1) e mai inteligentă și o va înlocui în viitor.
+# LEGACY — păstrat pentru compatibilitate.
 
 def check_fiscal_deadlines(bot_token: str) -> None:
     """Alertă termene fiscale — ziua 20 a fiecărei luni."""
@@ -151,10 +152,7 @@ def check_fiscal_deadlines(bot_token: str) -> None:
 # ============================================================
 
 def run_fiscal_monitoring(bot_token: str) -> None:
-    """
-    Monitorizare legislativă cu OpenAI Web Search.
-    Rulează ziua 1 a fiecărei luni, 07:00.
-    """
+    """Monitorizare legislativă cu OpenAI Web Search. Ziua 1, 07:00."""
     from db import get_session
     from app.models import User, FiscalAlert
     from app.ai.fiscal_monitor import run_fiscal_research, format_alert_telegram
@@ -226,20 +224,12 @@ def run_fiscal_monitoring(bot_token: str) -> None:
 
 
 # ============================================================
-#    ⭐ JOB 4: ALERTE PROACTIVE OBLIGAȚII (Zilnic 08:00)
-#    ⭐ Pas 10.1 — NOU
+#    JOB 4: ALERTE PROACTIVE OBLIGAȚII (Zilnic 08:00) — Pas 10.1
 # ============================================================
 
 def run_proactive_alerts(bot_token: str) -> None:
     """
     Job zilnic — alerte pentru obligații fiscale cu termen apropiat.
-
-    Verifică toți userii și trimite reminder Telegram pentru:
-      • 7 zile rămase  → AVERTISMENT
-      • 3 zile rămase  → URGENT
-      • Ziua termenului → ASTĂZI EXPIRĂ
-      • Depășit         → zilnic primele 7 zile, apoi săptămânal
-
     Anti-spam: tabelul fiscal_alert_sent previne trimiterea dublă.
     """
     try:
@@ -253,6 +243,27 @@ def run_proactive_alerts(bot_token: str) -> None:
         )
     except Exception as e:
         logger.error(f"run_proactive_alerts error: {e}")
+
+
+# ============================================================
+#  ⭐ JOB 5: WEEKLY COMPLIANCE DASHBOARD (Luni 08:30) — Pas 10.3
+# ============================================================
+
+def run_weekly_dashboard(bot_token: str) -> None:
+    """
+    Job săptămânal — dashboard compliance cu score 0-100.
+    Rulează Luni 08:30 (după reminder-ul de la 08:00).
+    """
+    try:
+        from app.services.proactive_alerts import send_weekly_compliance_dashboard
+        stats = send_weekly_compliance_dashboard(bot_token)
+        logger.info(
+            f"✅ Weekly dashboard job done: "
+            f"{stats.get('dashboards_sent', 0)} dashboards sent, "
+            f"{stats.get('errors', 0)} errors"
+        )
+    except Exception as e:
+        logger.error(f"run_weekly_dashboard error: {e}")
 
 
 # ============================================================
@@ -271,6 +282,17 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         ),
         id="weekly_reminder",
         name="Weekly document reminder",
+        replace_existing=True,
+    )
+
+    # ⭐ Pas 10.3: Dashboard compliance: Luni 08:30
+    scheduler.add_job(
+        func=lambda: run_weekly_dashboard(bot_token),
+        trigger=CronTrigger(
+            day_of_week="mon", hour=8, minute=30, timezone=ROMANIA_TZ
+        ),
+        id="weekly_dashboard",
+        name="Weekly compliance dashboard",
         replace_existing=True,
     )
 
@@ -296,7 +318,7 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
-    # ⭐ Pas 10.1: Alerte proactive obligații — ZILNIC 08:00
+    # Pas 10.1: Alerte proactive obligații — ZILNIC 08:00
     scheduler.add_job(
         func=lambda: run_proactive_alerts(bot_token),
         trigger=CronTrigger(
@@ -311,8 +333,9 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
     logger.info(
         "✅ Scheduler started:\n"
         "   • Luni 08:00 — reminder săptămânal\n"
+        "   • Luni 08:30 — dashboard compliance ⭐ NOU (Pas 10.3)\n"
         "   • Ziua 20, 09:00 — alerte termene fiscale (legacy)\n"
         "   • Ziua 1, 07:00 — monitorizare legislativă\n"
-        "   • Zilnic 08:00 — alerte proactive obligații ⭐ NOU (Pas 10.1)"
+        "   • Zilnic 08:00 — alerte proactive obligații (Pas 10.1)"
     )
     return scheduler
