@@ -14,7 +14,8 @@ from app.services import posting
 from app.services import tax_engine
 from app.services import scheduler as sched_service
 from app.services import onboarding
-from app.services import plata_fiscala  # ⭐ Pas 11.4
+from app.services import plata_fiscala  # Pas 11.4
+from app.services import reminder_ui  # ⭐ Pas 10.2
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -50,7 +51,7 @@ BTN_RAPORT = "📊 Raport"
 BTN_REGISTRU = "📂 Registru"
 BTN_DASHBOARD = "🖥️ Dashboard"
 BTN_CALENDAR = "📋 Calendar Fiscal"
-BTN_PLATA = plata_fiscala.BTN_PLATA  # ⭐ Pas 11.4: "💳 Plată Fiscală"
+BTN_PLATA = plata_fiscala.BTN_PLATA  # Pas 11.4: "💳 Plată Fiscală"
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 
@@ -81,7 +82,7 @@ def build_main_menu():
             KeyboardButton(BTN_DASHBOARD, web_app=WebAppInfo(url=DASHBOARD_URL)),
             KeyboardButton(BTN_CALENDAR),
         ],
-        [KeyboardButton(BTN_PLATA)],  # ⭐ Pas 11.4
+        [KeyboardButton(BTN_PLATA)],  # Pas 11.4
         [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
@@ -139,7 +140,9 @@ def build_registru_type_picker():
 def build_settings_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("👤 Vezi profilul meu", callback_data="settings|profil")],
-        [InlineKeyboardButton("🔔 Alerte fiscale", callback_data="settings|alerts")],
+        [InlineKeyboardButton("🔔 Alerte fiscale (legislative)", callback_data="settings|alerts")],
+        # ⭐ Pas 10.2: NOU - Configurare reminder-uri obligații
+        [InlineKeyboardButton(reminder_ui.BTN_LABEL, callback_data="reminder|menu")],
         [InlineKeyboardButton("⏰ Trimite reminder manual", callback_data="settings|reminder")],
         [InlineKeyboardButton("📥 Export CSV", callback_data="settings|export")],
         [InlineKeyboardButton("🗑️ Reset (șterge toate datele)", callback_data="settings|reset|ask")],
@@ -347,11 +350,7 @@ def _tx_count_label(n: int) -> str:
 
 
 def _resolve_expense_meta(activity, platforma, detalii):
-    """
-    Returnează (icon, label, deductibility_pct, note) pentru o cheltuială.
-    Folosește keyword-urile activității user-ului pentru detectare.
-    Fallback elegant dacă nu match-uie nicio categorie.
-    """
+    """Returnează (icon, label, deductibility_pct, note) pentru o cheltuială."""
     default_icon = "🛒"
     default_label = "Cheltuială"
     default_pct = 100
@@ -364,7 +363,6 @@ def _resolve_expense_meta(activity, platforma, detalii):
     if not text:
         return default_icon, default_label, default_pct, default_note
 
-    # Caută match pe keywords
     for cat in activity.expense_categories:
         if not cat.keywords:
             continue
@@ -376,7 +374,6 @@ def _resolve_expense_meta(activity, platforma, detalii):
                 cat.deductibility_note or "",
             )
 
-    # No match → fallback la "other_expense" dacă există
     other = activity.get_expense_category("other_expense")
     if other:
         return (
@@ -433,11 +430,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 # ============================================================
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /start — verifică status onboarding:
-    - Dacă user e onboarded → afișează meniul principal
-    - Altfel → începe/continuă onboarding-ul
-    """
+    """/start — verifică status onboarding."""
     ensure_user(update)
     tg_id = update.effective_user.id
 
@@ -478,6 +471,9 @@ async def send_ajutor(chat_id, context):
         "• 📋 *Calendar* — termene fiscale\n"
         "• 💳 *Plată Fiscală* — IBAN + sumă pre-calculate\n"
         "• ⚙️ *Setări* — alerte, profil, export, reset\n\n"
+        "🔔 *Alerte automate (Setări)*\n"
+        "• *Alerte fiscale* — modificări legislative ANAF\n"
+        "• *Reminder-uri obligații* — termene proprii (D301, D100, etc.)\n\n"
         "💬 *Comenzi text*\n"
         "• `/start` — meniul principal\n"
         "• `/profil` — vezi profilul tău\n"
@@ -492,7 +488,7 @@ async def send_ajutor(chat_id, context):
 
 
 async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/profil — afișează profilul curent al utilizatorului."""
+    """/profil — afișează profilul curent."""
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Eroare identificare utilizator.")
@@ -540,7 +536,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/reset_profil — relansează onboarding-ul (pentru editare profil)."""
+    """/reset_profil — relansează onboarding-ul."""
     ensure_user(update)
     tg_id = update.effective_user.id
 
@@ -607,7 +603,7 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode="Markdown",
             reply_markup=build_year_picker("fiscal", years),
         )
-    elif text == BTN_PLATA:  # ⭐ Pas 11.4
+    elif text == BTN_PLATA:
         await plata_fiscala.handle_menu_button(update, context)
     elif text == BTN_SETARI:
         await update.message.reply_text(
@@ -750,7 +746,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await execute_show_profil(query, context, user_id)
             elif parts[1] == "alerts":
                 await query.edit_message_text(
-                    "🔔 *Alerte fiscale*\n\n"
+                    "🔔 *Alerte fiscale (legislative)*\n\n"
                     "Monitorizare automată ANAF/Monitorul Oficial pentru "
                     "modificări legislative.",
                     parse_mode="Markdown",
@@ -810,9 +806,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
-        # ⭐ Pas 11.4: Plată Fiscală
+        # Pas 11.4: Plată Fiscală
         if namespace == "plata":
             await plata_fiscala.handle_callback(update, context, parts)
+            return
+
+        # ⭐ Pas 10.2: Reminder UI (configurare alerte proactive)
+        if namespace == "reminder":
+            await reminder_ui.handle_callback(update, context, parts)
             return
 
     except Exception as e:
@@ -1252,7 +1253,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test ANAF — îl păstrăm pentru debug. Va fi eliminat ulterior."""
+    """Test ANAF — debug."""
     args = context.args or []
     cui = args[0] if args else "53067338"
     await update.message.reply_text(f"🔄 Caut CUI `{cui}` în ANAF...", parse_mode="Markdown")
@@ -1315,7 +1316,6 @@ async def process_entry(
         )
         return
 
-    # ⭐ Activitatea user-ului — pentru personalizare mesaj
     activity = get_activity_for_user(user_id) if user_id else None
 
     try:
@@ -1346,7 +1346,6 @@ async def process_entry(
             doc_tag = f" #{doc_id}" if doc_id else ""
             tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
 
-            # Folder label din data documentului
             try:
                 d_obj = datetime.strptime(data_doc, "%d.%m.%Y")
                 folder_label = f"{LUNI_LONG.get(d_obj.month, '?')} {d_obj.year}"
@@ -1362,7 +1361,6 @@ async def process_entry(
                     f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
                 )
             elif tip == DocType.CHELTUIALA:
-                # ⭐ ACTIVITY-AWARE: detectăm categoria + iconul + deductibilitatea
                 cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(
                     activity, item.platforma, item.detalii
                 )
@@ -1387,7 +1385,6 @@ async def process_entry(
                     lines.append(f"   ℹ️ _{note_short}_")
                 msg_confirm += "\n".join(lines) + "\n"
             else:
-                # VENIT
                 net_display = item.net if item.net > 0 else item.brut
                 card_display = round(net_display - item.cash, 2)
                 platforma_tag = f" {item.platforma}" if item.platforma else ""
@@ -1481,18 +1478,15 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text or ""
     tg_id = update.effective_user.id
 
-    # 1. Verificăm dacă user e în onboarding și așteaptă text
     if onboarding.user_is_in_onboarding(tg_id):
         handled = await onboarding.handle_onboarding_text(update, context)
         if handled:
             return
 
-    # 2. Buton meniu principal?
     if text in MAIN_MENU_BUTTONS:
         await handle_menu_button(update, context, text)
         return
 
-    # 3. Altfel — procesăm ca document
     await process_entry(update, context, text_input=text)
 
 
@@ -1534,7 +1528,6 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
-    # ⭐ Pas 11.4: comanda /plata_fiscala
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
 
     # Callback queries (router pentru toate butoanele inline)
@@ -1548,5 +1541,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v9 — Compliance Engine Ready (Pas 11 COMPLET)")
+    print("🤖 Bot Contabil v10 — Compliance Engine + Proactive Alerts ONLINE (Pas 11 + 10.1 + 10.2)")
     app_bot.run_polling()
