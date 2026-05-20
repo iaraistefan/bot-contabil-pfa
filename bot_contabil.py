@@ -1543,4 +1543,3 @@ if __name__ == '__main__':
 
     print("🤖 Bot Contabil v10 — Compliance Engine + Proactive Alerts ONLINE (Pas 11 + 10.1 + 10.2)")
     app_bot.run_polling()
-Try 
