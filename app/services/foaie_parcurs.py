@@ -749,7 +749,7 @@ async def handle_callback(
                 "`parcurs azi 180 km aprovizionare`\n"
                 "`parcurs 15.05.2026 220 km`\n\n"
                 "_Data poate fi `azi`, `ieri`, sau `ZZ.LL`._\n"
-                "_Dacă nu specifici scopul, se trece „Curse Bolt"._",
+                "_Daca nu specifici scopul, se trece Curse Bolt._",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton(
