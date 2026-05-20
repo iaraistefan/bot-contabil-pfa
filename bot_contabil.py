@@ -8,6 +8,7 @@ from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
 from app.repositories import tax_periods as tax_periods_repo
 from app import storage
+from app import monitoring  # ⭐ Pas 13.1 — Sentry error tracking
 from app.ai import client as ai_client
 from app.ai import fiscal_monitor as fiscal_mon
 from app.services import posting
@@ -15,7 +16,7 @@ from app.services import tax_engine
 from app.services import scheduler as sched_service
 from app.services import onboarding
 from app.services import plata_fiscala  # Pas 11.4
-from app.services import reminder_ui  # ⭐ Pas 10.2
+from app.services import reminder_ui  # Pas 10.2
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -141,7 +142,7 @@ def build_settings_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("👤 Vezi profilul meu", callback_data="settings|profil")],
         [InlineKeyboardButton("🔔 Alerte fiscale (legislative)", callback_data="settings|alerts")],
-        # ⭐ Pas 10.2: NOU - Configurare reminder-uri obligații
+        # Pas 10.2: Configurare reminder-uri obligații
         [InlineKeyboardButton(reminder_ui.BTN_LABEL, callback_data="reminder|menu")],
         [InlineKeyboardButton("⏰ Trimite reminder manual", callback_data="settings|reminder")],
         [InlineKeyboardButton("📥 Export CSV", callback_data="settings|export")],
@@ -193,6 +194,8 @@ def ensure_user(update: Update):
                 )
             user_id = user.id
             session.commit()
+            # ⭐ Pas 13.1 — context Sentry (ID-uri, fără date personale)
+            monitoring.set_user_context(user_id=user_id, telegram_id=tg_user.id)
             return user_id
         except Exception as e:
             session.rollback()
@@ -394,6 +397,21 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     error = context.error
     tb_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     logger.error(f"Unhandled exception:\n{tb_str}")
+
+    # ⭐ Pas 13.1 — trimitem eroarea la Sentry cu context
+    update_info = "n/a"
+    try:
+        if isinstance(update, Update):
+            if update.effective_user:
+                update_info = f"telegram_id={update.effective_user.id}"
+            if update.callback_query:
+                update_info += f" callback={update.callback_query.data}"
+            elif update.effective_message and update.effective_message.text:
+                update_info += f" text={update.effective_message.text[:80]}"
+    except Exception:
+        pass
+    monitoring.capture_exception(error, update_info=update_info)
+
     try:
         user_id = None
         if isinstance(update, Update) and update.effective_user:
@@ -479,6 +497,7 @@ async def send_ajutor(chat_id, context):
         "• `/profil` — vezi profilul tău\n"
         "• `/reset_profil` — refă onboarding\n"
         "• `/plata_fiscala` — wizard plată ANAF\n"
+        "• `/status` — starea bot-ului\n"
         "• `/delete <ID>` — șterge un document"
     )
     await context.bot.send_message(
@@ -564,6 +583,57 @@ async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE
     await onboarding.start_onboarding(update, context)
 
 
+async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """⭐ Pas 13.1 — /status: starea bot-ului (healthcheck rapid)."""
+    user_id = ensure_user(update)
+
+    # Verificăm conexiunea DB
+    db_ok = False
+    doc_count = 0
+    tx_count = 0
+    try:
+        session = get_session()
+        try:
+            from app.models import Document, Transaction
+            if user_id:
+                doc_count = (
+                    session.query(Document)
+                    .filter(Document.user_id == user_id,
+                            Document.status != "rejected")
+                    .count()
+                )
+                tx_count = (
+                    session.query(Transaction)
+                    .filter(Transaction.user_id == user_id)
+                    .count()
+                )
+            db_ok = True
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"status DB check error: {e}")
+
+    sentry_status = "✅ Activ" if monitoring.is_active() else "🔕 Inactiv"
+    db_status = "✅ Conectat" if db_ok else "❌ Eroare"
+
+    msg = (
+        "🤖 *Status Bot Contabil*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"⚙️ Versiune: *v11* (Compliance + Alerts + Monitoring)\n"
+        f"🗄️ Bază de date: {db_status}\n"
+        f"📡 Error tracking: {sentry_status}\n\n"
+        f"📊 *Datele tale:*\n"
+        f"• Documente: *{doc_count}*\n"
+        f"• Tranzacții: *{tx_count}*\n\n"
+        f"🕐 *Joburi automate:*\n"
+        f"• Zilnic 08:00 — alerte obligații\n"
+        f"• Luni 08:30 — dashboard conformitate\n"
+        f"• Ziua 1 — monitorizare legislativă\n\n"
+        f"_Sistemul funcționează normal._"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+
 # ============================================================
 #                    MENU BUTTON HANDLERS
 # ============================================================
@@ -631,6 +701,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     parts = data.split("|")
     namespace = parts[0]
+
+    # ⭐ Pas 13.1 — breadcrumb pentru Sentry
+    monitoring.add_breadcrumb(f"callback: {data}", category="callback")
 
     # === ONBOARDING ===
     if namespace == "onb":
@@ -811,13 +884,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await plata_fiscala.handle_callback(update, context, parts)
             return
 
-        # ⭐ Pas 10.2: Reminder UI (configurare alerte proactive)
+        # Pas 10.2: Reminder UI (configurare alerte proactive)
         if namespace == "reminder":
             await reminder_ui.handle_callback(update, context, parts)
             return
 
     except Exception as e:
         logger.error(f"Callback handler error data={data}: {e}")
+        # ⭐ Pas 13.1 — trimitem la Sentry
+        monitoring.capture_exception(e, callback_data=data)
         try:
             await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
         except Exception:
@@ -1406,6 +1481,8 @@ async def process_entry(
         )
     except Exception as e:
         logger.error(f"Error processing items: {e}")
+        # ⭐ Pas 13.1 — trimitem la Sentry
+        monitoring.capture_exception(e, stage="process_entry")
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"❌ Eroare sistem: {str(e)}"
@@ -1495,16 +1572,21 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ============================================================
 
 if __name__ == '__main__':
+    # ⭐ Pas 13.1 — Sentry PRIMUL, ca să capteze și erorile de pornire
+    monitoring.init_sentry()
+
     try:
         init_db()
         logger.info("✅ DB init OK")
     except Exception as e:
         logger.error(f"❌ DB init FAILED: {e}")
+        monitoring.capture_exception(e, stage="init_db")
 
     try:
         run_migrations()
     except Exception as e:
         logger.error(f"❌ Migrations FAILED: {e}")
+        monitoring.capture_exception(e, stage="run_migrations")
 
     try:
         storage.ensure_storage_dir()
@@ -1518,6 +1600,7 @@ if __name__ == '__main__':
         sched_service.start_scheduler(settings.telegram_token)
     except Exception as e:
         logger.error(f"❌ Scheduler FAILED: {e}")
+        monitoring.capture_exception(e, stage="start_scheduler")
 
     app_bot = ApplicationBuilder().token(settings.telegram_token).build()
 
@@ -1526,6 +1609,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
+    app_bot.add_handler(CommandHandler("status", handle_status))  # ⭐ Pas 13.1
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
@@ -1541,5 +1625,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v10 — Compliance Engine + Proactive Alerts ONLINE (Pas 11 + 10.1 + 10.2)")
+    print("🤖 Bot Contabil v11 — Compliance + Proactive Alerts + Monitoring ONLINE (Pas 11 + 10 + 13.1)")
     app_bot.run_polling()
