@@ -54,12 +54,9 @@ class User(Base):
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
-    # === ⭐ Pas 10.1 — Configurare Proactive Alerts ===
-    # Pornește activate (default True) — user poate dezactiva din meniu
+    # === Pas 10.1 — Proactive alerts config ===
     proactive_alerts_enabled = Column(Boolean, nullable=False, default=True)
-    # Ora la care primește alertele zilnice (0-23). Default 08:00
     proactive_alerts_hour = Column(Integer, nullable=False, default=8)
-    # Câte zile înainte de termen să primească prima alertă (1-30). Default 7
     proactive_alerts_advance_days = Column(Integer, nullable=False, default=7)
 
     # === Relations ===
@@ -68,10 +65,13 @@ class User(Base):
     transactions = relationship("Transaction", back_populates="user")
     tax_periods = relationship("TaxPeriod", back_populates="user")
     fiscal_alerts = relationship("FiscalAlert", back_populates="user")
-    # ⭐ Pas 10.1
     fiscal_alerts_sent = relationship(
-        "FiscalAlertSent",
-        back_populates="user",
+        "FiscalAlertSent", back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    # ⭐ Pas 14
+    trip_logs = relationship(
+        "TripLog", back_populates="user",
         cascade="all, delete-orphan",
     )
 
@@ -123,8 +123,6 @@ class Document(Base):
     prompt_version = Column(String(50), nullable=True)
 
     # === VAT_ID al furnizorului (Pas 8.2) ===
-    # Format: prefix țară (2 litere) + cifre. Ex: "EE102094445", "RO12345678"
-    # Nullable: nu apare pe bonuri fiscale RO simple, dar pe facturi UE/comerciale da
     vat_id = Column(String(20), nullable=True, index=True)
 
     user = relationship("User", back_populates="documents")
@@ -185,10 +183,7 @@ class TaxPeriod(Base):
 
 
 class FiscalAlert(Base):
-    """
-    Alerte legislative (modificări ANAF/MOf) — generate de AI fiscal_monitor.
-    NU sunt confundate cu FiscalAlertSent (anti-spam pentru proactive_alerts).
-    """
+    """Alerte legislative (modificări ANAF/MOf) — generate de AI fiscal_monitor."""
     __tablename__ = "fiscal_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -248,55 +243,35 @@ class AuditLog(Base):
 
 
 # ============================================================
-# ⭐ Pas 10.1 — FiscalAlertSent (Proactive Alerts anti-spam)
+# Pas 10.1 — FiscalAlertSent (Proactive Alerts anti-spam)
 # ============================================================
 
 class FiscalAlertSent(Base):
     """
-    Pas 10.1 — Tracking pentru alerte proactive trimise.
-
-    Folosit ca ANTI-SPAM de către `app.services.proactive_alerts`:
-    înainte să trimită o alertă, verifică dacă există deja înregistrare
-    cu aceeași combinație (user, obligație, perioadă, tip_alertă).
-
+    Pas 10.1 — Tracking pentru alerte proactive trimise (anti-spam).
     NU se confundă cu FiscalAlert (alerte legislative ANAF/MOf).
-
-    alert_type values:
-      - "advance_7d"    → 7 zile rămase până la termen
-      - "advance_3d"    → 3 zile rămase
-      - "due_today"     → ziua termenului
-      - "overdue_d1".."overdue_d7" → 1-7 zile depășit (zilnic)
-      - "overdue_w2", "overdue_w3", ... → săptămânile 2, 3, ... (săptămânal)
     """
     __tablename__ = "fiscal_alert_sent"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
     )
     obligation_code = Column(String(50), nullable=False)
-    # Ex: "D100" (din "D100 poz. 634"), "D301", "D212", "D207"
-
     period_year = Column(Integer, nullable=False)
     period_month = Column(Integer, nullable=False)
     alert_type = Column(String(30), nullable=False)
-
     sent_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     status = Column(String(20), nullable=False, default="delivered")
-    # Valori: "delivered" / "failed"
 
     user = relationship("User", back_populates="fiscal_alerts_sent")
 
     __table_args__ = (
-        # Unique compus: previne trimiterea aceleiași alerte de două ori
         UniqueConstraint(
             "user_id", "obligation_code", "period_year",
             "period_month", "alert_type",
             name="ix_fas_unique",
         ),
-        # Lookup pe user + dată (pentru istoricul alertelor)
         Index("ix_fas_user_sent_at", "user_id", "sent_at"),
     )
 
@@ -305,4 +280,51 @@ class FiscalAlertSent(Base):
             f"<FiscalAlertSent user={self.user_id} "
             f"{self.obligation_code} {self.period_year}/{self.period_month:02d} "
             f"type={self.alert_type}>"
+        )
+
+
+# ============================================================
+# ⭐ Pas 14 — TripLog (Foaie de parcurs / jurnal km auto)
+# ============================================================
+
+class TripLog(Base):
+    """
+    Pas 14 — Foaie de parcurs: o intrare = o zi de deplasare.
+
+    Justifică deductibilitatea cheltuielilor auto (combustibil) prin
+    documentarea km parcurși în interesul activității.
+
+    Câmpuri:
+      • trip_date    — ziua deplasării
+      • km           — km parcurși (obligatoriu)
+      • odometer_*   — citire bord start/sfârșit (opțional)
+      • purpose      — scop/traseu (ex: "curse Bolt Bistrița")
+      • period_*     — derivate din trip_date pentru raportare rapidă
+    """
+    __tablename__ = "trip_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    trip_date = Column(Date, nullable=False, index=True)
+    km = Column(Float, nullable=False, default=0.0)
+    odometer_start = Column(Integer, nullable=True)
+    odometer_end = Column(Integer, nullable=True)
+    purpose = Column(String(255), nullable=True)
+    period_year = Column(Integer, nullable=False, index=True)
+    period_month = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="trip_logs")
+
+    __table_args__ = (
+        Index("ix_trip_logs_user_period", "user_id", "period_year", "period_month"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<TripLog user={self.user_id} {self.trip_date} "
+            f"km={self.km} purpose={self.purpose!r}>"
         )
