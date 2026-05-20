@@ -15,38 +15,24 @@ from db import get_session
 logger = logging.getLogger(__name__)
 
 
-# Lista migrărilor — fiecare e o listă de comenzi SQL idempotente.
-# Pentru a adăuga o migrare nouă, adaugă o intrare nouă cu ID unic.
-
 MIGRATIONS = [
     {
         "id": "001_user_profile_fields",
         "description": "Add user profile fields (firma, CUI, regim, activitate)",
         "sql": [
-            # Profil firmă
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_nume VARCHAR(255)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_cui VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_forma_juridica VARCHAR(20)",
             "CREATE INDEX IF NOT EXISTS ix_users_firma_cui ON users(firma_cui)",
-
-            # Regim fiscal
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_tva VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_impunere VARCHAR(20)",
-
-            # Activitate
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS caen_principal VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_code VARCHAR(50)",
-
-            # Locație
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS judet VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS localitate VARCHAR(100)",
-
-            # Stare onboarding
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_inceput_activitate DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_step INTEGER NOT NULL DEFAULT 0",
-
-            # Contact
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(150)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS telefon VARCHAR(30)",
         ],
@@ -82,8 +68,6 @@ MIGRATIONS = [
             "of supplier country (RO/UE/non-UE) and VAT treatment"
         ),
         "sql": [
-            # Câmp pentru VAT_ID al furnizorului (ex: "EE102094445", "IE6388047V", "RO12345678")
-            # Nullable pentru că nu apare pe toate documentele (ex: bonuri fiscale RO)
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS vat_id VARCHAR(20)",
             "CREATE INDEX IF NOT EXISTS ix_documents_vat_id ON documents(vat_id)",
         ],
@@ -95,7 +79,6 @@ MIGRATIONS = [
             "(anti-spam) și 3 coloane în users pentru configurare alerte"
         ),
         "sql": [
-            # ── Tabel nou pentru tracking alerte trimise (anti-spam) ─────
             """
             CREATE TABLE IF NOT EXISTS fiscal_alert_sent (
                 id              SERIAL PRIMARY KEY,
@@ -108,7 +91,6 @@ MIGRATIONS = [
                 status          VARCHAR(20) NOT NULL DEFAULT 'delivered'
             )
             """,
-            # Index UNIQUE compus: previne trimiterea aceleiași alerte de două ori
             """
             CREATE UNIQUE INDEX IF NOT EXISTS ix_fas_unique
                 ON fiscal_alert_sent (
@@ -116,12 +98,10 @@ MIGRATIONS = [
                     period_month, alert_type
                 )
             """,
-            # Index secundar pentru lookup pe user + dată
             """
             CREATE INDEX IF NOT EXISTS ix_fas_user_sent_at
                 ON fiscal_alert_sent (user_id, sent_at DESC)
             """,
-            # ── Coloane noi în users pentru configurare alerte ───────────
             """
             ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS proactive_alerts_enabled
@@ -136,6 +116,37 @@ MIGRATIONS = [
             ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS proactive_alerts_advance_days
                 INTEGER NOT NULL DEFAULT 7
+            """,
+        ],
+    },
+    {
+        "id": "005_trip_logs",
+        "description": (
+            "Pas 14: Foaie de parcurs — tabelul trip_logs pentru jurnal "
+            "km auto (deductibilitate combustibil)"
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS trip_logs (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                trip_date       DATE NOT NULL,
+                km              DOUBLE PRECISION NOT NULL DEFAULT 0,
+                odometer_start  INTEGER,
+                odometer_end    INTEGER,
+                purpose         VARCHAR(255),
+                period_year     INTEGER NOT NULL,
+                period_month    INTEGER NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_trip_logs_user_period
+                ON trip_logs (user_id, period_year, period_month)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_trip_logs_date
+                ON trip_logs (user_id, trip_date)
             """,
         ],
     },
