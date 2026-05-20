@@ -1,33 +1,34 @@
 """
-Pas 10.1 — Proactive Alerts: Reminder zilnic Telegram pentru obligații fiscale.
+Pas 10 — Proactive Alerts: Reminder zilnic + Dashboard săptămânal.
 
-ARHITECTURĂ:
-- Job zilnic la 8:00 (configurable per user)
-- Pentru fiecare user onboarded:
-    1. Construiește contextul (formă juridică, factură Bolt curentă)
-    2. Calculează obligațiile aplicabile (folosind fiscal_calendar)
-    3. Filtrează cele cu termen apropiat sau depășit
-    4. Trimite alerte Telegram (cu anti-spam prin tabelul fiscal_alert_sent)
-- Logica de alertare smart (4 puncte temporale, fără spam):
-    • 7 zile rămase  → AVERTISMENT
-    • 3 zile rămase  → URGENT
-    • Ziua termenului → ASTĂZI EXPIRĂ
-    • Depășit         → zilnic primele 7 zile, apoi săptămânal
+COMPONENTE:
+  • check_and_send_proactive_alerts() — job zilnic 08:00 (Pas 10.1)
+  • send_weekly_compliance_dashboard() — job Luni 08:30 (Pas 10.3)
+  • test_alerts_for_user() — test manual din UI (Pas 10.2)
+
+LOGICA DE ALERTARE (zilnic, 4 puncte temporale, anti-spam):
+  • 7 zile rămase  → AVERTISMENT
+  • 3 zile rămase  → URGENT
+  • Ziua termenului → ASTĂZI EXPIRĂ
+  • Depășit         → zilnic primele 7 zile, apoi săptămânal
+
+DASHBOARD SĂPTĂMÂNAL (Luni 08:30):
+  • Score compliance 0-100
+  • Obligații depășite / apropiate / de urmărit
+  • Verdict colorat
 
 ANTI-SPAM:
-- Tabelul `fiscal_alert_sent` păstrează cheia unică:
+  • Tabelul fiscal_alert_sent — cheie unică
     (user_id, obligation_code, period_year, period_month, alert_type)
-- Înainte de trimitere → check dacă există → skip dacă da
 
 DEPENDS ON:
-- app.domain.fiscal_calendar (Pas 11.2)
-- app.domain.compliance_guardian (Pas 11.3)
-- app.services.plata_fiscala (Pas 11.4) — helper-e (importate privat)
-- app.models.FiscalAlertSent (NOU — migration 004)
-- app.models.User.proactive_alerts_* (NOU — migration 004)
+  • app.domain.fiscal_calendar (Pas 11.2)
+  • app.models.FiscalAlertSent (migration 004)
+  • app.models.User.proactive_alerts_* (migration 004)
 
 CHANGELOG:
-- v1 (16.05.2026, Pas 10.1): Versiune inițială backend
+  • v1 (Pas 10.1): backend alerte zilnice
+  • v2 (Pas 10.3): + weekly compliance dashboard
 """
 
 import logging
@@ -56,6 +57,12 @@ ALERT_OVERDUE_WEEKLY_TPL = "overdue_w{week}"     # săptămânile 2+
 DEFAULT_PROACTIVE_ENABLED = True
 DEFAULT_ALERTS_HOUR = 8
 DEFAULT_ADVANCE_DAYS = 7
+
+# Praguri scoring compliance (Pas 10.3)
+SCORE_BASE = 100
+PENALTY_OVERDUE = 25      # obligație depășită
+PENALTY_URGENT = 10       # 0-3 zile rămase
+PENALTY_SOON = 5          # 4-7 zile rămase
 
 LUNI_RO = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
@@ -96,39 +103,28 @@ def _send_telegram_message(
 def _determine_alert_type(zile_ramase: int) -> Optional[str]:
     """
     Determină ce tip de alertă să trimitem pentru o obligație.
-
     Returns None dacă nu e momentul de alertat (anti-spam).
     """
-    # Ziua termenului
     if zile_ramase == 0:
         return ALERT_DUE_TODAY
-    # 3 zile rămase
     if zile_ramase == 3:
         return ALERT_ADVANCE_3D
-    # 7 zile rămase
     if zile_ramase == 7:
         return ALERT_ADVANCE_7D
-    # Depășit
     if zile_ramase < 0:
         days_overdue = abs(zile_ramase)
         if days_overdue <= 7:
             return ALERT_OVERDUE_DAILY_TPL.format(days=days_overdue)
         else:
-            # Săptămânale: ziua 8, 15, 22, etc.
             if days_overdue % 7 == 1:
                 week = (days_overdue - 1) // 7 + 1
                 return ALERT_OVERDUE_WEEKLY_TPL.format(week=week)
-    # Altfel — nu alertăm (1, 2, 4, 5, 6 zile rămase)
     return None
 
 
 def _was_alert_sent(
-    session,
-    user_id: int,
-    obligation_code: str,
-    period_year: int,
-    period_month: int,
-    alert_type: str,
+    session, user_id: int, obligation_code: str,
+    period_year: int, period_month: int, alert_type: str,
 ) -> bool:
     """Verifică dacă o alertă specifică a fost deja trimisă."""
     try:
@@ -152,12 +148,8 @@ def _was_alert_sent(
 
 
 def _log_alert_sent(
-    session,
-    user_id: int,
-    obligation_code: str,
-    period_year: int,
-    period_month: int,
-    alert_type: str,
+    session, user_id: int, obligation_code: str,
+    period_year: int, period_month: int, alert_type: str,
     status: str = "delivered",
 ) -> None:
     """Salvează în DB că am trimis o alertă."""
@@ -179,10 +171,8 @@ def _log_alert_sent(
 
 
 # ============================================================
-#               CONTEXT BUILDERS (similar plata_fiscala)
+#               CONTEXT BUILDERS
 # ============================================================
-# Le duplicăm aici pentru a NU modifica plata_fiscala.py existent.
-# DRY trade-off: 30 linii duplicate vs zero risc de regresie.
 
 JUDET_NAME_TO_CODE = {
     "BISTRITA-NASAUD": "BN", "BISTRIȚA-NĂSĂUD": "BN",
@@ -260,17 +250,84 @@ def _get_intracom_base_for_month(
         return 0.0
 
 
+def _get_months_to_check(today: date) -> List[Tuple[int, int]]:
+    """
+    Returnează lunile pentru care verificăm obligații:
+    luna curentă, luna anterioară, luna în urmă cu 2.
+    """
+    months = []
+    months.append((today.year, today.month))
+
+    if today.month == 1:
+        months.append((today.year - 1, 12))
+    else:
+        months.append((today.year, today.month - 1))
+
+    if today.month == 1:
+        months.append((today.year - 1, 11))
+    elif today.month == 2:
+        months.append((today.year - 1, 12))
+    else:
+        months.append((today.year, today.month - 2))
+
+    return months
+
+
+def _collect_all_obligations(
+    session, user, ctx: Dict, today: date
+) -> List:
+    """
+    Colectează toate obligațiile aplicabile din lunile relevante.
+    Deduplicate pe (cod, perioada_an, perioada_luna).
+    """
+    from app.domain.fiscal_calendar import get_obligations_for_user
+
+    all_obligatii = []
+    seen = set()
+
+    for year, month in _get_months_to_check(today):
+        intracom_base = _get_intracom_base_for_month(
+            session, user.id, year, month
+        )
+        try:
+            obligatii = get_obligations_for_user(
+                year, month,
+                forma_juridica=ctx["forma_juridica"],
+                activity_code=ctx["activity_code"],
+                has_intracom_invoice=intracom_base > 0,
+                intracom_base_amount=intracom_base,
+                has_cod_special_tva=ctx["has_cod_special_tva"],
+                is_vat_payer=ctx["is_vat_payer"],
+                judet=ctx["judet"],
+                only_applicable=True,
+                today=today,
+            )
+        except Exception as e:
+            logger.error(
+                f"_collect_all_obligations error {year}/{month}: {e}"
+            )
+            continue
+
+        for o in obligatii:
+            key = (
+                o.definitie.cod,
+                o.perioada_an or year,
+                o.perioada_luna or month,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            all_obligatii.append(o)
+
+    return all_obligatii
+
+
 # ============================================================
-#               FORMAT TELEGRAM ALERT
+#               FORMAT TELEGRAM ALERT (zilnic)
 # ============================================================
 
-def _format_alert_message(
-    obligation,  # ObligatieCalculate
-    alert_type: str,
-    ctx: Dict,
-) -> str:
-    """Construiește mesajul Telegram pentru o alertă."""
-    # Header bazat pe tipul alertei
+def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
+    """Construiește mesajul Telegram pentru o alertă zilnică."""
     if alert_type == ALERT_ADVANCE_7D:
         header = "🟡 *AVERTISMENT FISCAL — 7 zile rămase*"
     elif alert_type == ALERT_ADVANCE_3D:
@@ -303,11 +360,10 @@ def _format_alert_message(
 
     if obligation.iban_cont:
         lines.append("")
-        lines.append(f"🏦 IBAN PLATĂ:")
+        lines.append("🏦 IBAN PLATĂ:")
         lines.append(f"`{obligation.iban_cont.iban}`")
         lines.append(f"   Cod buget: `{obligation.iban_cont.cod_buget}`")
 
-    # Majorări pentru overdue
     if obligation.zile_ramase < 0 and obligation.suma_estimata:
         majorari = (
             obligation.suma_estimata * 0.0002 * abs(obligation.zile_ramase)
@@ -317,7 +373,6 @@ def _format_alert_message(
             f"⚠️ Majorări estimate: *{majorari:.2f} RON* (0.02%/zi)"
         )
 
-    # Bonus info
     if obligation.definitie.bonus_info:
         lines.append("")
         lines.append(f"💡 _{obligation.definitie.bonus_info}_")
@@ -333,82 +388,39 @@ def _format_alert_message(
 
 
 # ============================================================
-#               MAIN LOGIC — PER USER
+#               MAIN LOGIC — ALERTE ZILNICE
 # ============================================================
 
-def _get_months_to_check(today: date) -> List[Tuple[int, int]]:
-    """
-    Returnează lunile pentru care verificăm obligații.
-
-    Includem:
-    - Luna curentă (declarăm luna curentă → termen luna următoare)
-    - Luna anterioară (termen curent sau aproape)
-    - Luna în urmă cu 2 (pentru overdue)
-    """
-    months = []
-
-    # Luna curentă
-    months.append((today.year, today.month))
-
-    # Luna anterioară
-    if today.month == 1:
-        months.append((today.year - 1, 12))
-    else:
-        months.append((today.year, today.month - 1))
-
-    # Luna în urmă cu 2
-    if today.month == 1:
-        months.append((today.year - 1, 11))
-    elif today.month == 2:
-        months.append((today.year - 1, 12))
-    else:
-        months.append((today.year, today.month - 2))
-
-    return months
-
-
 def _process_user_alerts(
-    session,
-    bot_token: str,
-    user,
-    today: Optional[date] = None,
+    session, bot_token: str, user, today: Optional[date] = None,
 ) -> int:
-    """
-    Procesează alertele pentru un singur user.
-
-    Returns: numărul de alerte trimise.
-    """
+    """Procesează alertele zilnice pentru un user. Returns: nr alerte trimise."""
     if today is None:
         today = date.today()
 
-    # Check enable
     proactive_enabled = getattr(
         user, "proactive_alerts_enabled", DEFAULT_PROACTIVE_ENABLED
     )
     if not proactive_enabled:
         return 0
 
-    # Build context
     try:
         ctx = _build_user_context(session, user.id)
     except Exception as e:
         logger.error(f"Build context failed for user {user.id}: {e}")
         return 0
 
-    # Importăm aici ca să evităm circular imports
     from app.domain.fiscal_calendar import get_obligations_for_user
 
     alerts_sent = 0
     months_to_check = _get_months_to_check(today)
 
     for year, month in months_to_check:
-        # Factura Bolt pentru luna respectivă
         intracom_base = _get_intracom_base_for_month(
             session, user.id, year, month
         )
         has_intracom = intracom_base > 0
 
-        # Obligațiile aplicabile
         try:
             obligatii = get_obligations_for_user(
                 year, month,
@@ -424,31 +436,26 @@ def _process_user_alerts(
             )
         except Exception as e:
             logger.error(
-                f"get_obligations error for user {user.id} {year}/{month}: {e}"
+                f"get_obligations error user {user.id} {year}/{month}: {e}"
             )
             continue
 
         for obligatie in obligatii:
-            # Determină dacă e momentul de alertat
             alert_type = _determine_alert_type(obligatie.zile_ramase)
             if not alert_type:
                 continue
 
-            # Cod scurt pentru DB (D100 din "D100 poz. 634")
             obligation_code = obligatie.definitie.cod.split()[0]
             period_year = obligatie.perioada_an or year
             period_month = obligatie.perioada_luna or month
 
-            # Anti-spam check
             if _was_alert_sent(
                 session, user.id, obligation_code,
                 period_year, period_month, alert_type,
             ):
                 continue
 
-            # Construiește și trimite
             msg = _format_alert_message(obligatie, alert_type, ctx)
-
             success = _send_telegram_message(
                 bot_token, user.telegram_id, msg
             )
@@ -470,16 +477,10 @@ def _process_user_alerts(
     return alerts_sent
 
 
-# ============================================================
-#               PUBLIC API — JOB ENTRY POINT
-# ============================================================
-
 def check_and_send_proactive_alerts(bot_token: str) -> Dict[str, int]:
     """
-    Job zilnic principal — verifică toți userii pentru obligații
-    apropiate și trimite alerte.
-
-    Returns: stats {users_processed, alerts_sent}
+    Job zilnic principal — verifică toți userii și trimite alerte.
+    Returns: stats {users_processed, alerts_sent, errors}
     """
     from db import get_session
     from app.models import User
@@ -489,13 +490,11 @@ def check_and_send_proactive_alerts(bot_token: str) -> Dict[str, int]:
 
     session = get_session()
     try:
-        # Userii care au telegram_id (= activi)
         users = (
             session.query(User)
             .filter(User.telegram_id.isnot(None))
             .all()
         )
-
         today = date.today()
 
         for user in users:
@@ -518,9 +517,181 @@ def check_and_send_proactive_alerts(bot_token: str) -> Dict[str, int]:
             f"{stats['alerts_sent']} alerts, "
             f"{stats['errors']} errors"
         )
-
     except Exception as e:
         logger.error(f"check_and_send_proactive_alerts fatal error: {e}")
+    finally:
+        session.close()
+
+    return stats
+
+
+# ============================================================
+#         Pas 10.3 — WEEKLY COMPLIANCE DASHBOARD
+# ============================================================
+
+def _compute_compliance_score(obligatii: List) -> Tuple[int, str, str]:
+    """
+    Calculează scorul de compliance 0-100 din lista de obligații.
+    Returns: (score, verdict_label, verdict_emoji)
+    """
+    score = SCORE_BASE
+
+    for o in obligatii:
+        zile = o.zile_ramase
+        if zile < 0:
+            score -= PENALTY_OVERDUE
+        elif zile <= 3:
+            score -= PENALTY_URGENT
+        elif zile <= 7:
+            score -= PENALTY_SOON
+
+    score = max(0, min(100, score))
+
+    if score >= 90:
+        return score, "Excelent", "🟢"
+    elif score >= 70:
+        return score, "Bun", "🟡"
+    elif score >= 50:
+        return score, "Necesită acțiune", "🟠"
+    else:
+        return score, "Critic", "🔴"
+
+
+def _format_weekly_dashboard(
+    ctx: Dict, obligatii: List, score_data: Tuple, today: date,
+) -> str:
+    """Construiește mesajul dashboard-ului săptămânal."""
+    score, verdict_label, verdict_emoji = score_data
+    week_end = today + timedelta(days=6)
+
+    obligatii_sorted = sorted(obligatii, key=lambda o: o.zile_ramase)
+
+    overdue = [o for o in obligatii_sorted if o.zile_ramase < 0]
+    urgent = [o for o in obligatii_sorted if 0 <= o.zile_ramase <= 7]
+    upcoming = [o for o in obligatii_sorted if 7 < o.zile_ramase <= 30]
+
+    lines = [
+        "📊 *DASHBOARD COMPLIANCE SĂPTĂMÂNAL*",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"📅 _{today.strftime('%d.%m')} – "
+        f"{week_end.strftime('%d.%m.%Y')}_",
+        "",
+        f"{verdict_emoji} *Score: {score}/100* — {verdict_label}",
+        "",
+    ]
+
+    if overdue:
+        lines.append("❌ *OBLIGAȚII DEPĂȘITE:*")
+        for o in overdue:
+            lines.append(
+                f"  • *{o.definitie.cod}* — depășit "
+                f"{abs(o.zile_ramase)} zile "
+                f"(`{o.termen.strftime('%d.%m')}`)"
+            )
+            if o.suma_estimata:
+                lines.append(f"    💰 {o.suma_estimata:.2f} RON")
+        lines.append("")
+
+    if urgent:
+        lines.append("🟠 *TERMEN APROPIAT (≤7 zile):*")
+        for o in urgent:
+            zile_txt = (
+                "ASTĂZI" if o.zile_ramase == 0
+                else f"{o.zile_ramase} zile"
+            )
+            lines.append(
+                f"  • *{o.definitie.cod}* — {zile_txt} "
+                f"(`{o.termen.strftime('%d.%m')}`)"
+            )
+            if o.suma_estimata:
+                lines.append(f"    💰 {o.suma_estimata:.2f} RON")
+        lines.append("")
+
+    if upcoming:
+        lines.append("🟡 *DE URMĂRIT (8-30 zile):*")
+        for o in upcoming:
+            lines.append(
+                f"  • {o.definitie.cod} — {o.zile_ramase} zile "
+                f"(`{o.termen.strftime('%d.%m')}`)"
+            )
+        lines.append("")
+
+    if not overdue and not urgent and not upcoming:
+        lines.append("✅ *Săptămână liniștită!*")
+        lines.append("_Nicio obligație fiscală apropiată._")
+        lines.append("")
+
+    lines.extend([
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "💳 _Apasă_ `/plata_fiscala` _pentru IBAN și sume._",
+    ])
+
+    return "\n".join(lines)
+
+
+def send_weekly_compliance_dashboard(bot_token: str) -> Dict[str, int]:
+    """
+    Job Luni 08:30 — trimite dashboard compliance săptămânal
+    tuturor userilor cu alerte activate.
+
+    Returns: stats {users_processed, dashboards_sent, errors}
+    """
+    from db import get_session
+    from app.models import User
+
+    logger.info("📊 Starting weekly compliance dashboard...")
+    stats = {"users_processed": 0, "dashboards_sent": 0, "errors": 0}
+
+    session = get_session()
+    try:
+        users = (
+            session.query(User)
+            .filter(User.telegram_id.isnot(None))
+            .all()
+        )
+        today = date.today()
+
+        for user in users:
+            try:
+                proactive_enabled = getattr(
+                    user, "proactive_alerts_enabled",
+                    DEFAULT_PROACTIVE_ENABLED,
+                )
+                if not proactive_enabled:
+                    continue
+
+                ctx = _build_user_context(session, user.id)
+                obligatii = _collect_all_obligations(
+                    session, user, ctx, today
+                )
+                score_data = _compute_compliance_score(obligatii)
+                msg = _format_weekly_dashboard(
+                    ctx, obligatii, score_data, today
+                )
+
+                success = _send_telegram_message(
+                    bot_token, user.telegram_id, msg
+                )
+                if success:
+                    stats["dashboards_sent"] += 1
+                    logger.info(
+                        f"Weekly dashboard sent to user {user.id} "
+                        f"(score={score_data[0]})"
+                    )
+                stats["users_processed"] += 1
+            except Exception as e:
+                logger.error(
+                    f"Weekly dashboard error for user {user.id}: {e}"
+                )
+                stats["errors"] += 1
+
+        logger.info(
+            f"✅ Weekly dashboard done: "
+            f"{stats['dashboards_sent']} sent, "
+            f"{stats['errors']} errors"
+        )
+    except Exception as e:
+        logger.error(f"send_weekly_compliance_dashboard error: {e}")
     finally:
         session.close()
 
@@ -531,19 +702,11 @@ def check_and_send_proactive_alerts(bot_token: str) -> Dict[str, int]:
 #               TEST MANUAL ENTRY POINT
 # ============================================================
 
-def test_alerts_for_user(
-    bot_token: str, telegram_id: int
-) -> Dict:
+def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
     """
     Test manual al sistemului de alerte pentru un user specific.
-
     Folosit din UI Telegram (buton "🧪 Test acum").
-
-    Differența față de jobul zilnic:
-    - NU verifică anti-spam (trimite toate alertele aplicabile)
-    - Marchează totul cu suffix "_test" pentru a NU bloca alerte reale
-
-    Returns: stats + lista de obligații găsite
+    NU verifică anti-spam — afișează un sumar al obligațiilor.
     """
     from db import get_session
     from app.models import User
@@ -563,7 +726,6 @@ def test_alerts_for_user(
 
         from app.domain.fiscal_calendar import get_obligations_for_user
 
-        # Verificăm pentru luna curentă (în care suntem)
         intracom_base = _get_intracom_base_for_month(
             session, user.id, today.year, today.month
         )
@@ -581,13 +743,14 @@ def test_alerts_for_user(
             today=today,
         )
 
-        # Mesaj sumar test
         lines = [
             "🧪 *TEST ALERTE FISCALE*",
             "━━━━━━━━━━━━━━━━━━━━",
             "",
-            f"👤 Profil: _{ctx['forma_juridica']} · {ctx['activity_code']}_",
-            f"📅 Luna curentă: _{LUNI_RO.get(today.month)} {today.year}_",
+            f"👤 Profil: _{ctx['forma_juridica']} · "
+            f"{ctx['activity_code']}_",
+            f"📅 Luna curentă: _{LUNI_RO.get(today.month)} "
+            f"{today.year}_",
             "",
         ]
 
@@ -605,8 +768,8 @@ def test_alerts_for_user(
                     else f"{o.zile_ramase}z rămase"
                 )
                 lines.append(
-                    f"• *{o.definitie.cod}* — `{o.termen.strftime('%d.%m.%Y')}` "
-                    f"({zile_str})"
+                    f"• *{o.definitie.cod}* — "
+                    f"`{o.termen.strftime('%d.%m.%Y')}` ({zile_str})"
                 )
                 if o.suma_estimata:
                     lines.append(f"  💰 {o.suma_estimata:.2f} RON")
@@ -614,8 +777,8 @@ def test_alerts_for_user(
         lines.extend([
             "",
             "━━━━━━━━━━━━━━━━━━━━",
-            "_Sistemul de alerte rulează zilnic la 8:00._",
-            "_Vei primi notificare cu 7 zile, 3 zile și ziua termenului._",
+            "_Alertele zilnice rulează la 8:00._",
+            "_Dashboard săptămânal: Luni 8:30._",
         ])
 
         msg = "\n".join(lines)
@@ -636,6 +799,7 @@ def test_alerts_for_user(
 
 __all__ = [
     "check_and_send_proactive_alerts",
+    "send_weekly_compliance_dashboard",
     "test_alerts_for_user",
     "ALERT_ADVANCE_7D",
     "ALERT_ADVANCE_3D",
