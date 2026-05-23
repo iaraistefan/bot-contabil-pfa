@@ -1,10 +1,10 @@
 """
-Migrări de bază de date pentru schema evolutivă.
+Migrari de baza de date pentru schema evolutiva.
 
-Folosim ALTER TABLE IF NOT EXISTS (Postgres 9.6+) — idempotent.
-Rulează la fiecare pornire a botului. Dacă coloana există deja, nu face nimic.
+Folosim ALTER TABLE IF NOT EXISTS (Postgres 9.6+) - idempotent.
+Ruleaza la fiecare pornire a botului. Daca coloana exista deja, nu face nimic.
 
-Ordinea migrărilor contează — adaugă mereu la sfârșit, nu modifica cele vechi.
+Ordinea migrarilor conteaza - adauga mereu la sfarsit, nu modifica cele vechi.
 """
 
 import logging
@@ -15,38 +15,24 @@ from db import get_session
 logger = logging.getLogger(__name__)
 
 
-# Lista migrărilor — fiecare e o listă de comenzi SQL idempotente.
-# Pentru a adăuga o migrare nouă, adaugă o intrare nouă cu ID unic.
-
 MIGRATIONS = [
     {
         "id": "001_user_profile_fields",
         "description": "Add user profile fields (firma, CUI, regim, activitate)",
         "sql": [
-            # Profil firmă
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_nume VARCHAR(255)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_cui VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS firma_forma_juridica VARCHAR(20)",
             "CREATE INDEX IF NOT EXISTS ix_users_firma_cui ON users(firma_cui)",
-
-            # Regim fiscal
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_tva VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_impunere VARCHAR(20)",
-
-            # Activitate
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS caen_principal VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_code VARCHAR(50)",
-
-            # Locație
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS judet VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS localitate VARCHAR(100)",
-
-            # Stare onboarding
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_inceput_activitate DATE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_step INTEGER NOT NULL DEFAULT 0",
-
-            # Contact
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(150)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS telefon VARCHAR(30)",
         ],
@@ -78,12 +64,10 @@ MIGRATIONS = [
     {
         "id": "003_documents_vat_id",
         "description": (
-            "Add vat_id field to Document for VAT engine — automatic detection "
+            "Add vat_id field to Document for VAT engine - automatic detection "
             "of supplier country (RO/UE/non-UE) and VAT treatment"
         ),
         "sql": [
-            # Câmp pentru VAT_ID al furnizorului (ex: "EE102094445", "IE6388047V", "RO12345678")
-            # Nullable pentru că nu apare pe toate documentele (ex: bonuri fiscale RO)
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS vat_id VARCHAR(20)",
             "CREATE INDEX IF NOT EXISTS ix_documents_vat_id ON documents(vat_id)",
         ],
@@ -91,11 +75,10 @@ MIGRATIONS = [
     {
         "id": "004_proactive_alerts",
         "description": (
-            "Pas 10.1: Proactive Alerts — adaugă tabelul fiscal_alert_sent "
-            "(anti-spam) și 3 coloane în users pentru configurare alerte"
+            "Pas 10.1: Proactive Alerts - adauga tabelul fiscal_alert_sent "
+            "(anti-spam) si 3 coloane in users pentru configurare alerte"
         ),
         "sql": [
-            # ── Tabel nou pentru tracking alerte trimise (anti-spam) ─────
             """
             CREATE TABLE IF NOT EXISTS fiscal_alert_sent (
                 id              SERIAL PRIMARY KEY,
@@ -108,7 +91,6 @@ MIGRATIONS = [
                 status          VARCHAR(20) NOT NULL DEFAULT 'delivered'
             )
             """,
-            # Index UNIQUE compus: previne trimiterea aceleiași alerte de două ori
             """
             CREATE UNIQUE INDEX IF NOT EXISTS ix_fas_unique
                 ON fiscal_alert_sent (
@@ -116,12 +98,10 @@ MIGRATIONS = [
                     period_month, alert_type
                 )
             """,
-            # Index secundar pentru lookup pe user + dată
             """
             CREATE INDEX IF NOT EXISTS ix_fas_user_sent_at
                 ON fiscal_alert_sent (user_id, sent_at DESC)
             """,
-            # ── Coloane noi în users pentru configurare alerte ───────────
             """
             ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS proactive_alerts_enabled
@@ -139,12 +119,94 @@ MIGRATIONS = [
             """,
         ],
     },
-    # Aici vom adăuga migrări noi în viitor
+    {
+        "id": "005_trip_logs",
+        "description": (
+            "Pas 14: Foaie de parcurs - tabelul trip_logs pentru jurnal "
+            "km auto (deductibilitate combustibil)"
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS trip_logs (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                trip_date       DATE NOT NULL,
+                km              DOUBLE PRECISION NOT NULL DEFAULT 0,
+                odometer_start  INTEGER,
+                odometer_end    INTEGER,
+                purpose         VARCHAR(255),
+                period_year     INTEGER NOT NULL,
+                period_month    INTEGER NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_trip_logs_user_period
+                ON trip_logs (user_id, period_year, period_month)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_trip_logs_date
+                ON trip_logs (user_id, trip_date)
+            """,
+        ],
+    },
+    {
+        "id": "006_vehicule_foaie_parcurs",
+        "description": (
+            "Pas A: tabelul vehicule (flota PFA/SRL/II) + extindere "
+            "trip_logs cu vehicul_id, status open/closed si ore tura"
+        ),
+        "sql": [
+            # --- 1. Tabel nou: vehicule ---
+            """
+            CREATE TABLE IF NOT EXISTS vehicule (
+                id                SERIAL PRIMARY KEY,
+                user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                nr_inmatriculare  VARCHAR(20) NOT NULL,
+                marca_model       VARCHAR(120),
+                norma_consum      DOUBLE PRECISION NOT NULL DEFAULT 7.5,
+                tip_detinere      VARCHAR(20),
+                km_curent         INTEGER,
+                activ             BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_vehicule_user_activ
+                ON vehicule (user_id, activ)
+            """,
+            # --- 2. Extindere trip_logs (idempotent) ---
+            """
+            ALTER TABLE trip_logs
+                ADD COLUMN IF NOT EXISTS vehicul_id INTEGER
+                REFERENCES vehicule(id) ON DELETE SET NULL
+            """,
+            """
+            ALTER TABLE trip_logs
+                ADD COLUMN IF NOT EXISTS status VARCHAR(20)
+                NOT NULL DEFAULT 'closed'
+            """,
+            """
+            ALTER TABLE trip_logs
+                ADD COLUMN IF NOT EXISTS ora_start VARCHAR(5)
+            """,
+            """
+            ALTER TABLE trip_logs
+                ADD COLUMN IF NOT EXISTS ora_stop VARCHAR(5)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_trip_logs_vehicul
+                ON trip_logs (vehicul_id)
+            """,
+        ],
+    },
+    # Aici vom adauga migrari noi in viitor
 ]
 
 
 def _ensure_migrations_table():
-    """Creează tabelul de tracking al migrărilor dacă nu există."""
+    """Creeaza tabelul de tracking al migrarilor daca nu exista."""
     session = get_session()
     try:
         session.execute(text("""
@@ -199,15 +261,15 @@ def _mark_applied(migration_id: str, description: str):
 
 def run_migrations():
     """
-    Rulează toate migrările care nu au fost aplicate încă.
-    Idempotent — sigur de apelat de oricâte ori.
+    Ruleaza toate migrarile care nu au fost aplicate inca.
+    Idempotent - sigur de apelat de oricate ori.
     """
-    logger.info("🔄 Verificare migrări DB...")
+    logger.info("Verificare migrari DB...")
 
     try:
         _ensure_migrations_table()
     except Exception as e:
-        logger.error(f"❌ Cannot ensure schema_migrations table: {e}")
+        logger.error(f"Cannot ensure schema_migrations table: {e}")
         return
 
     applied_count = 0
@@ -221,22 +283,22 @@ def run_migrations():
             skipped_count += 1
             continue
 
-        logger.info(f"🚀 Aplic migrare: {mid} — {desc}")
+        logger.info(f"Aplic migrare: {mid} - {desc}")
         session = get_session()
         try:
             for sql in migration["sql"]:
                 session.execute(text(sql))
             session.commit()
             _mark_applied(mid, desc)
-            logger.info(f"✅ Migrare {mid} aplicată cu succes")
+            logger.info(f"Migrare {mid} aplicata cu succes")
             applied_count += 1
         except Exception as e:
             session.rollback()
-            logger.error(f"❌ Migrare {mid} EȘUATĂ: {e}")
+            logger.error(f"Migrare {mid} ESUATA: {e}")
             raise
         finally:
             session.close()
 
     logger.info(
-        f"✅ Migrări terminate: {applied_count} aplicate, {skipped_count} sărite (deja aplicate)"
+        f"Migrari terminate: {applied_count} aplicate, {skipped_count} sarite (deja aplicate)"
     )
