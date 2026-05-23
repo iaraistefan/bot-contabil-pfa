@@ -1,45 +1,59 @@
 """
-Pas 14 — Foaie de Parcurs: jurnal km auto pentru deductibilitatea
-cheltuielilor cu combustibilul.
+Pas A.3 - Modul foaie de parcurs (jurnal km auto).
 
-COMPONENTE:
-  • Parser text rapid: `parcurs 18.05 240km Bolt Bistrița`
-  • Wizard Telegram cu butoane (înregistrare ghidată)
-  • Generare Excel "Foaie de parcurs" formatată
-  • Smart link: corelație km ↔ cheltuieli combustibil (plauzibilitate consum)
+Comenzi text:
+  parcurs start <KM>            - porneste o tura (km de pe bord)
+  parcurs start <KM> <traseu>   - cu descriere traseu optionala
+  parcurs stop <KM>             - inchide tura curenta
+  parcurs <KM_START> <KM_STOP>  - tura completa intr-o comanda (backup)
+  parcurs                       - afiseaza statusul / jurnalul lunii
 
-JUSTIFICARE FISCALĂ:
-  Cheltuielile cu combustibilul pentru un vehicul folosit în activitate
-  necesită documentare (foaie de parcurs) pentru a justifica gradul de
-  deductibilitate. Acest modul produce documentul justificativ.
+Km personali se deduc automat din "gap-urile" de kilometraj intre ture
+(diferenta dintre odometrul de stop al unei ture si cel de start al urmatoarei).
 
-INTEGRARE:
-  • bot_contabil.py — buton meniu + namespace callback "parcurs" + comandă text
-  • app.models.TripLog (migration 005)
+INTEGRARE in bot_contabil.py:
+  - In handle_text_wrapper, INAINTE de procesarea documentelor:
+        if foaie_parcurs.match_command(text):
+            await foaie_parcurs.handle_command(update, context)
+            return
+  - In callback router, namespace "parcurs":
+        if namespace == "parcurs":
+            await foaie_parcurs.handle_callback(update, context, parts)
+            return
+
+CALLBACK namespace "parcurs":
+  parcurs|status               - status / sumar luna curenta
+  parcurs|luni                 - alege luna pentru jurnal
+  parcurs|jurnal|<an>|<luna>   - afiseaza jurnalul lunii
+  parcurs|del|<trip_id>        - cere confirmare stergere tura
+  parcurs|delok|<trip_id>      - executa stergerea
 
 CHANGELOG:
-  • v1 (Pas 14): versiune inițială completă
+  - v1 (Pas A.3): Versiune initiala
 """
 
-import io as _io
 import logging
-import re
-from datetime import date, datetime
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
 
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup,
-)
+import pytz
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+
+from db import get_session
+from app.repositories import users as users_repo
+from app.repositories import vehicule as vehicule_repo
+from app.repositories import trip_logs as trip_repo
+from app.repositories import audit as audit_repo
+from app.models import TRIP_STATUS_OPEN, TRIP_STATUS_CLOSED
 
 logger = logging.getLogger(__name__)
 
+BTN_PARCURS = "🛣️ Foaie parcurs"
 
-# ============================================================
-#                    CONSTANTE
-# ============================================================
+RO_TZ = pytz.timezone("Europe/Bucharest")
 
-BTN_LABEL = "🚗 Foaie de parcurs"
+# Sanity check: km parcursi intr-o tura peste aceasta valoare = suspect
+MAX_KM_TURA = 1500
 
 LUNI_LONG = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
@@ -51,938 +65,655 @@ LUNI_SHORT = {
     7: "Iul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
 }
 
-# Praguri plauzibilitate consum combustibil (L/100km)
-CONSUM_MIN_NORMAL = 4.0
-CONSUM_MAX_NORMAL = 13.0
-# Preț mediu motorină RON/L — folosit pentru estimare litri din valoarea bonului.
-# Aproximativ; folosit doar pentru un calcul informativ, nu fiscal.
-PRET_MEDIU_MOTORINA = 7.5
 
-# Scopuri predefinite pentru wizard
-SCOPURI_PREDEFINITE = [
-    "Curse Bolt",
-    "Curse Uber",
-    "Aprovizionare",
-    "Deplasare interes afacere",
-]
+# ============================================================
+#       HELPERS
+# ============================================================
+
+def _now_ro() -> datetime:
+    """Data si ora curenta in timezone Romania."""
+    return datetime.now(RO_TZ)
+
+
+def _get_user_id(update: Update) -> int:
+    session = get_session()
+    try:
+        user = users_repo.get_by_telegram_id(
+            session, telegram_id=update.effective_user.id
+        )
+        return user.id if user else None
+    finally:
+        session.close()
+
+
+def _parse_int(token: str):
+    """Parseaza un intreg dintr-un token (ignora puncte/spatii din mii)."""
+    if token is None:
+        return None
+    cleaned = token.replace(".", "").replace(",", "").replace(" ", "").strip()
+    if not cleaned:
+        return None
+    try:
+        return int(cleaned)
+    except ValueError:
+        return None
+
+
+def _fmt_km(value) -> str:
+    """Formateaza un numar de km cu separator de mii (125.430)."""
+    try:
+        return f"{int(round(value)):,}".replace(",", ".")
+    except (ValueError, TypeError):
+        return str(value)
 
 
 # ============================================================
-#                    PARSER TEXT RAPID
+#       LOGICA PURA - sumar lunar
 # ============================================================
 
-def is_trip_command(text: str) -> bool:
-    """Verifică dacă textul începe cu cuvântul-cheie 'parcurs'."""
+def compute_month_summary(trips: list) -> dict:
+    """
+    Calculeaza sumarul unei luni din lista de ture.
+
+    Km business  = suma km din turele inchise.
+    Km personali = suma "gap-urilor" de odometru intre ture consecutive
+                   (cand odometrul de start al unei ture > odometrul de
+                   stop al turei precedente, diferenta a fost parcursa
+                   in interes personal).
+    """
+    closed = [t for t in trips if t.status == TRIP_STATUS_CLOSED]
+    has_open = any(t.status == TRIP_STATUS_OPEN for t in trips)
+
+    km_business = sum((t.km or 0.0) for t in closed)
+
+    # Km personali din gap-uri - doar turele cu odometru complet
+    with_odo = sorted(
+        [
+            t for t in closed
+            if t.odometer_start is not None and t.odometer_end is not None
+        ],
+        key=lambda t: (t.trip_date, t.odometer_start),
+    )
+    km_personal = 0.0
+    for i in range(len(with_odo) - 1):
+        gap = with_odo[i + 1].odometer_start - with_odo[i].odometer_end
+        if gap > 0:
+            km_personal += gap
+
+    km_total = km_business + km_personal
+    pct_business = (km_business / km_total * 100.0) if km_total > 0 else 0.0
+
+    return {
+        "nr_ture": len(closed),
+        "km_business": km_business,
+        "km_personal": km_personal,
+        "km_total": km_total,
+        "pct_business": pct_business,
+        "has_open": has_open,
+    }
+
+
+# ============================================================
+#       COMANDA TEXT
+# ============================================================
+
+def match_command(text: str) -> bool:
+    """True daca textul e o comanda de foaie de parcurs."""
     if not text:
         return False
     return text.strip().lower().startswith("parcurs")
 
 
-def parse_trip_text(text: str) -> Dict:
-    """
-    Parsează un text de tip:
-      parcurs 18.05 240km Bolt Bistrița
-      parcurs 18.05.2026 240 km curse Bistrița
-      parcurs azi 240km
-      parcurs 240 km
+async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Proceseaza o comanda text 'parcurs ...'."""
+    text = (update.message.text or "").strip()
+    tokens = text.split()
+    rest = tokens[1:]  # tokens[0] = "parcurs"
 
-    Returns dict:
-      {ok: bool, trip_date: date, km: float, purpose: str, error: str}
-    """
-    result = {
-        "ok": False, "trip_date": None, "km": None,
-        "purpose": None, "error": None,
-    }
+    user_id = _get_user_id(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
 
-    if not text:
-        result["error"] = "Text gol"
-        return result
+    # Fara argumente -> status
+    if not rest:
+        await _show_status(update, context, user_id)
+        return
 
-    # Eliminăm cuvântul-cheie "parcurs"
-    body = text.strip()
-    body = re.sub(r"^parcurs\s*", "", body, flags=re.IGNORECASE).strip()
+    sub = rest[0].lower()
 
-    if not body:
-        result["error"] = "Lipsesc datele după 'parcurs'"
-        return result
+    if sub == "start":
+        km = _parse_int(rest[1]) if len(rest) > 1 else None
+        purpose = " ".join(rest[2:]) if len(rest) > 2 else None
+        await _cmd_start(update, context, user_id, km, purpose)
 
-    today = date.today()
-    trip_date = today
+    elif sub == "stop":
+        km = _parse_int(rest[1]) if len(rest) > 1 else None
+        await _cmd_stop(update, context, user_id, km)
 
-    # 1. Detectăm data — formate: DD.MM, DD.MM.YYYY, "azi", "ieri"
-    tokens = body.split()
-    consumed_idx = set()
+    elif sub in ("status", "jurnal"):
+        await _show_status(update, context, user_id)
 
-    first = tokens[0].lower() if tokens else ""
-    if first == "azi":
-        trip_date = today
-        consumed_idx.add(0)
-    elif first in ("ieri", "ieri."):
-        from datetime import timedelta
-        trip_date = today - timedelta(days=1)
-        consumed_idx.add(0)
     else:
-        # Încercăm DD.MM.YYYY sau DD.MM
-        m = re.match(r"^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$", first)
-        if m:
-            day = int(m.group(1))
-            month = int(m.group(2))
-            year = int(m.group(3)) if m.group(3) else today.year
-            if year < 100:
-                year += 2000
-            try:
-                trip_date = date(year, month, day)
-                consumed_idx.add(0)
-            except ValueError:
-                result["error"] = f"Dată invalidă: {first}"
-                return result
-
-    # 2. Detectăm km — un număr urmat opțional de "km"
-    km_value = None
-    for i, tok in enumerate(tokens):
-        if i in consumed_idx:
-            continue
-        # "240km" sau "240"
-        m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(km)?$", tok.lower())
-        if m:
-            km_value = float(m.group(1).replace(",", "."))
-            consumed_idx.add(i)
-            # Dacă următorul token e "km" separat
-            if i + 1 < len(tokens) and tokens[i + 1].lower() == "km":
-                consumed_idx.add(i + 1)
-            break
-
-    if km_value is None:
-        result["error"] = "Nu am găsit numărul de km"
-        return result
-
-    if km_value <= 0 or km_value > 2000:
-        result["error"] = f"Km în afara intervalului plauzibil: {km_value}"
-        return result
-
-    # 3. Restul = scop/traseu
-    purpose_tokens = [
-        tok for i, tok in enumerate(tokens) if i not in consumed_idx
-    ]
-    purpose = " ".join(purpose_tokens).strip()
-    if not purpose:
-        purpose = "Curse Bolt"  # default pentru ridesharing
-
-    result.update({
-        "ok": True,
-        "trip_date": trip_date,
-        "km": km_value,
-        "purpose": purpose[:255],
-    })
-    return result
+        # Poate sunt doua numere: parcurs 125430 125680
+        nums = [_parse_int(x) for x in rest]
+        valid = [n for n in nums if n is not None]
+        if len(valid) == 2:
+            await _cmd_complete(update, context, user_id, valid[0], valid[1])
+        else:
+            await update.message.reply_text(
+                "⚠️ Comandă neînțeleasă.\n\n"
+                "Folosește:\n"
+                "• `parcurs start 125430` — pornești tura\n"
+                "• `parcurs stop 125680` — închizi tura\n"
+                "• `parcurs 125430 125680` — tură completă\n"
+                "• `parcurs` — vezi jurnalul",
+                parse_mode="Markdown",
+            )
 
 
 # ============================================================
-#                    DB OPERATIONS
+#       COMANDA: START
 # ============================================================
 
-def register_trip(
-    session, user_id: int, trip_date: date,
-    km: float, purpose: str,
-    odometer_start: Optional[int] = None,
-    odometer_end: Optional[int] = None,
-) -> Optional[int]:
-    """Înregistrează o intrare în foaia de parcurs. Returns trip_id sau None."""
-    from app.models import TripLog
-    try:
-        trip = TripLog(
-            user_id=user_id,
-            trip_date=trip_date,
-            km=km,
-            purpose=purpose,
-            odometer_start=odometer_start,
-            odometer_end=odometer_end,
-            period_year=trip_date.year,
-            period_month=trip_date.month,
+async def _cmd_start(update, context, user_id, km, purpose):
+    if km is None or km <= 0:
+        await update.message.reply_text(
+            "⚠️ Scrie kilometrajul de pe bord.\n"
+            "Exemplu: `parcurs start 125430`",
+            parse_mode="Markdown",
         )
-        session.add(trip)
+        return
+
+    session = get_session()
+    try:
+        # 1. Verificam daca exista deja o tura deschisa
+        open_trip = trip_repo.get_open_trip(session, user_id)
+        if open_trip:
+            await update.message.reply_text(
+                f"⚠️ Ai deja o tură pornită la *{_fmt_km(open_trip.odometer_start)} km*"
+                f"{' (' + open_trip.ora_start + ')' if open_trip.ora_start else ''}.\n\n"
+                f"Închide-o întâi: `parcurs stop <km>`",
+                parse_mode="Markdown",
+            )
+            return
+
+        # 2. Gasim masina (default = prima activa)
+        vehicul = vehicule_repo.get_default(session, user_id)
+        if not vehicul:
+            await update.message.reply_text(
+                "⚠️ Nu ai nicio mașină înregistrată.\n\n"
+                "Adaugă întâi mașina din meniul *🚗 Mașinile mele*.",
+                parse_mode="Markdown",
+            )
+            return
+
+        # 3. Sanity check fata de km_curent al masinii
+        avertisment = ""
+        if vehicul.km_curent and km < vehicul.km_curent:
+            avertisment = (
+                f"\n\n⚠️ _Atenție: {_fmt_km(km)} km e sub kilometrajul "
+                f"cunoscut ({_fmt_km(vehicul.km_curent)} km). Verifică cifra._"
+            )
+
+        now = _now_ro()
+        ora = now.strftime("%H:%M")
+        trip_date = now.date()
+
+        trip = trip_repo.create_open(
+            session, user_id=user_id, vehicul_id=vehicul.id,
+            odometer_start=km, trip_date=trip_date,
+            ora_start=ora, purpose=purpose,
+        )
+        vehicule_repo.update_km_curent(session, vehicul, km)
+        audit_repo.write(
+            session, entity_type="trip_log", entity_id=trip.id,
+            action="start", user_id=user_id, source="user",
+            after=trip_repo.to_dict(trip),
+        )
         session.commit()
-        return trip.id
+
+        traseu_line = f"\n📍 Traseu: {purpose}" if purpose else ""
+        await update.message.reply_text(
+            "🚗 *Tură pornită!*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🛣️ Kilometraj start: *{_fmt_km(km)} km*\n"
+            f"🕐 Ora: *{ora}*\n"
+            f"🚙 Mașina: {vehicul.nr_inmatriculare}{traseu_line}\n\n"
+            f"_Când termini, scrie:_ `parcurs stop <km>`"
+            f"{avertisment}",
+            parse_mode="Markdown",
+        )
     except Exception as e:
         session.rollback()
-        logger.error(f"register_trip error: {e}")
-        return None
+        logger.error(f"cmd_start error: {e}")
+        await update.message.reply_text("❌ Eroare la pornirea turei.")
+    finally:
+        session.close()
 
 
-def get_trips_for_period(
-    session, user_id: int, year: int, month: int,
-) -> List:
-    """Returnează intrările foii de parcurs pentru o lună."""
-    from app.models import TripLog
+# ============================================================
+#       COMANDA: STOP
+# ============================================================
+
+async def _cmd_stop(update, context, user_id, km):
+    if km is None or km <= 0:
+        await update.message.reply_text(
+            "⚠️ Scrie kilometrajul de pe bord.\n"
+            "Exemplu: `parcurs stop 125680`",
+            parse_mode="Markdown",
+        )
+        return
+
+    session = get_session()
     try:
-        return (
-            session.query(TripLog)
-            .filter(
-                TripLog.user_id == user_id,
-                TripLog.period_year == year,
-                TripLog.period_month == month,
+        open_trip = trip_repo.get_open_trip(session, user_id)
+        if not open_trip:
+            await update.message.reply_text(
+                "⚠️ Nu ai nicio tură pornită.\n\n"
+                "Pornește una: `parcurs start <km>`\n"
+                "Sau înregistrează o tură completă: `parcurs 125430 125680`",
+                parse_mode="Markdown",
             )
-            .order_by(TripLog.trip_date)
-            .all()
-        )
-    except Exception as e:
-        logger.error(f"get_trips_for_period error: {e}")
-        return []
+            return
 
+        start_km = open_trip.odometer_start or 0
+        if km <= start_km:
+            await update.message.reply_text(
+                f"⚠️ Kilometrajul de stop ({_fmt_km(km)}) trebuie să fie "
+                f"mai mare decât cel de start ({_fmt_km(start_km)}).\n\n"
+                "Verifică cifra și încearcă din nou.",
+                parse_mode="Markdown",
+            )
+            return
 
-def get_available_trip_periods(session, user_id: int) -> List[Tuple[int, int]]:
-    """Returnează (year, month) pentru care există intrări."""
-    from app.models import TripLog
-    try:
-        rows = (
-            session.query(TripLog.period_year, TripLog.period_month)
-            .filter(TripLog.user_id == user_id)
-            .distinct()
-            .all()
-        )
-        return sorted(
-            set((r[0], r[1]) for r in rows), reverse=True
-        )
-    except Exception as e:
-        logger.error(f"get_available_trip_periods error: {e}")
-        return []
+        km_parcursi = km - start_km
+        avertisment = ""
+        if km_parcursi > MAX_KM_TURA:
+            avertisment = (
+                f"\n\n⚠️ _{_fmt_km(km_parcursi)} km într-o tură pare mult. "
+                f"Dacă ai greșit, șterge tura din jurnal._"
+            )
 
+        now = _now_ro()
+        ora_stop = now.strftime("%H:%M")
 
-def delete_trip(session, user_id: int, trip_id: int) -> bool:
-    """Șterge o intrare din foaia de parcurs."""
-    from app.models import TripLog
-    try:
-        trip = (
-            session.query(TripLog)
-            .filter(TripLog.id == trip_id, TripLog.user_id == user_id)
-            .first()
+        trip_repo.close_trip(session, open_trip, odometer_end=km, ora_stop=ora_stop)
+
+        # Update km masina
+        vehicul = None
+        if open_trip.vehicul_id:
+            vehicul = vehicule_repo.get_by_id(session, open_trip.vehicul_id, user_id)
+            if vehicul:
+                vehicule_repo.update_km_curent(session, vehicul, km)
+
+        audit_repo.write(
+            session, entity_type="trip_log", entity_id=open_trip.id,
+            action="stop", user_id=user_id, source="user",
+            after=trip_repo.to_dict(open_trip),
         )
-        if not trip:
-            return False
-        session.delete(trip)
         session.commit()
-        return True
+
+        interval = ""
+        if open_trip.ora_start:
+            interval = f" ({open_trip.ora_start} → {ora_stop})"
+
+        await update.message.reply_text(
+            "✅ *Tură încheiată!*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🛣️ {_fmt_km(start_km)} → {_fmt_km(km)} km\n"
+            f"📊 *Parcurși azi: {_fmt_km(km_parcursi)} km*{interval}\n\n"
+            f"_Tura a fost adăugată în foaia de parcurs._"
+            f"{avertisment}",
+            parse_mode="Markdown",
+        )
     except Exception as e:
         session.rollback()
-        logger.error(f"delete_trip error: {e}")
-        return False
+        logger.error(f"cmd_stop error: {e}")
+        await update.message.reply_text("❌ Eroare la închiderea turei.")
+    finally:
+        session.close()
 
 
 # ============================================================
-#               SMART LINK — CORELAȚIE COMBUSTIBIL
+#       COMANDA: TURA COMPLETA
 # ============================================================
 
-def _get_fuel_expense_for_period(
-    session, user_id: int, year: int, month: int,
-) -> float:
-    """
-    Suma cheltuielilor cu combustibilul pentru o lună (RON).
-    Caută documente de tip cheltuială cu cuvinte-cheie combustibil.
-    """
+async def _cmd_complete(update, context, user_id, km_start, km_stop):
+    if km_stop <= km_start:
+        await update.message.reply_text(
+            f"⚠️ Al doilea număr ({_fmt_km(km_stop)}) trebuie să fie "
+            f"mai mare decât primul ({_fmt_km(km_start)}).",
+            parse_mode="Markdown",
+        )
+        return
+
+    session = get_session()
     try:
-        from app.models import Document
-        target_month_str = f"{month:02d}.{year}"
-        fuel_keywords = [
-            "motorina", "motorină", "benzina", "benzină",
-            "combustibil", "carburant", "diesel", "gpl",
-            "lukoil", "omv", "petrom", "rompetrol", "mol", "socar",
-        ]
-
-        docs = (
-            session.query(Document)
-            .filter(
-                Document.user_id == user_id,
-                Document.status == "posted",
+        vehicul = vehicule_repo.get_default(session, user_id)
+        if not vehicul:
+            await update.message.reply_text(
+                "⚠️ Nu ai nicio mașină înregistrată.\n\n"
+                "Adaugă întâi mașina din meniul *🚗 Mașinile mele*.",
+                parse_mode="Markdown",
             )
-            .all()
+            return
+
+        km_parcursi = km_stop - km_start
+        now = _now_ro()
+
+        trip = trip_repo.create_complete(
+            session, user_id=user_id, vehicul_id=vehicul.id,
+            odometer_start=km_start, odometer_end=km_stop,
+            trip_date=now.date(),
         )
+        vehicule_repo.update_km_curent(session, vehicul, km_stop)
+        audit_repo.write(
+            session, entity_type="trip_log", entity_id=trip.id,
+            action="create_complete", user_id=user_id, source="user",
+            after=trip_repo.to_dict(trip),
+        )
+        session.commit()
 
-        total = 0.0
-        for d in docs:
-            if not d.data_doc or target_month_str not in d.data_doc:
-                continue
-            text = f"{d.platforma or ''} {d.detalii or ''}".lower()
-            if any(kw in text for kw in fuel_keywords):
-                total += float(d.brut or 0)
+        avertisment = ""
+        if km_parcursi > MAX_KM_TURA:
+            avertisment = f"\n\n⚠️ _{_fmt_km(km_parcursi)} km pare mult pentru o tură._"
 
-        return round(total, 2)
+        await update.message.reply_text(
+            "✅ *Tură înregistrată!*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🛣️ {_fmt_km(km_start)} → {_fmt_km(km_stop)} km\n"
+            f"📊 *Parcurși: {_fmt_km(km_parcursi)} km*\n"
+            f"🚙 Mașina: {vehicul.nr_inmatriculare}"
+            f"{avertisment}",
+            parse_mode="Markdown",
+        )
     except Exception as e:
-        logger.error(f"_get_fuel_expense_for_period error: {e}")
-        return 0.0
-
-
-def analyze_fuel_consistency(
-    session, user_id: int, year: int, month: int,
-) -> Dict:
-    """
-    Analizează plauzibilitatea: km parcurși vs cheltuieli combustibil.
-
-    Returns dict:
-      {
-        total_km, fuel_ron, estimated_liters,
-        consum_per_100km, verdict, verdict_emoji, message
-      }
-    """
-    trips = get_trips_for_period(session, user_id, year, month)
-    total_km = sum(t.km for t in trips)
-    fuel_ron = _get_fuel_expense_for_period(session, user_id, year, month)
-
-    result = {
-        "total_km": total_km,
-        "fuel_ron": fuel_ron,
-        "estimated_liters": 0.0,
-        "consum_per_100km": 0.0,
-        "cost_per_km": 0.0,
-        "verdict": "no_data",
-        "verdict_emoji": "ℹ️",
-        "message": "",
-    }
-
-    if total_km <= 0:
-        result["message"] = "Nu există km înregistrați pentru această lună."
-        return result
-
-    if fuel_ron <= 0:
-        result["message"] = (
-            "Nu există cheltuieli cu combustibilul înregistrate. "
-            "Înregistrează bonurile pentru analiză completă."
-        )
-        result["cost_per_km"] = 0.0
-        return result
-
-    estimated_liters = fuel_ron / PRET_MEDIU_MOTORINA
-    consum = (estimated_liters / total_km) * 100.0
-    cost_per_km = fuel_ron / total_km
-
-    result["estimated_liters"] = round(estimated_liters, 1)
-    result["consum_per_100km"] = round(consum, 1)
-    result["cost_per_km"] = round(cost_per_km, 2)
-
-    if CONSUM_MIN_NORMAL <= consum <= CONSUM_MAX_NORMAL:
-        result["verdict"] = "ok"
-        result["verdict_emoji"] = "✅"
-        result["message"] = (
-            f"Consum estimat {consum:.1f} L/100km — plauzibil. "
-            f"Foaia de parcurs susține cheltuielile cu combustibilul."
-        )
-    elif consum < CONSUM_MIN_NORMAL:
-        result["verdict"] = "low"
-        result["verdict_emoji"] = "⚠️"
-        result["message"] = (
-            f"Consum estimat {consum:.1f} L/100km — neobișnuit de mic. "
-            f"Posibil: km supraevaluați sau bonuri combustibil lipsă."
-        )
-    else:
-        result["verdict"] = "high"
-        result["verdict_emoji"] = "⚠️"
-        result["message"] = (
-            f"Consum estimat {consum:.1f} L/100km — peste normal. "
-            f"Posibil: km subevaluați sau combustibil pentru alt vehicul."
-        )
-
-    return result
+        session.rollback()
+        logger.error(f"cmd_complete error: {e}")
+        await update.message.reply_text("❌ Eroare la înregistrarea turei.")
+    finally:
+        session.close()
 
 
 # ============================================================
-#               GENERARE EXCEL — FOAIE DE PARCURS
+#       STATUS / SUMAR LUNA
 # ============================================================
 
-def generate_foaie_parcurs_xlsx(
-    trips: List, year: int, month: int,
-    pfa_name: str = "PFA", pfa_cui: str = "",
-    fuel_analysis: Optional[Dict] = None,
-) -> bytes:
-    """
-    Generează Excel "Foaie de parcurs" formatat, gata de tipărit.
-    Returns: bytes XLSX.
-    """
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-    from openpyxl.utils import get_column_letter
+async def _show_status(update, context, user_id, via_callback=False):
+    """Afiseaza tura deschisa (daca exista) si sumarul lunii curente."""
+    now = _now_ro()
+    year, month = now.year, now.month
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"Foaie parcurs {LUNI_SHORT.get(month, '')}"
+    session = get_session()
+    try:
+        open_trip = trip_repo.get_open_trip(session, user_id)
+        trips = trip_repo.list_for_month(session, user_id, year, month)
+    finally:
+        session.close()
 
-    # Stiluri
-    title_font = Font(bold=True, size=14)
-    header_font = Font(bold=True, size=10, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="2F5496")
-    cell_font = Font(size=10)
-    total_font = Font(bold=True, size=11)
-    thin = Side(style="thin", color="999999")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center")
+    summary = compute_month_summary(trips)
 
-    # --- Titlu ---
-    ws.merge_cells("A1:F1")
-    ws["A1"] = "FOAIE DE PARCURS"
-    ws["A1"].font = title_font
-    ws["A1"].alignment = center
-
-    ws.merge_cells("A2:F2")
-    ws["A2"] = f"{LUNI_LONG.get(month, '')} {year}"
-    ws["A2"].font = Font(bold=True, size=11)
-    ws["A2"].alignment = center
-
-    # --- Date firmă ---
-    ws["A4"] = "Titular:"
-    ws["A4"].font = Font(bold=True, size=10)
-    ws["B4"] = pfa_name
-    ws["A5"] = "CUI/CIF:"
-    ws["A5"].font = Font(bold=True, size=10)
-    ws["B5"] = pfa_cui or "—"
-
-    # --- Header tabel ---
-    header_row = 7
-    headers = [
-        "Nr.", "Data", "Km parcurși",
-        "Citire bord\n(start)", "Citire bord\n(sfârșit)",
-        "Scop / Traseu",
+    lines = [
+        "🛣️ *Foaie de parcurs*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
     ]
-    for col, h in enumerate(headers, start=1):
-        cell = ws.cell(row=header_row, column=col, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = center
-        cell.border = border
 
-    # --- Rânduri date ---
-    row = header_row + 1
-    total_km = 0.0
-    for idx, trip in enumerate(trips, start=1):
-        ws.cell(row=row, column=1, value=idx).alignment = center
-        ws.cell(
-            row=row, column=2,
-            value=trip.trip_date.strftime("%d.%m.%Y"),
-        ).alignment = center
-        ws.cell(row=row, column=3, value=round(trip.km, 1)).alignment = center
-        ws.cell(
-            row=row, column=4,
-            value=trip.odometer_start if trip.odometer_start else "—",
-        ).alignment = center
-        ws.cell(
-            row=row, column=5,
-            value=trip.odometer_end if trip.odometer_end else "—",
-        ).alignment = center
-        ws.cell(
-            row=row, column=6, value=trip.purpose or "—",
-        ).alignment = left
-
-        for col in range(1, 7):
-            ws.cell(row=row, column=col).border = border
-            if ws.cell(row=row, column=col).font.size is None:
-                ws.cell(row=row, column=col).font = cell_font
-
-        total_km += trip.km
-        row += 1
-
-    # --- Rând TOTAL ---
-    ws.cell(row=row, column=1, value="TOTAL").font = total_font
-    ws.merge_cells(
-        start_row=row, start_column=1, end_row=row, end_column=2
-    )
-    ws.cell(row=row, column=1).alignment = center
-    total_cell = ws.cell(row=row, column=3, value=round(total_km, 1))
-    total_cell.font = total_font
-    total_cell.alignment = center
-    total_cell.fill = PatternFill("solid", fgColor="D9E2F3")
-    for col in range(1, 7):
-        ws.cell(row=row, column=col).border = border
-
-    # --- Analiză combustibil (opțional) ---
-    if fuel_analysis and fuel_analysis.get("verdict") not in ("no_data",):
-        info_row = row + 2
-        ws.merge_cells(
-            start_row=info_row, start_column=1,
-            end_row=info_row, end_column=6,
+    if open_trip:
+        ora = f" ({open_trip.ora_start})" if open_trip.ora_start else ""
+        lines.append(
+            f"🟢 *Tură în desfășurare* — pornită la "
+            f"{_fmt_km(open_trip.odometer_start)} km{ora}\n"
+            f"   _Închide-o cu_ `parcurs stop <km>`"
         )
-        ws.cell(
-            row=info_row, column=1,
-            value="ANALIZĂ COMBUSTIBIL (informativ)",
-        ).font = Font(bold=True, size=10)
+        lines.append("")
 
-        fa = fuel_analysis
-        details = [
-            f"Total km luna: {fa['total_km']:.0f} km",
-            f"Cheltuieli combustibil: {fa['fuel_ron']:.2f} RON",
-            f"Litri estimați: ~{fa['estimated_liters']:.1f} L",
-            f"Consum estimat: {fa['consum_per_100km']:.1f} L/100km",
-            f"Cost mediu: {fa['cost_per_km']:.2f} RON/km",
-        ]
-        for i, d in enumerate(details, start=1):
-            ws.cell(row=info_row + i, column=1, value=d).font = cell_font
-            ws.merge_cells(
-                start_row=info_row + i, start_column=1,
-                end_row=info_row + i, end_column=6,
-            )
+    lines.append(f"📅 *{LUNI_LONG[month]} {year}*")
+    lines.append(f"• Ture înregistrate: *{summary['nr_ture']}*")
+    lines.append(f"• Km business: *{_fmt_km(summary['km_business'])} km*")
+    if summary["km_personal"] > 0:
+        lines.append(f"• Km personali (gap): *{_fmt_km(summary['km_personal'])} km*")
+        lines.append(f"• Utilizare business: *{summary['pct_business']:.0f}%*")
 
-    # --- Semnătură ---
-    sig_row = row + (10 if fuel_analysis else 3)
-    ws.cell(
-        row=sig_row, column=1,
-        value="Întocmit (semnătură): ____________________",
-    ).font = cell_font
-    ws.cell(
-        row=sig_row, column=5,
-        value=f"Data: {date.today().strftime('%d.%m.%Y')}",
-    ).font = cell_font
+    if summary["nr_ture"] == 0 and not open_trip:
+        lines.append("")
+        lines.append(
+            "_Nicio tură încă. Pornește prima cu_ `parcurs start <km>`"
+        )
 
-    # --- Lățimi coloane ---
-    widths = [6, 14, 14, 14, 14, 40]
-    for col, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(col)].width = w
+    text = "\n".join(lines)
 
-    # Setări print
-    ws.print_area = f"A1:F{sig_row}"
-    ws.page_setup.orientation = "landscape"
-    ws.page_setup.fitToWidth = 1
-
-    buf = _io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
-
-
-def filename_foaie_parcurs(year: int, month: int) -> str:
-    return f"Foaie_parcurs_{year}_{month:02d}.xlsx"
-
-
-# ============================================================
-#               UI TELEGRAM — KEYBOARD BUILDERS
-# ============================================================
-
-def _build_main_menu() -> InlineKeyboardMarkup:
-    """Meniul principal al foii de parcurs."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "➕ Adaugă zi de parcurs",
-            callback_data="parcurs|add"
-        )],
-        [InlineKeyboardButton(
-            "📊 Vezi luna curentă",
-            callback_data="parcurs|view_current"
-        )],
-        [InlineKeyboardButton(
-            "📥 Descarcă foaie Excel",
-            callback_data="parcurs|export"
-        )],
-        [InlineKeyboardButton(
-            "⛽ Analiză combustibil",
-            callback_data="parcurs|fuel"
-        )],
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Vezi jurnalul lunii", callback_data=f"parcurs|jurnal|{year}|{month}")],
+        [InlineKeyboardButton("🗓️ Altă lună", callback_data="parcurs|luni")],
         [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
     ])
 
-
-def _build_purpose_picker() -> InlineKeyboardMarkup:
-    """Picker pentru scop predefinit."""
-    rows = []
-    for i in range(0, len(SCOPURI_PREDEFINITE), 2):
-        row = [
-            InlineKeyboardButton(
-                s, callback_data=f"parcurs|purpose|{idx}"
-            )
-            for idx, s in enumerate(
-                SCOPURI_PREDEFINITE[i:i + 2], start=i
-            )
-        ]
-        rows.append(row)
-    rows.append([
-        InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|menu"),
-    ])
-    return InlineKeyboardMarkup(rows)
-
-
-def _build_period_picker(
-    periods: List[Tuple[int, int]], action: str,
-) -> InlineKeyboardMarkup:
-    """Picker pentru perioadă (year, month)."""
-    rows = []
-    for i in range(0, len(periods), 2):
-        row = []
-        for year, month in periods[i:i + 2]:
-            row.append(InlineKeyboardButton(
-                f"{LUNI_SHORT.get(month)} {year}",
-                callback_data=f"parcurs|{action}|{year}|{month}"
-            ))
-        rows.append(row)
-    rows.append([
-        InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|menu"),
-    ])
-    return InlineKeyboardMarkup(rows)
-
-
-# ============================================================
-#               UI TELEGRAM — HANDLERS
-# ============================================================
-
-async def handle_menu_button(
-    update: Update, context: ContextTypes.DEFAULT_TYPE,
-) -> None:
-    """Apelat când user apasă butonul '🚗 Foaie de parcurs' din meniu."""
-    msg = (
-        "🚗 *FOAIE DE PARCURS*\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Jurnalul km parcurși — *justifică deductibilitatea "
-        "cheltuielilor cu combustibilul.*\n\n"
-        "✍️ *Înregistrare rapidă (text):*\n"
-        "`parcurs 18.05 240km Bolt Bistrița`\n"
-        "`parcurs azi 180 km aprovizionare`\n\n"
-        "_Sau folosește butoanele de mai jos:_"
-    )
-    await update.message.reply_text(
-        msg, parse_mode="Markdown",
-        reply_markup=_build_main_menu(),
-    )
-
-
-async def handle_text_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE,
-) -> bool:
-    """
-    Procesează comanda text `parcurs ...`.
-    Returns True dacă a procesat, False altfel.
-    """
-    from db import get_session
-    from app.repositories import users as users_repo
-
-    text = update.message.text or ""
-    if not is_trip_command(text):
-        return False
-
-    parsed = parse_trip_text(text)
-    if not parsed["ok"]:
+    if via_callback and update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="Markdown", reply_markup=markup
+        )
+    else:
         await update.message.reply_text(
-            f"⚠️ Nu am putut înregistra parcursul.\n"
-            f"_{parsed['error']}_\n\n"
-            f"Format corect:\n"
-            f"`parcurs 18.05 240km Bolt Bistrița`",
-            parse_mode="Markdown",
+            text, parse_mode="Markdown", reply_markup=markup
         )
-        return True
-
-    tg_id = update.effective_user.id
-    session = get_session()
-    try:
-        user = users_repo.get_by_telegram_id(session, telegram_id=tg_id)
-        if not user:
-            await update.message.reply_text("⚠️ Eroare identificare utilizator.")
-            return True
-
-        trip_id = register_trip(
-            session, user.id,
-            trip_date=parsed["trip_date"],
-            km=parsed["km"],
-            purpose=parsed["purpose"],
-        )
-
-        if trip_id:
-            # Total luna curentă pentru context
-            trips = get_trips_for_period(
-                session, user.id,
-                parsed["trip_date"].year,
-                parsed["trip_date"].month,
-            )
-            total_km = sum(t.km for t in trips)
-
-            await update.message.reply_text(
-                f"✅ *Parcurs înregistrat* #{trip_id}\n\n"
-                f"📅 Data: {parsed['trip_date'].strftime('%d.%m.%Y')}\n"
-                f"🚗 Km: *{parsed['km']:.0f} km*\n"
-                f"📍 Scop: {parsed['purpose']}\n\n"
-                f"📊 Total {LUNI_LONG.get(parsed['trip_date'].month)} "
-                f"{parsed['trip_date'].year}: *{total_km:.0f} km* "
-                f"({len(trips)} zile)",
-                parse_mode="Markdown",
-            )
-        else:
-            await update.message.reply_text(
-                "❌ Eroare la înregistrarea parcursului."
-            )
-        return True
-    except Exception as e:
-        logger.error(f"handle_text_command error: {e}")
-        await update.message.reply_text("❌ Eroare sistem.")
-        return True
-    finally:
-        session.close()
-
-
-async def handle_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, parts: List[str],
-) -> None:
-    """Router pentru callback queries namespace=parcurs."""
-    from db import get_session
-    from app.repositories import users as users_repo
-
-    query = update.callback_query
-    tg_id = update.effective_user.id
-
-    if len(parts) < 2:
-        return
-    action = parts[1]
-
-    session = get_session()
-    try:
-        user = users_repo.get_by_telegram_id(session, telegram_id=tg_id)
-        if not user:
-            await query.edit_message_text("⚠️ Eroare identificare utilizator.")
-            return
-        user_id = user.id
-
-        # ─── MENIU ───────────────────────────────────────────
-        if action == "menu":
-            await query.edit_message_text(
-                "🚗 *FOAIE DE PARCURS*\n\nAlege o opțiune:",
-                parse_mode="Markdown",
-                reply_markup=_build_main_menu(),
-            )
-            return
-
-        # ─── ADAUGĂ (instrucțiuni text) ──────────────────────
-        if action == "add":
-            await query.edit_message_text(
-                "➕ *Adaugă zi de parcurs*\n\n"
-                "Trimite un mesaj text în formatul:\n\n"
-                "`parcurs 18.05 240km Bolt Bistrița`\n"
-                "`parcurs azi 180 km aprovizionare`\n"
-                "`parcurs 15.05.2026 220 km`\n\n"
-                "_Data poate fi `azi`, `ieri`, sau `ZZ.LL`._\n"
-                "_Daca nu specifici scopul, se trece Curse Bolt._",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "⬅️ Înapoi", callback_data="parcurs|menu"
-                    )
-                ]]),
-            )
-            return
-
-        # ─── VEZI LUNA CURENTĂ ───────────────────────────────
-        if action == "view_current":
-            today = date.today()
-            await _show_period_trips(
-                query, session, user_id, today.year, today.month
-            )
-            return
-
-        # ─── EXPORT — alege perioada ─────────────────────────
-        if action == "export":
-            periods = get_available_trip_periods(session, user_id)
-            if not periods:
-                await query.edit_message_text(
-                    "📭 Nu ai înregistrări în foaia de parcurs.\n\n"
-                    "Adaugă prima zi cu:\n"
-                    "`parcurs azi 240km Bolt`",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            "⬅️ Înapoi", callback_data="parcurs|menu"
-                        )
-                    ]]),
-                )
-                return
-            await query.edit_message_text(
-                "📥 *Descarcă foaia de parcurs*\nAlege luna:",
-                parse_mode="Markdown",
-                reply_markup=_build_period_picker(periods, "export_do"),
-            )
-            return
-
-        # ─── EXPORT — generează Excel ────────────────────────
-        if action == "export_do":
-            year = int(parts[2])
-            month = int(parts[3])
-            await _generate_and_send_excel(
-                query, context, session, user_id, year, month
-            )
-            return
-
-        # ─── ANALIZĂ COMBUSTIBIL ─────────────────────────────
-        if action == "fuel":
-            today = date.today()
-            analysis = analyze_fuel_consistency(
-                session, user_id, today.year, today.month
-            )
-            msg = _format_fuel_analysis(analysis, today.year, today.month)
-            await query.edit_message_text(
-                msg, parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "⬅️ Înapoi", callback_data="parcurs|menu"
-                    )
-                ]]),
-            )
-            return
-
-    except Exception as e:
-        logger.error(f"foaie_parcurs callback error: {e}")
-        try:
-            await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
-        except Exception:
-            pass
-    finally:
-        session.close()
 
 
 # ============================================================
-#               HELPERS — DISPLAY
+#       JURNAL LUNAR
 # ============================================================
 
-async def _show_period_trips(query, session, user_id, year, month):
-    """Afișează intrările pentru o lună."""
-    trips = get_trips_for_period(session, user_id, year, month)
+async def _show_jurnal(update, context, user_id, year, month):
+    """Afiseaza lista turelor dintr-o luna."""
+    session = get_session()
+    try:
+        trips = trip_repo.list_for_month(session, user_id, year, month)
+    finally:
+        session.close()
+
+    summary = compute_month_summary(trips)
 
     if not trips:
-        await query.edit_message_text(
-            f"📭 Nu ai înregistrări pentru "
-            f"{LUNI_LONG.get(month)} {year}.\n\n"
-            f"Adaugă cu: `parcurs azi 240km Bolt`",
-            parse_mode="Markdown",
+        await update.callback_query.edit_message_text(
+            f"📭 Nicio tură în {LUNI_LONG[month]} {year}.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(
-                    "⬅️ Înapoi", callback_data="parcurs|menu"
-                )
+                InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")
             ]]),
         )
         return
 
-    total_km = sum(t.km for t in trips)
     lines = [
-        f"📊 *Foaie parcurs — {LUNI_LONG.get(month)} {year}*",
+        f"📋 *Jurnal parcurs — {LUNI_LONG[month]} {year}*",
         "━━━━━━━━━━━━━━━━━━━━",
         "",
     ]
     for t in trips:
-        lines.append(
-            f"📅 {t.trip_date.strftime('%d.%m')} — "
-            f"*{t.km:.0f} km* · _{t.purpose or '—'}_"
-        )
+        zi = t.trip_date.strftime("%d.%m") if t.trip_date else "—"
+        if t.status == TRIP_STATUS_OPEN:
+            lines.append(
+                f"🟢 *{zi}* — pornită la {_fmt_km(t.odometer_start)} km (în curs)"
+            )
+        else:
+            odo = ""
+            if t.odometer_start is not None and t.odometer_end is not None:
+                odo = f"  ({_fmt_km(t.odometer_start)}→{_fmt_km(t.odometer_end)})"
+            ore = ""
+            if t.ora_start and t.ora_stop:
+                ore = f" {t.ora_start}-{t.ora_stop}"
+            traseu = f" · {t.purpose}" if t.purpose else ""
+            lines.append(
+                f"🚗 *{zi}*{ore} — {_fmt_km(t.km)} km{odo}{traseu}\n"
+                f"   `/sterge_tura {t.id}`"
+            )
 
-    lines.extend([
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"🚗 *TOTAL: {total_km:.0f} km* ({len(trips)} zile)",
+    lines.append("")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"📊 *Total business: {_fmt_km(summary['km_business'])} km*")
+    if summary["km_personal"] > 0:
+        lines.append(f"🏠 Personal (gap): {_fmt_km(summary['km_personal'])} km")
+        lines.append(f"📈 Business: {summary['pct_business']:.0f}% din total")
+
+    text = "\n".join(lines)
+    # Telegram limita 4096 caractere
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n_...listă prea lungă, trunchiată._"
+
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")],
+        [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
     ])
-
-    await query.edit_message_text(
-        "\n".join(lines),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "📥 Descarcă Excel",
-                callback_data=f"parcurs|export_do|{year}|{month}"
-            )],
-            [InlineKeyboardButton(
-                "⬅️ Înapoi", callback_data="parcurs|menu"
-            )],
-        ]),
+    await update.callback_query.edit_message_text(
+        text, parse_mode="Markdown", reply_markup=markup
     )
 
 
-async def _generate_and_send_excel(
-    query, context, session, user_id, year, month,
-):
-    """Generează și trimite Excel-ul foii de parcurs."""
-    from app.repositories import users as users_repo
+async def _show_luni_picker(update, context, user_id):
+    """Afiseaza lunile pentru care exista ture."""
+    session = get_session()
+    try:
+        months = trip_repo.available_months(session, user_id)
+    finally:
+        session.close()
 
-    await query.edit_message_text(
-        f"🔄 Generez foaia de parcurs "
-        f"{LUNI_LONG.get(month)} {year}..."
-    )
-
-    trips = get_trips_for_period(session, user_id, year, month)
-    if not trips:
-        await query.edit_message_text(
-            f"📭 Nu există înregistrări pentru "
-            f"{LUNI_LONG.get(month)} {year}."
+    if not months:
+        await update.callback_query.edit_message_text(
+            "📭 Nu există ture înregistrate încă.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")
+            ]]),
         )
         return
 
-    profile = users_repo.get_profile_dict(session, user_id) or {}
-    pfa_name = profile.get("firma_nume") or "PFA"
-    pfa_cui = profile.get("firma_cui") or ""
+    rows = []
+    for (y, m) in months[:24]:
+        label = f"{LUNI_SHORT[m]} {y}"
+        rows.append([InlineKeyboardButton(
+            label, callback_data=f"parcurs|jurnal|{y}|{m}"
+        )])
+    rows.append([InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")])
 
-    fuel_analysis = analyze_fuel_consistency(
-        session, user_id, year, month
+    await update.callback_query.edit_message_text(
+        "🗓️ *Alege luna:*",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(rows),
     )
 
-    try:
-        xlsx_bytes = generate_foaie_parcurs_xlsx(
-            trips, year, month,
-            pfa_name=pfa_name, pfa_cui=pfa_cui,
-            fuel_analysis=fuel_analysis,
-        )
-        fname = filename_foaie_parcurs(year, month)
-        total_km = sum(t.km for t in trips)
 
-        await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=_io.BytesIO(xlsx_bytes),
-            filename=fname,
-            caption=(
-                f"🚗 *Foaie de parcurs — "
-                f"{LUNI_LONG.get(month)} {year}*\n\n"
-                f"📊 Total: {total_km:.0f} km · {len(trips)} zile\n"
-                f"🖨️ Tipărește: Print → Landscape A4\n\n"
-                f"_Document justificativ pentru deductibilitatea "
-                f"cheltuielilor auto._"
-            ),
+# ============================================================
+#       STERGERE TURA
+# ============================================================
+
+async def handle_delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comanda /sterge_tura <id>."""
+    user_id = _get_user_id(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "⚠️ Specifică ID-ul turei.\nExemplu: `/sterge_tura 12`",
             parse_mode="Markdown",
         )
-        await query.edit_message_text(
-            f"✅ Foaie de parcurs generată pentru "
-            f"{LUNI_LONG.get(month)} {year}."
+        return
+
+    trip_id = _parse_int(args[0])
+    if trip_id is None:
+        await update.message.reply_text("⚠️ ID invalid.")
+        return
+
+    session = get_session()
+    try:
+        trip = trip_repo.get_by_id(session, trip_id, user_id)
+        if not trip:
+            await update.message.reply_text(f"⚠️ Tura #{trip_id} nu a fost găsită.")
+            return
+        zi = trip.trip_date.strftime("%d.%m.%Y") if trip.trip_date else "—"
+        km = _fmt_km(trip.km)
+    finally:
+        session.close()
+
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Da, șterge", callback_data=f"parcurs|delok|{trip_id}"),
+        InlineKeyboardButton("❌ Nu", callback_data="parcurs|status"),
+    ]])
+    await update.message.reply_text(
+        f"🗑️ Ștergi tura *#{trip_id}* ({zi}, {km} km)?",
+        parse_mode="Markdown", reply_markup=markup,
+    )
+
+
+async def _do_delete_trip(update, context, user_id, trip_id):
+    session = get_session()
+    try:
+        trip = trip_repo.get_by_id(session, trip_id, user_id)
+        if not trip:
+            await update.callback_query.edit_message_text("⚠️ Tura nu a fost găsită.")
+            return
+        before = trip_repo.to_dict(trip)
+        trip_repo.delete(session, trip)
+        audit_repo.write(
+            session, entity_type="trip_log", entity_id=trip_id,
+            action="delete", user_id=user_id, source="user",
+            before=before,
         )
+        session.commit()
     except Exception as e:
-        logger.error(f"_generate_and_send_excel error: {e}")
-        await query.edit_message_text(
-            "❌ Eroare la generarea foii de parcurs."
-        )
+        session.rollback()
+        logger.error(f"do_delete_trip error: {e}")
+        await update.callback_query.edit_message_text("❌ Eroare la ștergere.")
+        return
+    finally:
+        session.close()
+
+    await update.callback_query.edit_message_text(
+        f"✅ Tura #{trip_id} a fost ștearsă.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🛣️ Foaie parcurs", callback_data="parcurs|status")
+        ]]),
+    )
 
 
-def _format_fuel_analysis(analysis: Dict, year: int, month: int) -> str:
-    """Formatează rezultatul analizei combustibil."""
-    lines = [
-        f"⛽ *ANALIZĂ COMBUSTIBIL*",
-        f"_{LUNI_LONG.get(month)} {year}_",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "",
-    ]
+# ============================================================
+#       MENIU BUTTON & CALLBACK ROUTER
+# ============================================================
 
-    if analysis["verdict"] == "no_data":
-        lines.append(f"ℹ️ {analysis['message']}")
-        return "\n".join(lines)
-
-    lines.extend([
-        f"🚗 Total km: *{analysis['total_km']:.0f} km*",
-        f"💰 Cheltuieli combustibil: *{analysis['fuel_ron']:.2f} RON*",
-    ])
-
-    if analysis["fuel_ron"] > 0:
-        lines.extend([
-            f"⛽ Litri estimați: ~{analysis['estimated_liters']:.1f} L",
-            f"📊 Consum estimat: *{analysis['consum_per_100km']:.1f} "
-            f"L/100km*",
-            f"💵 Cost mediu: {analysis['cost_per_km']:.2f} RON/km",
-        ])
-
-    lines.extend([
-        "",
-        f"{analysis['verdict_emoji']} _{analysis['message']}_",
-        "",
-        "_Calculul litrilor e estimativ (preț mediu motorină). "
-        "Pentru exactitate, păstrează bonurile cu litri afișați._",
-    ])
-
-    return "\n".join(lines)
+async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Apelat cand user-ul apasa butonul din meniu."""
+    user_id = _get_user_id(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+    await _show_status(update, context, user_id, via_callback=False)
 
 
-__all__ = [
-    "BTN_LABEL",
-    "is_trip_command",
-    "handle_menu_button",
-    "handle_text_command",
-    "handle_callback",
-]
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                          parts: list):
+    """Router pentru callback-urile din namespace-ul 'parcurs'."""
+    query = update.callback_query
+    user_id = _get_user_id(update)
+    if not user_id:
+        await query.edit_message_text("⚠️ Eroare identificare utilizator.")
+        return
+
+    action = parts[1] if len(parts) > 1 else ""
+
+    try:
+        if action == "status":
+            await _show_status(update, context, user_id, via_callback=True)
+        elif action == "luni":
+            await _show_luni_picker(update, context, user_id)
+        elif action == "jurnal":
+            year = int(parts[2])
+            month = int(parts[3])
+            await _show_jurnal(update, context, user_id, year, month)
+        elif action == "delok":
+            await _do_delete_trip(update, context, user_id, int(parts[2]))
+    except Exception as e:
+        logger.error(f"parcurs callback error parts={parts}: {e}")
+        try:
+            await query.edit_message_text(f"❌ Eroare: {str(e)[:150]}")
+        except Exception:
+            pass
