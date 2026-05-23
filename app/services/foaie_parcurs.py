@@ -44,6 +44,7 @@ from app.repositories import users as users_repo
 from app.repositories import vehicule as vehicule_repo
 from app.repositories import trip_logs as trip_repo
 from app.repositories import audit as audit_repo
+from app.integrations.exports import foaie_parcurs_export
 from app.models import TRIP_STATUS_OPEN, TRIP_STATUS_CLOSED
 
 logger = logging.getLogger(__name__)
@@ -560,11 +561,66 @@ async def _show_jurnal(update, context, user_id, year, month):
         text = text[:3900] + "\n\n_...listă prea lungă, trunchiată._"
 
     markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📥 Descarcă foaia Excel", callback_data=f"parcurs|excel|{year}|{month}")],
         [InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")],
         [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
     ])
     await update.callback_query.edit_message_text(
         text, parse_mode="Markdown", reply_markup=markup
+    )
+
+
+async def _send_excel(update, context, user_id, year, month):
+    """Genereaza si trimite foaia de parcurs Excel."""
+    query = update.callback_query
+    await query.edit_message_text(
+        f"🔄 Generez foaia de parcurs Excel pentru {LUNI_LONG[month]} {year}..."
+    )
+    session = get_session()
+    try:
+        trips = trip_repo.list_for_month(session, user_id, year, month)
+        if not trips:
+            await query.edit_message_text(
+                f"📭 Nicio tură în {LUNI_LONG[month]} {year}."
+            )
+            return
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        pfa_name = profile.get("firma_nume") or "PFA"
+        pfa_cui = profile.get("firma_cui") or ""
+        vehicul = vehicule_repo.get_default(session, user_id)
+        xlsx_bytes = foaie_parcurs_export.generate_foaie_parcurs_xlsx(
+            trips, year, month, vehicul,
+            pfa_name=pfa_name, pfa_cui=pfa_cui,
+        )
+        nr_inmat = vehicul.nr_inmatriculare if vehicul else ""
+        fname = foaie_parcurs_export.filename_foaie_parcurs(year, month, nr_inmat)
+        summary = compute_month_summary(trips)
+    except Exception as e:
+        logger.error(f"send_excel error: {e}")
+        await query.edit_message_text("❌ Eroare la generarea foii Excel.")
+        return
+    finally:
+        session.close()
+
+    import io as _io
+    ded = foaie_parcurs_export.calcul_deductibilitate_combustibil(
+        summary["km_business"],
+        vehicul.norma_consum if vehicul else 7.5,
+    )
+    await context.bot.send_document(
+        chat_id=query.message.chat_id,
+        document=_io.BytesIO(xlsx_bytes),
+        filename=fname,
+        caption=(
+            f"📊 *Foaie de parcurs — {LUNI_LONG[month]} {year}*\n\n"
+            f"🛣️ Total business: {_fmt_km(summary['km_business'])} km\n"
+            f"⛽ Combustibil normat: {ded['litri_normati']:g} litri\n\n"
+            f"_Tipărește: Landscape A4. Verifică cu contabilul._"
+        ),
+        parse_mode="Markdown",
+    )
+    await query.edit_message_text(
+        f"✅ Foaie de parcurs generată pentru {LUNI_LONG[month]} {year}."
     )
 
 
@@ -709,6 +765,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
             year = int(parts[2])
             month = int(parts[3])
             await _show_jurnal(update, context, user_id, year, month)
+        elif action == "excel":
+            await _send_excel(update, context, user_id, int(parts[2]), int(parts[3]))
         elif action == "delok":
             await _do_delete_trip(update, context, user_id, int(parts[2]))
     except Exception as e:
