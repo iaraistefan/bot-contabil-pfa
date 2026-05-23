@@ -54,17 +54,17 @@ class RidesharingActivity(BaseActivity):
     #                       CHELTUIELI
     # ============================================================
     expense_categories = [
-        # ── Combustibil — DEDUCTIBIL 50% (auto mixt) ──
+        # -- Combustibil -- DEDUCTIBIL 50% (auto mixt) --
         ExpenseCategory(
             code="fuel",
             label="Combustibil auto",
             icon="⛽",
             keywords=[
-                # Tipuri de combustibil — keywords PUTERNICE
+                # Tipuri de combustibil - keywords PUTERNICE
                 "motorina", "benzina", "carburant", "combustibil",
                 "diesel", "gpl", "petrol",
                 "euro diesel", "euro premium", "euro 5", "euro 6",
-                # Brand-uri benzinării — keywords SLABE (numai pentru fallback)
+                # Brand-uri benzinarii - keywords SLABE (numai pentru fallback)
                 "lukoil", "omv", "petrom", "mol", "rompetrol",
                 "socar", "shell",
             ],
@@ -77,7 +77,7 @@ class RidesharingActivity(BaseActivity):
             accounting_code="6022",
         ),
 
-        # ── Comision platformă — DEDUCTIBIL 100% + reverse charge ──
+        # -- Comision platforma -- DEDUCTIBIL 100% + reverse charge --
         ExpenseCategory(
             code="platform_commission",
             label="Comision platformă (Bolt/Uber)",
@@ -96,13 +96,13 @@ class RidesharingActivity(BaseActivity):
             accounting_code="628",
         ),
 
-        # ── Service auto / consumabile — DEDUCTIBIL 50% ──
+        # -- Service auto / consumabile -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_service",
             label="Service / Consumabile auto",
             icon="🔧",
             keywords=[
-                # Compuse — au prioritate (scor mare datorită spațiilor)
+                # Compuse - au prioritate (scor mare datorita spatiilor)
                 "ulei motor", "ulei auto", "schimb ulei", "filtru ulei",
                 "filtru aer", "filtru polen", "filtru combustibil",
                 "service auto", "reparatii auto", "diagnostic auto",
@@ -124,13 +124,13 @@ class RidesharingActivity(BaseActivity):
             accounting_code="611",
         ),
 
-        # ── Autorizații / Înregistrare — DEDUCTIBIL 100% ──
+        # -- Autorizatii / Inregistrare -- DEDUCTIBIL 100% --
         ExpenseCategory(
             code="registration",
             label="Autorizații / Înregistrare",
             icon="📋",
             keywords=[
-                # Compuse — prioritate
+                # Compuse - prioritate
                 "autorizatie transport", "atestat profesional",
                 "consultanta autorizatie", "ecusoane RAR",
                 "ecuson rutier", "tahograf",
@@ -146,13 +146,13 @@ class RidesharingActivity(BaseActivity):
             accounting_code="635",
         ),
 
-        # ── Asigurări auto — DEDUCTIBIL 50% ──
+        # -- Asigurari auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_insurance",
             label="Asigurări auto (RCA, CASCO)",
             icon="🛡️",
             keywords=[
-                # Compuse — prioritate
+                # Compuse - prioritate
                 "asigurare auto", "asigurari auto", "polita rca",
                 "polita casco", "polita auto", "city insurance",
                 "asirom auto", "groupama auto", "allianz auto",
@@ -167,7 +167,7 @@ class RidesharingActivity(BaseActivity):
             accounting_code="613",
         ),
 
-        # ── Spălătorie auto — DEDUCTIBIL 50% ──
+        # -- Spalatorie auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_wash",
             label="Spălătorie auto",
@@ -182,7 +182,7 @@ class RidesharingActivity(BaseActivity):
             accounting_code="611",
         ),
 
-        # ── Onorariu notarial / contabil — DEDUCTIBIL 100% ──
+        # -- Onorariu notarial / contabil -- DEDUCTIBIL 100% --
         ExpenseCategory(
             code="professional_fees",
             label="Onorarii notar/contabil/avocat",
@@ -199,7 +199,7 @@ class RidesharingActivity(BaseActivity):
             accounting_code="622",
         ),
 
-        # ── Telefonie / Internet — DEDUCTIBIL 50% ──
+        # -- Telefonie / Internet -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="telecom",
             label="Telefon / Internet",
@@ -217,7 +217,7 @@ class RidesharingActivity(BaseActivity):
             accounting_code="626",
         ),
 
-        # ── Materiale / Accesorii auto — DEDUCTIBIL 50% ──
+        # -- Materiale / Accesorii auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_supplies",
             label="Accesorii auto / Consumabile",
@@ -234,12 +234,12 @@ class RidesharingActivity(BaseActivity):
             accounting_code="6028",
         ),
 
-        # ── Alte cheltuieli — fallback final ──
+        # -- Alte cheltuieli -- fallback final --
         ExpenseCategory(
             code="other_expense",
             label="Alte cheltuieli",
             icon="📦",
-            keywords=[],  # ← gol intentionat: e fallback când nimic nu match-uie
+            keywords=[],  # gol intentionat: e fallback cand nimic nu match-uie
             deductibility=DeductibilityRule.FULL,
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="628",
@@ -251,10 +251,11 @@ class RidesharingActivity(BaseActivity):
         """
         Hint-uri specifice ridesharing pentru promptul AI.
 
-        Acest text e apendizat la system prompt-ul generic. Conține:
-        - Categorii și keywords specifice Ridesharing
-        - Regula importantă: Lukoil + ulei → car_service (NU fuel)
-        - Exemple concrete cu rapoarte Bolt/Uber și facturi de comision
+        Acest text e apendizat la system prompt-ul generic. Contine:
+        - Categorii si keywords specifice Ridesharing
+        - Regula importanta: Lukoil + ulei -> car_service (NU fuel)
+        - Regula litri combustibil: pastreaza litrii in detalii
+        - Exemple concrete cu rapoarte Bolt/Uber si facturi de comision
         """
         return """
 
@@ -268,6 +269,13 @@ CATEGORII SPECIFICE (mapează la code):
 Dacă bonul e de la o benzinărie (Lukoil, OMV, Petrom, MOL, Rompetrol, Shell)
 DAR menționează "ulei", "filtru", "lichid", "antigel" → categoria e `car_service` (NU `fuel`)!
 Doar dacă bonul e CLAR doar pentru combustibil (motorină/benzină) → `fuel`.
+
+🔵 IMPORTANT — Litri combustibil:
+Pentru bonurile de COMBUSTIBIL (motorină/benzină/GPL), dacă în text apare
+cantitatea în litri (ex: "40L", "40 litri", "38.5 l", "45,5 litri"),
+include OBLIGATORIU litrii în câmpul "detalii".
+Exemplu detalii corect: "Combustibil OMV motorină 40 litri".
+Litrii sunt necesari pentru calculul corect al deductibilității prin foaia de parcurs.
 
 CHELTUIELI:
 - `fuel` (Combustibil auto) — DOAR pentru motorină, benzină, GPL la pompă
@@ -298,6 +306,10 @@ Output:
 Input: "bon 05.02.2026 Lukoil motorina 450 lei"
 Output:
 [{"data":"05.02.2026","platforma":"Lukoil","tip":"CHELTUIALA","brut":450,"comision":0,"tva":0,"net":450,"cash":450,"detalii":"Combustibil Lukoil"}]
+
+Input: "bon 05.02.2026 OMV motorina 300 lei 40 litri"
+Output:
+[{"data":"05.02.2026","platforma":"OMV","tip":"CHELTUIALA","brut":300,"comision":0,"tva":0,"net":300,"cash":300,"detalii":"Combustibil OMV motorina 40 litri"}]
 
 Input: "bon 05.04.2026 Lukoil ulei motor 200 lei"
 Output:
