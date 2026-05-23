@@ -45,6 +45,7 @@ from app.repositories import vehicule as vehicule_repo
 from app.repositories import trip_logs as trip_repo
 from app.repositories import audit as audit_repo
 from app.integrations.exports import foaie_parcurs_export
+from app.services import combustibil
 from app.models import TRIP_STATUS_OPEN, TRIP_STATUS_CLOSED
 
 logger = logging.getLogger(__name__)
@@ -482,6 +483,16 @@ async def _show_status(update, context, user_id, via_callback=False):
         lines.append(
             "_Nicio tură încă. Pornește prima cu_ `parcurs start <km>`"
         )
+
+    # Pas A+ : sectiunea combustibil deductibil
+    try:
+        fuel_summary = combustibil.get_fuel_summary(user_id, year, month)
+        fuel_section = combustibil.format_fuel_section(fuel_summary)
+        if fuel_section:
+            lines.append("")
+            lines.append(fuel_section)
+    except Exception as e:
+        logger.error(f"fuel section in status error: {e}")
 
     text = "\n".join(lines)
 
