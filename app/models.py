@@ -25,7 +25,7 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     name = Column(String(200), nullable=True)
 
-    # === Profil firmă ===
+    # === Profil firma ===
     firma_nume = Column(String(255), nullable=True)
     firma_cui = Column(String(20), nullable=True, index=True)
     firma_forma_juridica = Column(String(20), nullable=True)
@@ -41,7 +41,7 @@ class User(Base):
     caen_principal = Column(String(10), nullable=True)
     activity_code = Column(String(50), nullable=True)
 
-    # === Locație ===
+    # === Locatie ===
     judet = Column(String(50), nullable=True)
     localitate = Column(String(100), nullable=True)
 
@@ -54,7 +54,7 @@ class User(Base):
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
-    # === Pas 10.1 — Proactive alerts config ===
+    # === Pas 10.1 - Proactive alerts config ===
     proactive_alerts_enabled = Column(Boolean, nullable=False, default=True)
     proactive_alerts_hour = Column(Integer, nullable=False, default=8)
     proactive_alerts_advance_days = Column(Integer, nullable=False, default=7)
@@ -69,9 +69,14 @@ class User(Base):
         "FiscalAlertSent", back_populates="user",
         cascade="all, delete-orphan",
     )
-    # ⭐ Pas 14
+    # Pas 14 - Foaie de parcurs
     trip_logs = relationship(
         "TripLog", back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    # Pas A - Vehicule
+    vehicule = relationship(
+        "Vehicul", back_populates="user",
         cascade="all, delete-orphan",
     )
 
@@ -183,7 +188,7 @@ class TaxPeriod(Base):
 
 
 class FiscalAlert(Base):
-    """Alerte legislative (modificări ANAF/MOf) — generate de AI fiscal_monitor."""
+    """Alerte legislative (modificari ANAF/MOf) - generate de AI fiscal_monitor."""
     __tablename__ = "fiscal_alerts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -243,13 +248,13 @@ class AuditLog(Base):
 
 
 # ============================================================
-# Pas 10.1 — FiscalAlertSent (Proactive Alerts anti-spam)
+# Pas 10.1 - FiscalAlertSent (Proactive Alerts anti-spam)
 # ============================================================
 
 class FiscalAlertSent(Base):
     """
-    Pas 10.1 — Tracking pentru alerte proactive trimise (anti-spam).
-    NU se confundă cu FiscalAlert (alerte legislative ANAF/MOf).
+    Pas 10.1 - Tracking pentru alerte proactive trimise (anti-spam).
+    NU se confunda cu FiscalAlert (alerte legislative ANAF/MOf).
     """
     __tablename__ = "fiscal_alert_sent"
 
@@ -284,22 +289,105 @@ class FiscalAlertSent(Base):
 
 
 # ============================================================
-# ⭐ Pas 14 — TripLog (Foaie de parcurs / jurnal km auto)
+# Pas A - Vehicul (masini PFA/SRL/II - flota)
 # ============================================================
+
+# Tipuri de detinere - relevante fiscal pentru deductibilitatea RCA/CASCO
+TIP_DETINERE_PROPRIETATE = "PROPRIETATE"   # achizitionat pe firma
+TIP_DETINERE_COMODAT = "COMODAT"           # masina personala in folosinta
+TIP_DETINERE_LEASING = "LEASING"           # leasing financiar/operational
+TIP_DETINERE_INCHIRIERE = "INCHIRIERE"     # inchiriat
+
+TIP_DETINERE_LABELS = {
+    TIP_DETINERE_PROPRIETATE: "Proprietatea firmei",
+    TIP_DETINERE_COMODAT: "Comodat (masina personala)",
+    TIP_DETINERE_LEASING: "Leasing",
+    TIP_DETINERE_INCHIRIERE: "Inchiriere",
+}
+
+
+class Vehicul(Base):
+    """
+    Pas A - Vehicul folosit in activitate.
+
+    Un PFA poate avea o singura masina (un titular). Un SRL sau I.I.
+    poate avea mai multe (flota, mai multi soferi) - constrangerea se
+    aplica la nivel de UI pe baza formei juridice.
+
+    Campuri relevante fiscal:
+      - norma_consum   : L/100km, folosita in foaia de parcurs
+      - tip_detinere   : decide daca RCA/CASCO sunt deductibile:
+                         PROPRIETATE/LEASING/INCHIRIERE -> da
+                         COMODAT (masina personala)     -> nu (doar combustibil)
+      - km_curent      : ultimul odometru cunoscut (sincronizat din foaia
+                         de parcurs)
+    """
+    __tablename__ = "vehicule"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    nr_inmatriculare = Column(String(20), nullable=False)
+    marca_model = Column(String(120), nullable=True)
+    norma_consum = Column(Float, nullable=False, default=7.5)  # L/100km
+    tip_detinere = Column(String(20), nullable=True)  # vezi TIP_DETINERE_*
+    km_curent = Column(Integer, nullable=True)
+    activ = Column(Boolean, nullable=False, default=True)  # soft-delete
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    user = relationship("User", back_populates="vehicule")
+    trip_logs = relationship("TripLog", back_populates="vehicul")
+
+    __table_args__ = (
+        Index("ix_vehicule_user_activ", "user_id", "activ"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<Vehicul id={self.id} {self.nr_inmatriculare} "
+            f"{self.marca_model!r} activ={self.activ}>"
+        )
+
+
+# ============================================================
+# Pas 14 + A - TripLog (Foaie de parcurs / jurnal km auto)
+# ============================================================
+
+# Status-uri tura
+TRIP_STATUS_OPEN = "open"      # tura pornita (start dat, stop lipsa)
+TRIP_STATUS_CLOSED = "closed"  # tura incheiata (start + stop)
+
 
 class TripLog(Base):
     """
-    Pas 14 — Foaie de parcurs: o intrare = o zi de deplasare.
+    Pas 14 + A - Foaie de parcurs: o intrare = o tura (zi de deplasare).
 
-    Justifică deductibilitatea cheltuielilor auto (combustibil) prin
-    documentarea km parcurși în interesul activității.
+    Justifica deductibilitatea cheltuielilor auto (combustibil) prin
+    documentarea km parcursi in interesul activitatii.
 
-    Câmpuri:
-      • trip_date    — ziua deplasării
-      • km           — km parcurși (obligatoriu)
-      • odometer_*   — citire bord start/sfârșit (opțional)
-      • purpose      — scop/traseu (ex: "curse Bolt Bistrița")
-      • period_*     — derivate din trip_date pentru raportare rapidă
+    WORKFLOW start/stop:
+      1. `parcurs start 125430` -> creeaza rand status=open,
+         odometer_start=125430
+      2. `parcurs stop 125680`  -> completeaza odometer_end=125680,
+         km=250, status=closed
+
+    Campuri:
+      - vehicul_id     : masina folosita (Pas A)
+      - trip_date      : ziua deplasarii
+      - km             : km parcursi in interes business (= end - start)
+      - odometer_start : citire bord la inceputul turei
+      - odometer_end   : citire bord la sfarsitul turei
+      - status         : open / closed (vezi TRIP_STATUS_*)
+      - ora_start      : ora pornirii turei, format "HH:MM"
+      - ora_stop       : ora incheierii turei, format "HH:MM"
+      - purpose        : scop/traseu (ex: "curse Bolt Bistrita")
+      - period_*       : derivate din trip_date pentru raportare rapida
     """
     __tablename__ = "trip_logs"
 
@@ -308,16 +396,26 @@ class TripLog(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    # Pas A - legatura cu masina
+    vehicul_id = Column(
+        Integer, ForeignKey("vehicule.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     trip_date = Column(Date, nullable=False, index=True)
     km = Column(Float, nullable=False, default=0.0)
     odometer_start = Column(Integer, nullable=True)
     odometer_end = Column(Integer, nullable=True)
+    # Pas A - workflow start/stop
+    status = Column(String(20), nullable=False, default=TRIP_STATUS_CLOSED)
+    ora_start = Column(String(5), nullable=True)   # "08:30"
+    ora_stop = Column(String(5), nullable=True)    # "17:45"
     purpose = Column(String(255), nullable=True)
     period_year = Column(Integer, nullable=False, index=True)
     period_month = Column(Integer, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user = relationship("User", back_populates="trip_logs")
+    vehicul = relationship("Vehicul", back_populates="trip_logs")
 
     __table_args__ = (
         Index("ix_trip_logs_user_period", "user_id", "period_year", "period_month"),
@@ -326,5 +424,5 @@ class TripLog(Base):
     def __repr__(self):
         return (
             f"<TripLog user={self.user_id} {self.trip_date} "
-            f"km={self.km} purpose={self.purpose!r}>"
+            f"km={self.km} status={self.status} purpose={self.purpose!r}>"
         )
