@@ -8,7 +8,7 @@ from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
 from app.repositories import tax_periods as tax_periods_repo
 from app import storage
-from app import monitoring  # ⭐ Pas 13.1 — Sentry error tracking
+from app import monitoring  # Pas 13.1 - Sentry error tracking
 from app.ai import client as ai_client
 from app.ai import fiscal_monitor as fiscal_mon
 from app.services import posting
@@ -17,6 +17,8 @@ from app.services import scheduler as sched_service
 from app.services import onboarding
 from app.services import plata_fiscala  # Pas 11.4
 from app.services import reminder_ui  # Pas 10.2
+from app.services import vehicule  # Pas A.2
+from app.services import foaie_parcurs  # Pas A.3
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -53,12 +55,13 @@ BTN_REGISTRU = "📂 Registru"
 BTN_DASHBOARD = "🖥️ Dashboard"
 BTN_CALENDAR = "📋 Calendar Fiscal"
 BTN_PLATA = plata_fiscala.BTN_PLATA  # Pas 11.4: "💳 Plată Fiscală"
+BTN_PARCURS = foaie_parcurs.BTN_PARCURS  # Pas A: "🛣️ Foaie parcurs"
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
-    BTN_CALENDAR, BTN_PLATA, BTN_SETARI, BTN_AJUTOR,
+    BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_SETARI, BTN_AJUTOR,
 }
 
 LUNI_SHORT = {
@@ -83,7 +86,7 @@ def build_main_menu():
             KeyboardButton(BTN_DASHBOARD, web_app=WebAppInfo(url=DASHBOARD_URL)),
             KeyboardButton(BTN_CALENDAR),
         ],
-        [KeyboardButton(BTN_PLATA)],  # Pas 11.4
+        [KeyboardButton(BTN_PLATA), KeyboardButton(BTN_PARCURS)],  # Pas 11.4 + A
         [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
@@ -144,6 +147,8 @@ def build_settings_menu():
         [InlineKeyboardButton("🔔 Alerte fiscale (legislative)", callback_data="settings|alerts")],
         # Pas 10.2: Configurare reminder-uri obligații
         [InlineKeyboardButton(reminder_ui.BTN_LABEL, callback_data="reminder|menu")],
+        # Pas A: Management vehicule
+        [InlineKeyboardButton(vehicule.BTN_VEHICULE, callback_data="vehicul|menu")],
         [InlineKeyboardButton("⏰ Trimite reminder manual", callback_data="settings|reminder")],
         [InlineKeyboardButton("📥 Export CSV", callback_data="settings|export")],
         [InlineKeyboardButton("🗑️ Reset (șterge toate datele)", callback_data="settings|reset|ask")],
@@ -194,7 +199,7 @@ def ensure_user(update: Update):
                 )
             user_id = user.id
             session.commit()
-            # ⭐ Pas 13.1 — context Sentry (ID-uri, fără date personale)
+            # Pas 13.1 - context Sentry (ID-uri, fara date personale)
             monitoring.set_user_context(user_id=user_id, telegram_id=tg_user.id)
             return user_id
         except Exception as e:
@@ -353,7 +358,7 @@ def _tx_count_label(n: int) -> str:
 
 
 def _resolve_expense_meta(activity, platforma, detalii):
-    """Returnează (icon, label, deductibility_pct, note) pentru o cheltuială."""
+    """Returneaza (icon, label, deductibility_pct, note) pentru o cheltuiala."""
     default_icon = "🛒"
     default_label = "Cheltuială"
     default_pct = 100
@@ -398,7 +403,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     tb_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     logger.error(f"Unhandled exception:\n{tb_str}")
 
-    # ⭐ Pas 13.1 — trimitem eroarea la Sentry cu context
+    # Pas 13.1 - trimitem eroarea la Sentry cu context
     update_info = "n/a"
     try:
         if isinstance(update, Update):
@@ -448,7 +453,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 # ============================================================
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/start — verifică status onboarding."""
+    """/start - verifica status onboarding."""
     ensure_user(update)
     tg_id = update.effective_user.id
 
@@ -488,7 +493,13 @@ async def send_ajutor(chat_id, context):
         "• 🖥️ *Dashboard* — interfață vizuală\n"
         "• 📋 *Calendar* — termene fiscale\n"
         "• 💳 *Plată Fiscală* — IBAN + sumă pre-calculate\n"
-        "• ⚙️ *Setări* — alerte, profil, export, reset\n\n"
+        "• 🛣️ *Foaie parcurs* — jurnal km auto\n"
+        "• ⚙️ *Setări* — alerte, profil, mașini, export\n\n"
+        "🚗 *Foaie de parcurs (comenzi text)*\n"
+        "• `parcurs start 125430` — pornești tura\n"
+        "• `parcurs stop 125680` — închizi tura\n"
+        "• `parcurs 125430 125680` — tură completă\n"
+        "• `parcurs` — vezi jurnalul lunii\n\n"
         "🔔 *Alerte automate (Setări)*\n"
         "• *Alerte fiscale* — modificări legislative ANAF\n"
         "• *Reminder-uri obligații* — termene proprii (D301, D100, etc.)\n\n"
@@ -497,6 +508,7 @@ async def send_ajutor(chat_id, context):
         "• `/profil` — vezi profilul tău\n"
         "• `/reset_profil` — refă onboarding\n"
         "• `/plata_fiscala` — wizard plată ANAF\n"
+        "• `/sterge_tura <ID>` — șterge o tură\n"
         "• `/status` — starea bot-ului\n"
         "• `/delete <ID>` — șterge un document"
     )
@@ -507,7 +519,7 @@ async def send_ajutor(chat_id, context):
 
 
 async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/profil — afișează profilul curent."""
+    """/profil - afiseaza profilul curent."""
     user_id = ensure_user(update)
     if not user_id:
         await update.message.reply_text("⚠️ Eroare identificare utilizator.")
@@ -555,7 +567,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/reset_profil — relansează onboarding-ul."""
+    """/reset_profil - relanseaza onboarding-ul."""
     ensure_user(update)
     tg_id = update.effective_user.id
 
@@ -584,10 +596,10 @@ async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """⭐ Pas 13.1 — /status: starea bot-ului (healthcheck rapid)."""
+    """Pas 13.1 - /status: starea bot-ului (healthcheck rapid)."""
     user_id = ensure_user(update)
 
-    # Verificăm conexiunea DB
+    # Verificam conexiunea DB
     db_ok = False
     doc_count = 0
     tx_count = 0
@@ -619,7 +631,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v11* (Compliance + Alerts + Monitoring)\n"
+        f"⚙️ Versiune: *v12* (Compliance + Alerts + Monitoring + Parcurs)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -675,6 +687,8 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
     elif text == BTN_PLATA:
         await plata_fiscala.handle_menu_button(update, context)
+    elif text == BTN_PARCURS:
+        await foaie_parcurs.handle_menu_button(update, context)
     elif text == BTN_SETARI:
         await update.message.reply_text(
             "⚙️ *Setări*",
@@ -702,7 +716,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     parts = data.split("|")
     namespace = parts[0]
 
-    # ⭐ Pas 13.1 — breadcrumb pentru Sentry
+    # Pas 13.1 - breadcrumb pentru Sentry
     monitoring.add_breadcrumb(f"callback: {data}", category="callback")
 
     # === ONBOARDING ===
@@ -879,7 +893,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             return
 
-        # Pas 11.4: Plată Fiscală
+        # Pas 11.4: Plata Fiscala
         if namespace == "plata":
             await plata_fiscala.handle_callback(update, context, parts)
             return
@@ -889,9 +903,19 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await reminder_ui.handle_callback(update, context, parts)
             return
 
+        # Pas A.2: Management vehicule
+        if namespace == "vehicul":
+            await vehicule.handle_callback(update, context, parts)
+            return
+
+        # Pas A.3: Foaie de parcurs
+        if namespace == "parcurs":
+            await foaie_parcurs.handle_callback(update, context, parts)
+            return
+
     except Exception as e:
         logger.error(f"Callback handler error data={data}: {e}")
-        # ⭐ Pas 13.1 — trimitem la Sentry
+        # Pas 13.1 - trimitem la Sentry
         monitoring.capture_exception(e, callback_data=data)
         try:
             await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
@@ -1266,7 +1290,7 @@ async def execute_reset(query, context, user_id):
 
 
 # ============================================================
-#                    /delete și /anafdebug
+#                    /delete si /anafdebug
 # ============================================================
 
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1328,7 +1352,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test ANAF — debug."""
+    """Test ANAF - debug."""
     args = context.args or []
     cui = args[0] if args else "53067338"
     await update.message.reply_text(f"🔄 Caut CUI `{cui}` în ANAF...", parse_mode="Markdown")
@@ -1353,7 +1377,7 @@ async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ============================================================
-#                    PROCESARE INTRARI (poză/text)
+#                    PROCESARE INTRARI (poza/text)
 # ============================================================
 
 async def process_entry(
@@ -1481,7 +1505,7 @@ async def process_entry(
         )
     except Exception as e:
         logger.error(f"Error processing items: {e}")
-        # ⭐ Pas 13.1 — trimitem la Sentry
+        # Pas 13.1 - trimitem la Sentry
         monitoring.capture_exception(e, stage="process_entry")
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -1560,8 +1584,22 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
         if handled:
             return
 
+    # Butoanele de meniu au prioritate - anuleaza orice wizard activ
     if text in MAIN_MENU_BUTTONS:
+        if vehicule.is_in_wizard(context):
+            vehicule.cancel_wizard(context)
         await handle_menu_button(update, context, text)
+        return
+
+    # Pas A.2: Wizard vehicule (adaugare/editare masina)
+    if vehicule.is_in_wizard(context):
+        handled = await vehicule.handle_wizard_text(update, context)
+        if handled:
+            return
+
+    # Pas A.3: Comenzi foaie de parcurs (parcurs start/stop/...)
+    if foaie_parcurs.match_command(text):
+        await foaie_parcurs.handle_command(update, context)
         return
 
     await process_entry(update, context, text_input=text)
@@ -1572,7 +1610,7 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ============================================================
 
 if __name__ == '__main__':
-    # ⭐ Pas 13.1 — Sentry PRIMUL, ca să capteze și erorile de pornire
+    # Pas 13.1 - Sentry PRIMUL, ca sa capteze si erorile de pornire
     monitoring.init_sentry()
 
     try:
@@ -1609,10 +1647,11 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
-    app_bot.add_handler(CommandHandler("status", handle_status))  # ⭐ Pas 13.1
+    app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
+    app_bot.add_handler(CommandHandler("sterge_tura", foaie_parcurs.handle_delete_command))  # Pas A.3
 
     # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
@@ -1625,5 +1664,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v11 — Compliance + Proactive Alerts + Monitoring ONLINE (Pas 11 + 10 + 13.1)")
+    print("🤖 Bot Contabil v12 — Compliance + Alerts + Monitoring + Foaie Parcurs ONLINE (Pas 11 + 10 + 13 + A)")
     app_bot.run_polling()
