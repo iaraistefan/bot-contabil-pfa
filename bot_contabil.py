@@ -19,6 +19,7 @@ from app.services import plata_fiscala  # Pas 11.4
 from app.services import reminder_ui  # Pas 10.2
 from app.services import vehicule  # Pas A.2
 from app.services import foaie_parcurs  # Pas A.3
+from app.services import combustibil  # Pas A+
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -988,6 +989,19 @@ async def execute_raport(query, context, user_id, year, month):
         session.commit()
         msg = tax_engine.format_report_message(totals)
         await query.edit_message_text(msg, parse_mode="Markdown")
+
+        # Pas A+ : sectiunea combustibil deductibil (mesaj separat)
+        try:
+            fuel_summary = combustibil.get_fuel_summary(user_id, year, month)
+            fuel_msg = combustibil.format_fuel_section(fuel_summary)
+            if fuel_msg:
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=fuel_msg,
+                    parse_mode="Markdown",
+                )
+        except Exception as fuel_err:
+            logger.error(f"fuel section in raport error: {fuel_err}")
     except Exception as e:
         session.rollback()
         logger.error(f"execute_raport error: {e}")
