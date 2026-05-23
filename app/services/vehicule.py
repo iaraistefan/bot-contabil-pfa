@@ -80,6 +80,11 @@ def _clear_wizard(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop(_WIZARD_KEY, None)
 
 
+def cancel_wizard(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Anuleaza wizard-ul curent - apelabil din exterior (ex: bot_contabil)."""
+    _clear_wizard(context)
+
+
 def _get_user_id(update: Update) -> int:
     """Rezolva user_id-ul DB-intern din update."""
     session = get_session()
