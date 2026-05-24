@@ -1,15 +1,19 @@
 """
 Prompt-uri pentru AI extraction.
 
-Regulă: fiecare prompt are o versiune explicită. Când schimbi prompt-ul, BUMP versiunea.
+Regula: fiecare prompt are o versiune explicita. Cand schimbi prompt-ul, BUMP versiunea.
 
-ARHITECTURĂ ACTIVITY-AWARE (din Bug #5):
-- Promptul de bază e GENERIC (PFA/SRL din România)
-- Exemplele și keywords specifice vin din activity.ai_prompt_hints()
-  (apendizate în client.py)
+ARHITECTURA ACTIVITY-AWARE:
+- Promptul de baza e GENERIC (PFA/SRL din Romania)
+- Exemplele si keywords specifice vin din activity.ai_prompt_hints()
+
+CHANGELOG:
+- v5: arhitectura activity-aware
+- v6: instructiuni pentru citirea imaginilor (scris de mana, facturi
+      multi-linie, imagini neclare)
 """
 
-PROMPT_VERSION = "extract.v5"
+PROMPT_VERSION = "extract.v6"
 
 
 def build_extraction_system_prompt(today_str: str) -> str:
@@ -61,6 +65,32 @@ REGULA #4 — RECUNOASTERE TIP DIN TEXT:
 - Cuvinte cheie pentru FACTURA_COMISION: facturi de la entitati intracomunitare
   (cu VAT EE/IE/NL/etc), "commission", "service fee".
 - Daca textul contine o suma si un furnizor/descriere → extrage ca CHELTUIALA.
+
+REGULA #5 — CITIREA IMAGINILOR (bonuri, facturi, chitante):
+Cand primesti o IMAGINE, citeste cu MAXIMA ATENTIE tot textul vizibil.
+
+A) FACTURI / BONURI CU MAI MULTE LINII SAU PRODUSE:
+   - Extrage UN SINGUR obiect JSON cu TOTALUL documentului.
+   - NU crea cate un obiect per produs/linie. Pentru contabilitate conteaza
+     totalul facturii, nu produsele individuale.
+   - "brut" = suma finala de plata, cu TVA inclus. Cauta pe document:
+     "TOTAL", "TOTAL DE PLATA", "Total de plata", "Suma de plata", "TOTAL GENERAL".
+   - "tva" = valoarea TVA daca e afisata separat pe document.
+
+B) CHITANTE / BONURI SCRISE DE MANA:
+   - Cifrele scrise de mana pot fi neclare — citeste cu atentie.
+   - Concentreaza-te pe: suma totala, data, numele furnizorului.
+   - Daca o cifra e ambigua, alege interpretarea cea mai probabila in context
+     (ex: un bon de combustibil e tipic intre 100 si 600 lei).
+   - Daca nu exista TVA mentionat explicit, pune tva = 0.
+
+C) IMAGINI NECLARE / ILIZIBILE:
+   - Daca imaginea e prea blurata/intunecata si NU poti citi suma cu incredere
+     rezonabila → raspunde cu [].
+   - Mai bine [] decat o cifra ghicita gresit.
+
+D) ORIENTARE: documentul poate fi rotit sau fotografiat din unghi — citeste-l
+   oricum, indiferent de orientare.
 
 REGULI ANALIZA:
 
@@ -119,6 +149,14 @@ Output:
 Input: "factura 31.03.2026 AWS 245.50 lei hosting"
 Output:
 [{{"data":"31.03.2026","platforma":"AWS","tip":"FACTURA_COMISION","brut":245.50,"comision":245.50,"tva":51.56,"net":245.50,"cash":0,"detalii":"AWS hosting martie 2026"}}]
+
+Input: (imagine factura cu 8 produse, total de plata 1240.50 lei, TVA 215.30, data 12.04.2026, furnizor Dedeman)
+Output:
+[{{"data":"12.04.2026","platforma":"Dedeman","tip":"CHELTUIALA","brut":1240.50,"comision":0,"tva":215.30,"net":1025.20,"cash":0,"detalii":"Dedeman - materiale"}}]
+
+Input: (chitanta scrisa de mana, suma 250 lei, data 03.05.2026, fara TVA)
+Output:
+[{{"data":"03.05.2026","platforma":null,"tip":"CHELTUIALA","brut":250,"comision":0,"tva":0,"net":250,"cash":250,"detalii":"Chitanta"}}]
 
 ⚠️ ATENTIE: hint-urile specifice activitatii utilizatorului
 (Ridesharing, IT freelance, Comert, etc.) sunt apendizate dupa acest prompt.
