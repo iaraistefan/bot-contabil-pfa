@@ -20,6 +20,8 @@ from app.services import reminder_ui  # Pas 10.2
 from app.services import vehicule  # Pas A.2
 from app.services import foaie_parcurs  # Pas A.3
 from app.services import combustibil  # Pas A+
+from app.services import confirmare  # Pas R1 - confirmare date extrase
+from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -632,7 +634,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v12* (Compliance + Alerts + Monitoring + Parcurs)\n"
+        f"⚙️ Versiune: *v13* (Compliance + Alerts + Monitoring + Parcurs + Confirmare)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -912,6 +914,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # Pas A.3: Foaie de parcurs
         if namespace == "parcurs":
             await foaie_parcurs.handle_callback(update, context, parts)
+            return
+
+        # Pas R1: Confirmare date extrase de AI
+        if namespace == "confirm":
+            if len(parts) > 1 and parts[1] == "save":
+                await execute_confirmed_save(update, context, user_id)
+            else:
+                await confirmare.handle_callback(update, context, parts)
             return
 
     except Exception as e:
@@ -1429,11 +1439,56 @@ async def process_entry(
         )
         return
 
+    # === Pas R1: NU mai salvam direct. Afisam confirmare. ===
+    # Datele extrase devin "pending" in user_data. Salvarea efectiva
+    # se face in execute_confirmed_save() doar dupa ce user-ul confirma.
+    items_dicts = [it.model_dump() for it in extraction["items"]]
+    confirmare.store_pending(
+        context, items_dicts,
+        source_file_id=source_file_id,
+        raw_response=extraction["raw_response"],
+        prompt_version=extraction["prompt_version"],
+    )
+    await confirmare.show_confirmation(update.effective_chat.id, context)
+
+
+async def execute_confirmed_save(update, context, user_id):
+    """
+    Pas R1: Salveaza efectiv documentele DUPA ce user-ul a confirmat.
+    Citeste datele 'pending' din user_data, le persista si afiseaza
+    mesajul de confirmare cu deductibilitate.
+    """
+    query = update.callback_query
+    chat_id = query.message.chat_id
+
+    pending = confirmare.get_pending(context)
+    if not pending:
+        await query.edit_message_text(
+            "⏳ Sesiunea de confirmare a expirat.\n"
+            "Trimite documentul din nou."
+        )
+        return
+
+    source_file_id = pending.get("source_file_id")
+    raw_response = pending.get("raw_response", "")
+    prompt_version = pending.get("prompt_version", "")
+
+    # Reconstruim ExtractionItem din dict-urile validate
+    try:
+        items = [ExtractionItem(**d) for d in pending["items"]]
+    except Exception as e:
+        logger.error(f"execute_confirmed_save: rebuild items failed: {e}")
+        await query.edit_message_text("❌ Eroare la citirea datelor confirmate.")
+        confirmare.clear_pending(context)
+        return
+
     activity = get_activity_for_user(user_id) if user_id else None
 
     try:
+        await query.edit_message_text("💾 Salvez documentul...")
+
         msg_confirm = "✅ *Salvat:*\n"
-        for item in extraction["items"]:
+        for item in items:
             data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
             tip = item.tip
             tva = item.tva
@@ -1446,8 +1501,8 @@ async def process_entry(
                 doc_id = persist_document(
                     user_id=user_id, source_file_id=source_file_id,
                     item=item, banca=banca,
-                    raw_response=extraction["raw_response"],
-                    prompt_version=extraction["prompt_version"],
+                    raw_response=raw_response,
+                    prompt_version=prompt_version,
                 )
 
             tx_ids = []
@@ -1512,18 +1567,19 @@ async def process_entry(
                     f"   📅 Data: {data_doc}\n"
                 )
 
+        confirmare.clear_pending(context)
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
+            chat_id=chat_id,
             text=msg_confirm,
             parse_mode="Markdown",
         )
     except Exception as e:
-        logger.error(f"Error processing items: {e}")
-        # Pas 13.1 - trimitem la Sentry
-        monitoring.capture_exception(e, stage="process_entry")
+        logger.error(f"Error in execute_confirmed_save: {e}")
+        monitoring.capture_exception(e, stage="execute_confirmed_save")
+        confirmare.clear_pending(context)
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"❌ Eroare sistem: {str(e)}"
+            chat_id=chat_id,
+            text=f"❌ Eroare la salvare: {str(e)}"
         )
 
 
@@ -1602,8 +1658,16 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
     if text in MAIN_MENU_BUTTONS:
         if vehicule.is_in_wizard(context):
             vehicule.cancel_wizard(context)
+        if confirmare.is_editing(context):
+            confirmare.cancel_edit(context)
         await handle_menu_button(update, context, text)
         return
+
+    # Pas R1: Wizard editare camp (confirmare date extrase)
+    if confirmare.is_editing(context):
+        handled = await confirmare.handle_edit_text(update, context)
+        if handled:
+            return
 
     # Pas A.2: Wizard vehicule (adaugare/editare masina)
     if vehicule.is_in_wizard(context):
@@ -1678,5 +1742,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v12 — Compliance + Alerts + Monitoring + Foaie Parcurs ONLINE (Pas 11 + 10 + 13 + A)")
+    print("🤖 Bot Contabil v13 — + Confirmare date extrase ONLINE (Pas 11 + 10 + 13 + A + B + R1)")
     app_bot.run_polling()
