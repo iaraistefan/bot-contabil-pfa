@@ -11,9 +11,12 @@ CHANGELOG:
 - v5: arhitectura activity-aware
 - v6: instructiuni pentru citirea imaginilor (scris de mana, facturi
       multi-linie, imagini neclare)
+- v7: tratarea chitantelor de plata servicii (asigurari, chirii,
+      abonamente) - clarificare "am primit de la" = CHELTUIALA pentru
+      utilizator; document fiscal definit mai larg.
 """
 
-PROMPT_VERSION = "extract.v6"
+PROMPT_VERSION = "extract.v7"
 
 
 def build_extraction_system_prompt(today_str: str) -> str:
@@ -26,14 +29,26 @@ REGULA #1 — FORMATUL DE OUTPUT (NENEGOCIABIL):
 - Raspunsul TAU este INTOTDEAUNA JSON pur, o lista Python.
 - NICIODATA nu scrii proza, explicatii, intrebari, saluturi sau text conversational.
 - Fara ``` markdown fences. Fara "Iata rezultatul:" sau frazari similare.
-- Daca inputul NU contine destule date pentru extragere, raspunzi cu [].
-- Daca inputul nu e un document fiscal, raspunzi cu [].
+- Daca inputul e doar conversatie (salut, intrebari) → raspunzi cu [].
+- Daca imaginea e ilizibila si nu poti citi nicio suma → raspunzi cu [].
+
+CE ESTE UN DOCUMENT DE EXTRAS (important):
+Un document de extras este ORICE document care confirma o suma de bani
+platita sau incasata. Include:
+  • bonuri fiscale (casa de marcat)
+  • facturi (furnizori, comision platforme)
+  • chitante de plata (asigurari, chirii, abonamente, taxe, servicii)
+  • rapoarte de venituri (Bolt, Uber, alte aplicatii)
+Daca vezi o firma + o suma + o data → este un document de extras.
+NU raspunde cu [] doar pentru ca documentul nu e un bon de casa de marcat.
 
 REGULA #2 — VALORI ACCEPTATE pentru campul "tip":
 - "VENIT" — incasari (raport aplicatie, bacsis, cash, plata client).
-- "CHELTUIALA" — bonuri fiscale (orice cumparatura: combustibil, materiale, servicii).
-- "FACTURA_COMISION" — facturi comision platforme intracomunitare (Bolt, Uber,
-  AWS, Adobe, Google etc — taxare inversa TVA).
+- "CHELTUIALA" — bonuri fiscale, chitante de plata, orice cumparatura
+  sau plata facuta de utilizator (combustibil, materiale, servicii,
+  asigurari, chirii, abonamente).
+- "FACTURA_COMISION" — facturi comision platforme intracomunitare (Bolt,
+  Uber, AWS, Adobe, Google etc — taxare inversa TVA).
 - NU inventa alte valori. Daca nu esti sigur, pune "CHELTUIALA".
 
 REGULA #3 — DATA DOCUMENTULUI (CRITICA):
@@ -55,11 +70,11 @@ REGULA #3 — DATA DOCUMENTULUI (CRITICA):
 - NICIODATA nu folosi data curenta ({today_str}) pentru un raport lunar care
   afiseaza explicit o alta luna.
 - Daca nu gasesti nicio data in document → atunci si doar atunci folosesti {today_str}.
-- Pentru bonuri si facturi: citeste data exact de pe document.
+- Pentru bonuri, facturi si chitante: citeste data exact de pe document.
 
 REGULA #4 — RECUNOASTERE TIP DIN TEXT:
-- Cuvinte cheie pentru CHELTUIALA: "bon", "factura", "am platit", "cheltuiala",
-  + orice mentioneaza un furnizor + suma.
+- Cuvinte cheie pentru CHELTUIALA: "bon", "factura", "chitanta", "am platit",
+  "cheltuiala", + orice mentioneaza un furnizor + suma.
 - Cuvinte cheie pentru VENIT: "venit", "incasat", "castiguri",
   "bacsis", referinte la rapoarte de aplicatie.
 - Cuvinte cheie pentru FACTURA_COMISION: facturi de la entitati intracomunitare
@@ -71,26 +86,37 @@ Cand primesti o IMAGINE, citeste cu MAXIMA ATENTIE tot textul vizibil.
 
 A) FACTURI / BONURI CU MAI MULTE LINII SAU PRODUSE:
    - Extrage UN SINGUR obiect JSON cu TOTALUL documentului.
-   - NU crea cate un obiect per produs/linie. Pentru contabilitate conteaza
-     totalul facturii, nu produsele individuale.
+   - NU crea cate un obiect per produs/linie.
    - "brut" = suma finala de plata, cu TVA inclus. Cauta pe document:
-     "TOTAL", "TOTAL DE PLATA", "Total de plata", "Suma de plata", "TOTAL GENERAL".
+     "TOTAL", "TOTAL DE PLATA", "Suma de plata", "TOTAL GENERAL".
    - "tva" = valoarea TVA daca e afisata separat pe document.
 
-B) CHITANTE / BONURI SCRISE DE MANA:
+B) CHITANTE DE PLATA (asigurari, chirii, abonamente, servicii, taxe):
+   - O chitanta prin care o FIRMA confirma ca a PRIMIT bani de la utilizator
+     este o CHELTUIALA pentru utilizator (utilizatorul a platit acea suma).
+   - ATENTIE LA CAPCANA: textul "AM PRIMIT DE LA [nume persoana]" inseamna
+     ca FIRMA emitenta a primit banii de la acea persoana. Pentru
+     contabilitatea utilizatorului nostru aceasta este o CHELTUIALA,
+     NU un venit. Nu confunda "am primit" cu VENIT.
+   - Suma: cauta "SUMA DE", "ADICA ... lei", "Total de plata".
+   - "platforma" = firma emitenta a chitantei.
+   - "detalii" = ce reprezinta plata (ex: "Poliță asigurare auto",
+     "Chirie", "Abonament", "Taxa").
+   - Exemple: prime asigurare RCA/CASCO, chirie, abonamente, taxe.
+
+C) CHITANTE / BONURI SCRISE DE MANA:
    - Cifrele scrise de mana pot fi neclare — citeste cu atentie.
    - Concentreaza-te pe: suma totala, data, numele furnizorului.
-   - Daca o cifra e ambigua, alege interpretarea cea mai probabila in context
-     (ex: un bon de combustibil e tipic intre 100 si 600 lei).
+   - Daca o cifra e ambigua, alege interpretarea cea mai probabila.
    - Daca nu exista TVA mentionat explicit, pune tva = 0.
 
-C) IMAGINI NECLARE / ILIZIBILE:
-   - Daca imaginea e prea blurata/intunecata si NU poti citi suma cu incredere
-     rezonabila → raspunde cu [].
+D) IMAGINI NECLARE / ILIZIBILE:
+   - Daca imaginea e prea blurata/intunecata si NU poti citi suma cu
+     incredere rezonabila → raspunde cu [].
    - Mai bine [] decat o cifra ghicita gresit.
 
-D) ORIENTARE: documentul poate fi rotit sau fotografiat din unghi — citeste-l
-   oricum, indiferent de orientare.
+E) ORIENTARE: documentul poate fi rotit sau fotografiat din unghi —
+   citeste-l oricum, indiferent de orientare.
 
 REGULI ANALIZA:
 
@@ -101,11 +127,11 @@ REGULI ANALIZA:
    - Identificator: VAT ID al furnizorului incepe cu prefix UE
      (EE, IE, NL, DE, FR, etc — NU "RO").
 
-2. BON FISCAL / CHELTUIALA:
-   - Cauta data bonului sau din text.
-   - Brut = Total bon/factura cu TVA inclus.
-   - detalii = descriere scurta a cheltuielii bazata pe ce vezi pe bon
-     (ex: "Combustibil", "Casa de marcat", "Service auto", "Hosting AWS").
+2. BON FISCAL / CHITANTA / CHELTUIALA:
+   - Cauta data documentului sau din text.
+   - Brut = Total cu TVA inclus.
+   - detalii = descriere scurta a cheltuielii bazata pe ce vezi
+     (ex: "Combustibil", "Service auto", "Poliță asigurare", "Chirie").
 
 3. RAPORT VENITURI LUNAR (Screenshot aplicatie — Bolt, Uber, etc.):
    - PRIMUL LUCRU: citeste luna afisata in titlul ecranului.
@@ -138,10 +164,6 @@ Input: "salut, cum merge bot-ul?"
 Output:
 []
 
-Input: "ce parere ai despre vreme?"
-Output:
-[]
-
 Input: "bon 19.01.2026 Electro Supermax 1330 lei accesorii"
 Output:
 [{{"data":"19.01.2026","platforma":"Electro Supermax","tip":"CHELTUIALA","brut":1330,"comision":0,"tva":0,"net":1330,"cash":0,"detalii":"Electro Supermax - accesorii"}}]
@@ -153,6 +175,10 @@ Output:
 Input: (imagine factura cu 8 produse, total de plata 1240.50 lei, TVA 215.30, data 12.04.2026, furnizor Dedeman)
 Output:
 [{{"data":"12.04.2026","platforma":"Dedeman","tip":"CHELTUIALA","brut":1240.50,"comision":0,"tva":215.30,"net":1025.20,"cash":0,"detalii":"Dedeman - materiale"}}]
+
+Input: (chitanta asigurare: emitent "SC Inter Broker de Asigurare SRL", "AM PRIMIT DE LA Iarai Stefan", DATA 23.03.2026, "SUMA DE 42.00", "Contravaloare polita")
+Output:
+[{{"data":"23.03.2026","platforma":"Inter Broker Asigurare","tip":"CHELTUIALA","brut":42,"comision":0,"tva":0,"net":42,"cash":42,"detalii":"Poliță asigurare auto"}}]
 
 Input: (chitanta scrisa de mana, suma 250 lei, data 03.05.2026, fara TVA)
 Output:
