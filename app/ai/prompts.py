@@ -16,7 +16,7 @@ CHANGELOG:
       utilizator; document fiscal definit mai larg.
 """
 
-PROMPT_VERSION = "extract.v7"
+PROMPT_VERSION = "extract.v8"
 
 
 def build_extraction_system_prompt(today_str: str) -> str:
@@ -110,6 +110,17 @@ C) CHITANTE / BONURI SCRISE DE MANA:
    - Daca o cifra e ambigua, alege interpretarea cea mai probabila.
    - Daca nu exista TVA mentionat explicit, pune tva = 0.
 
+F) NUMARUL DOCUMENTULUI (IMPORTANT pentru detectarea duplicatelor):
+   - Aproape orice factura, bon fiscal sau chitanta are un NUMAR unic.
+   - Cauta pe document etichete ca: "Seria", "Serie", "Nr.", "Numar",
+     "Factura nr", "Chitanta nr", "Bon nr", "Document nr".
+   - Pune valoarea in campul "numar_document".
+   - Daca exista SERIE si NUMAR separat, combina-le cu "/" intre ele.
+     Exemplu: Seria "INSINT", Nr. "1518242" -> "INSINT/1518242".
+   - Daca exista doar numar (fara serie), pune doar numarul: "1518242".
+   - Daca NU gasesti niciun numar pe document, pune null.
+   - NU inventa un numar. Daca nu e vizibil clar -> null.
+
 D) IMAGINI NECLARE / ILIZIBILE:
    - Daca imaginea e prea blurata/intunecata si NU poti citi suma cu
      incredere rezonabila → raspunde cu [].
@@ -154,7 +165,8 @@ OUTPUT — LISTA DE OBIECTE JSON:
     "tva": 0.00,
     "net": 0.00,
     "cash": 0.00,
-    "detalii": "Scurta descriere"
+    "detalii": "Scurta descriere",
+    "numar_document": "Seria/Numarul documentului sau null"
   }}
 ]
 
@@ -166,23 +178,23 @@ Output:
 
 Input: "bon 19.01.2026 Electro Supermax 1330 lei accesorii"
 Output:
-[{{"data":"19.01.2026","platforma":"Electro Supermax","tip":"CHELTUIALA","brut":1330,"comision":0,"tva":0,"net":1330,"cash":0,"detalii":"Electro Supermax - accesorii"}}]
+[{{"data":"19.01.2026","platforma":"Electro Supermax","tip":"CHELTUIALA","brut":1330,"comision":0,"tva":0,"net":1330,"cash":0,"detalii":"Electro Supermax - accesorii","numar_document":null}}]
 
 Input: "factura 31.03.2026 AWS 245.50 lei hosting"
 Output:
-[{{"data":"31.03.2026","platforma":"AWS","tip":"FACTURA_COMISION","brut":245.50,"comision":245.50,"tva":51.56,"net":245.50,"cash":0,"detalii":"AWS hosting martie 2026"}}]
+[{{"data":"31.03.2026","platforma":"AWS","tip":"FACTURA_COMISION","brut":245.50,"comision":245.50,"tva":51.56,"net":245.50,"cash":0,"detalii":"AWS hosting martie 2026","numar_document":null}}]
 
-Input: (imagine factura cu 8 produse, total de plata 1240.50 lei, TVA 215.30, data 12.04.2026, furnizor Dedeman)
+Input: (imagine factura cu 8 produse, total de plata 1240.50 lei, TVA 215.30, data 12.04.2026, furnizor Dedeman, Seria DDM Nr. 00457)
 Output:
-[{{"data":"12.04.2026","platforma":"Dedeman","tip":"CHELTUIALA","brut":1240.50,"comision":0,"tva":215.30,"net":1025.20,"cash":0,"detalii":"Dedeman - materiale"}}]
+[{{"data":"12.04.2026","platforma":"Dedeman","tip":"CHELTUIALA","brut":1240.50,"comision":0,"tva":215.30,"net":1025.20,"cash":0,"detalii":"Dedeman - materiale","numar_document":"DDM/00457"}}]
 
-Input: (chitanta asigurare: emitent "SC Inter Broker de Asigurare SRL", "AM PRIMIT DE LA Iarai Stefan", DATA 23.03.2026, "SUMA DE 42.00", "Contravaloare polita")
+Input: (chitanta asigurare: emitent "SC Inter Broker de Asigurare SRL", "AM PRIMIT DE LA Iarai Stefan", DATA 23.03.2026, Seria INSINT Nr. 1518242, "SUMA DE 42.00", "Contravaloare polita")
 Output:
-[{{"data":"23.03.2026","platforma":"Inter Broker Asigurare","tip":"CHELTUIALA","brut":42,"comision":0,"tva":0,"net":42,"cash":42,"detalii":"Poliță asigurare auto"}}]
+[{{"data":"23.03.2026","platforma":"Inter Broker Asigurare","tip":"CHELTUIALA","brut":42,"comision":0,"tva":0,"net":42,"cash":42,"detalii":"Poliță asigurare auto","numar_document":"INSINT/1518242"}}]
 
 Input: (chitanta scrisa de mana, suma 250 lei, data 03.05.2026, fara TVA)
 Output:
-[{{"data":"03.05.2026","platforma":null,"tip":"CHELTUIALA","brut":250,"comision":0,"tva":0,"net":250,"cash":250,"detalii":"Chitanta"}}]
+[{{"data":"03.05.2026","platforma":null,"tip":"CHELTUIALA","brut":250,"comision":0,"tva":0,"net":250,"cash":250,"detalii":"Chitanta","numar_document":null}}]
 
 ⚠️ ATENTIE: hint-urile specifice activitatii utilizatorului
 (Ridesharing, IT freelance, Comert, etc.) sunt apendizate dupa acest prompt.
