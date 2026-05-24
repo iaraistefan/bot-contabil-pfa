@@ -1,14 +1,19 @@
 """
-Wrapper subțire peste OpenAI pentru extragere documente.
+Wrapper subtire peste OpenAI pentru extragere documente.
 
-Suportă acum activități plug-in: dacă primește user_id, prompt-ul AI va
-include hint-uri specifice activității utilizatorului (ex: pentru Ridesharing,
-AI-ul știe că "Lukoil" → categoria 'fuel').
+Suporta activitati plug-in: daca primeste user_id, prompt-ul AI va
+include hint-uri specifice activitatii utilizatorului.
+
+FIX EXTRACTOR (audit):
+- detail="high" pe imagini -> modelul citeste text mic + scris de mana
+- max_tokens marit (800 -> 3000) -> facturi complexe nu mai sunt taiate
+- retry pe erori tranzitorii OpenAI (3 incercari cu backoff)
 """
 
 import base64
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -22,20 +27,19 @@ logger = logging.getLogger(__name__)
 
 _client = OpenAI(api_key=settings.openai_api_key)
 
+# Numar de incercari pentru apelul OpenAI (erori tranzitorii: rate limit, timeout)
+_MAX_RETRIES = 3
+# Token-uri suficiente pentru facturi complexe cu multe campuri
+_MAX_TOKENS = 3000
+
 
 def _clean_json_response(text: str) -> str:
-    """Elimină markdown fences ```json ... ``` din răspuns."""
+    """Elimina markdown fences ```json ... ``` din raspuns."""
     return text.replace("```json", "").replace("```", "").strip()
 
 
 def _get_activity_hints(user_id: Optional[int]) -> str:
-    """
-    Returnează hint-urile specifice activității utilizatorului.
-    Dacă user_id e None sau nu are activitate, returnează șir gol.
-
-    Hint-urile sunt apendizate la promptul de extracție pentru a ajuta
-    AI-ul să clasifice corect cheltuielile (ex: Lukoil → fuel pentru Ridesharing).
-    """
+    """Returneaza hint-urile specifice activitatii utilizatorului."""
     if user_id is None:
         return ""
 
@@ -54,6 +58,34 @@ def _get_activity_hints(user_id: Optional[int]) -> str:
         return ""
 
 
+def _call_openai_with_retry(messages: list) -> str:
+    """
+    Apeleaza OpenAI cu retry pe erori tranzitorii.
+    Returneaza raw_response sau arunca exceptia ultima daca toate esueaza.
+    """
+    last_error = None
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            response = _client.chat.completions.create(
+                model=settings.openai_model,
+                messages=messages,
+                max_tokens=_MAX_TOKENS,
+                temperature=0.1,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                f"OpenAI attempt {attempt}/{_MAX_RETRIES} failed: {e}"
+            )
+            if attempt < _MAX_RETRIES:
+                # Backoff progresiv: 1.5s, 3s
+                time.sleep(1.5 * attempt)
+
+    # Toate incercarile au esuat
+    raise last_error if last_error else RuntimeError("OpenAI call failed")
+
+
 def extract_document(
     user_input: Optional[str] = None,
     image_bytes: Optional[bytes] = None,
@@ -61,14 +93,7 @@ def extract_document(
     user_id: Optional[int] = None,
 ) -> dict:
     """
-    Rulează extragerea pe text și/sau imagine, apoi validează.
-
-    Args:
-        user_input: textul scris de utilizator
-        image_bytes: bytes-urile imaginii (poză bon/factură)
-        today_str: data de azi (default: now)
-        user_id: ID intern user — dacă e setat, AI-ul primește hint-uri
-                 specifice activității utilizatorului
+    Ruleaza extragerea pe text si/sau imagine, apoi valideaza.
 
     Returns dict cu:
         - "ok": bool
@@ -81,7 +106,7 @@ def extract_document(
     today_str = today_str or datetime.now().strftime("%d.%m.%Y")
     system_prompt = build_extraction_system_prompt(today_str)
 
-    # === Adăugăm hint-uri specifice activității utilizatorului ===
+    # Hint-uri specifice activitatii utilizatorului
     activity_hints = _get_activity_hints(user_id)
     if activity_hints:
         system_prompt = f"{system_prompt}\n\n{activity_hints}"
@@ -93,7 +118,12 @@ def extract_document(
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         user_content.append({
             "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{image_b64}",
+                # detail="high" -> OpenAI proceseaza imaginea la rezolutie mare,
+                # esential pentru text mic de pe bonuri si scris de mana
+                "detail": "high",
+            },
         })
 
     messages = [
@@ -102,15 +132,9 @@ def extract_document(
     ]
 
     try:
-        response = _client.chat.completions.create(
-            model=settings.openai_model,
-            messages=messages,
-            max_tokens=800,
-            temperature=0.1,
-        )
-        raw_response = response.choices[0].message.content or ""
+        raw_response = _call_openai_with_retry(messages)
     except Exception as e:
-        logger.error(f"OpenAI call failed: {e}")
+        logger.error(f"OpenAI call failed after {_MAX_RETRIES} retries: {e}")
         return {
             "ok": False,
             "items": [],
