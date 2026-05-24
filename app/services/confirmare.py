@@ -1,20 +1,21 @@
 """
 Pas R1 - Confirmare date extrase de AI inainte de salvare.
+Pas R1.2 - Detectare duplicate pe continut (data + suma).
 
 PROBLEMA rezolvata:
-Inainte, datele extrase de AI se salveau DIRECT in contabilitate. O suma
-citita gresit de AI intra direct in declaratii -> risc de amenda ANAF.
+- Datele extrase de AI se salveau DIRECT in contabilitate (risc amenda).
+- Dedup-ul exista doar pe POZA (SHA256). Acelasi document introdus de
+  doua ori (text + poza, sau doua poze) intra de doua ori.
 
 SOLUTIA:
-Dupa extractie, bot-ul afiseaza ce a citit si cere confirmare umana.
-User-ul poate: confirma / corecta un camp / anula.
-Nimic nu se salveaza in DB pana cand user-ul nu apasa "Confirma".
+- Dupa extractie, bot-ul afiseaza ce a citit si cere confirmare umana.
+- Daca un document cu aceeasi data + suma exista deja, afiseaza
+  un AVERTISMENT de posibil duplicat (nu blocheaza - user-ul decide).
 
 ARHITECTURA:
 Datele "pending" traiesc in context.user_data intre extractie si confirmare.
-Modulul gestioneaza DOAR UI-ul (afisare + editare). Salvarea efectiva
-ramane in bot_contabil.py (execute_confirmed_save), care are acces la
-persist_document / persist_transactions.
+Modulul gestioneaza DOAR UI-ul. Salvarea efectiva si detectarea
+duplicatelor (query DB) raman in bot_contabil.py.
 
 Callback namespace: "confirm"
   confirm|save              -> gestionat de bot_contabil (salvare efectiva)
@@ -80,13 +81,20 @@ def _editable_fields(tip):
 #                    STARE (user_data)
 # ============================================================
 
-def store_pending(context, items_dicts, source_file_id, raw_response, prompt_version):
-    """Salveaza datele extrase ca 'pending' in user_data (nu in DB)."""
+def store_pending(context, items_dicts, source_file_id, raw_response,
+                  prompt_version, duplicates=None):
+    """
+    Salveaza datele extrase ca 'pending' in user_data (nu in DB).
+
+    duplicates: dict optional {item_index: {id, data_doc, platforma,
+                brut, created_at_str}} - posibile duplicate detectate.
+    """
     context.user_data[_PENDING_KEY] = {
         "items": items_dicts,
         "source_file_id": source_file_id,
         "raw_response": (raw_response or "")[:10000],
         "prompt_version": prompt_version,
+        "duplicates": duplicates or {},
     }
     context.user_data.pop(_EDIT_KEY, None)
 
@@ -124,8 +132,8 @@ def _fmt_num(v) -> str:
         return "0.00"
 
 
-def _format_item(idx: int, item: dict) -> str:
-    """Formateaza un document extras ca bloc text."""
+def _format_item(idx: int, item: dict, dup_info=None) -> str:
+    """Formateaza un document extras ca bloc text. dup_info = avertisment duplicat."""
     tip = item.get("tip", "CHELTUIALA")
     tip_label = TIP_LABELS.get(tip, tip)
     icon = TIP_ICONS.get(tip, "📄")
@@ -148,6 +156,28 @@ def _format_item(idx: int, item: dict) -> str:
         if item.get("detalii"):
             lines.append(f"📝 {item.get('detalii')}")
 
+    # Avertisment duplicat (Pas R1.2)
+    if dup_info:
+        added = dup_info.get("created_at_str", "")
+        added_part = f", adăugat {added}" if added else ""
+        doc_id = dup_info.get("id")
+        match_type = dup_info.get("match_type", "data_suma")
+        if match_type == "numar":
+            # Match pe numarul documentului = duplicat SIGUR
+            nr = dup_info.get("numar_document") or "?"
+            lines.append(
+                f"\n🚫 *DUPLICAT* — documentul cu numărul `{nr}` "
+                f"este DEJA înregistrat (#{doc_id}{added_part}).\n"
+                f"Același document fizic nu trebuie introdus de două ori."
+            )
+        else:
+            # Match pe data + suma = doar POSIBIL duplicat
+            lines.append(
+                f"\n⚠️ *POSIBIL DUPLICAT* — există deja un document "
+                f"cu aceeași dată și sumă (#{doc_id}{added_part}).\n"
+                f"Dacă e alt bon real, poți salva oricum."
+            )
+
     return "\n".join(lines)
 
 
@@ -165,17 +195,51 @@ async def show_confirmation(chat_id, context, query=None):
         return
 
     items = pending["items"]
-    blocks = [_format_item(i, it) for i, it in enumerate(items)]
+    duplicates = pending.get("duplicates", {})
+
+    blocks = []
+    for i, it in enumerate(items):
+        # duplicates pot avea chei int sau str (dupa serializare)
+        dup = duplicates.get(i) or duplicates.get(str(i))
+        blocks.append(_format_item(i, it, dup_info=dup))
+
+    has_dup = bool(duplicates)
+    # Duplicat sigur = cel putin un match pe numarul documentului
+    has_sure_dup = any(
+        (d or {}).get("match_type") == "numar"
+        for d in duplicates.values()
+    )
+
     text = (
         "🔍 *Verifică datele citite*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         + "\n\n".join(blocks)
         + "\n\n━━━━━━━━━━━━━━━━━━━━\n"
-        "_Verifică suma și data. Dacă ceva e greșit, corectează "
-        "înainte de salvare._"
     )
+    if has_sure_dup:
+        text += (
+            "🚫 _Acest document este DEJA în contabilitate. "
+            "Salvează doar dacă ești sigur că vrei o a doua înregistrare._"
+        )
+    elif has_dup:
+        text += (
+            "⚠️ _Un document similar pare deja înregistrat. "
+            "Verifică să nu fie introdus de două ori._"
+        )
+    else:
+        text += (
+            "_Verifică suma și data. Dacă ceva e greșit, corectează "
+            "înainte de salvare._"
+        )
+
+    if has_sure_dup:
+        save_label = "🚫 Salvează oricum (e duplicat)"
+    elif has_dup:
+        save_label = "⚠️ Salvează oricum"
+    else:
+        save_label = "✅ Confirmă și salvează"
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Confirmă și salvează", callback_data="confirm|save")],
+        [InlineKeyboardButton(save_label, callback_data="confirm|save")],
         [InlineKeyboardButton("✏️ Corectează", callback_data="confirm|edit")],
         [InlineKeyboardButton("❌ Anulează", callback_data="confirm|cancel")],
     ])
@@ -192,7 +256,6 @@ def _kb_edit_fields(idx: int, tip: str):
     """Butoane pentru campurile editabile ale unui document."""
     rows = []
     fields = _editable_fields(tip)
-    # Cate 2 pe rand
     for i in range(0, len(fields), 2):
         row = []
         for field_key, label, _ in fields[i:i + 2]:
@@ -268,7 +331,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     # === Meniu corectare ===
     if action == "edit":
         if len(items) == 1:
-            # Un singur document -> direct la campuri
             tip = items[0].get("tip", "CHELTUIALA")
             await query.edit_message_text(
                 "✏️ *Ce vrei să corectezi?*",
@@ -276,7 +338,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
                 reply_markup=_kb_edit_fields(0, tip),
             )
         else:
-            # Mai multe -> alege documentul intai
             await query.edit_message_text(
                 "✏️ *Ce document vrei să corectezi?*",
                 parse_mode="Markdown",
@@ -306,7 +367,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
             await show_confirmation(query.message.chat_id, context, query=query)
             return
 
-        # Tip -> butoane (nu text)
         if field == "tip":
             await query.edit_message_text(
                 f"🏷️ *Document #{idx + 1}* — alege tipul:",
@@ -315,7 +375,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
             )
             return
 
-        # Restul campurilor -> wizard text
         context.user_data[_EDIT_KEY] = {"item_index": idx, "field": field}
         prompts = {
             "data": "📅 Scrie data corectă (format ZZ.LL.AAAA):",
@@ -386,7 +445,6 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             )
             return True
         item[field] = getattr(validated, field)
-        # Recalcul derivate
         if item.get("tip") == "FACTURA_COMISION" and field == "comision":
             item["tva"] = round(item["comision"] * 0.21, 2)
             item["brut"] = item["comision"]
