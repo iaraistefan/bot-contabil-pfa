@@ -201,6 +201,20 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "007_documents_numar_document",
+        "description": (
+            "Pas R1.2: adauga numar_document in documents pentru "
+            "detectarea EXACTA a duplicatelor (serie + numar document)"
+        ),
+        "sql": [
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS numar_document VARCHAR(80)",
+            """
+            CREATE INDEX IF NOT EXISTS ix_documents_numar_document
+                ON documents (numar_document)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
