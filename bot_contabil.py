@@ -320,6 +320,11 @@ def persist_document(user_id, source_file_id, item, banca, raw_response, prompt_
             raw_json=raw_response[:10000] if raw_response else "",
             prompt_version=prompt_version, status="posted", confidence=1.0,
         )
+        # Pas R1.2: salvam numarul documentului direct pe obiect
+        # (setat inainte de commit -> intra in INSERT/UPDATE).
+        nr_doc = getattr(item, "numar_document", None)
+        if nr_doc:
+            doc.numar_document = str(nr_doc).strip()[:80]
         doc_id = doc.id
         audit_repo.write(
             session, entity_type="document", entity_id=doc_id,
@@ -634,7 +639,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v13* (Compliance + Alerts + Monitoring + Parcurs + Confirmare)\n"
+        f"⚙️ Versiune: *v15* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -1404,6 +1409,76 @@ async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #                    PROCESARE INTRARI (poza/text)
 # ============================================================
 
+def find_duplicate_document(user_id, data_doc, brut, numar_document=None):
+    """
+    Pas R1.2: Cauta un document deja inregistrat care e duplicat.
+
+    Strategie pe doua niveluri:
+      1. PE NUMARUL DOCUMENTULUI (serie + nr) — match exact = DUPLICAT SIGUR.
+         Doua bonuri reale nu pot avea acelasi numar de document.
+      2. FALLBACK pe data + suma — cand numarul lipseste (bon vechi neclar).
+         E doar POSIBIL duplicat (2 bonuri reale pot avea aceeasi suma/zi).
+
+    Returneaza dict cu 'match_type' ("numar" | "data_suma") sau None.
+    """
+    session = get_session()
+    try:
+        from app.models import Document
+
+        def _info(doc, match_type):
+            created_str = ""
+            try:
+                created_str = doc.created_at.strftime("%d.%m.%Y")
+            except Exception:
+                pass
+            return {
+                "id": doc.id,
+                "data_doc": doc.data_doc,
+                "platforma": doc.platforma,
+                "brut": doc.brut,
+                "numar_document": doc.numar_document,
+                "created_at_str": created_str,
+                "match_type": match_type,
+            }
+
+        # --- Nivel 1: match exact pe numarul documentului ---
+        nr = (numar_document or "").strip()
+        if nr:
+            doc = (
+                session.query(Document)
+                .filter(
+                    Document.user_id == user_id,
+                    Document.numar_document == nr,
+                    Document.status != "rejected",
+                )
+                .first()
+            )
+            if doc:
+                return _info(doc, "numar")
+
+        # --- Nivel 2: fallback pe data + suma ---
+        if data_doc and brut and brut > 0:
+            candidates = (
+                session.query(Document)
+                .filter(
+                    Document.user_id == user_id,
+                    Document.data_doc == data_doc,
+                    Document.status != "rejected",
+                )
+                .all()
+            )
+            for doc in candidates:
+                if abs((doc.brut or 0) - (brut or 0)) < 0.01:
+                    return _info(doc, "data_suma")
+
+        return None
+    except Exception as e:
+        logger.error(f"find_duplicate_document error: {e}")
+        return None
+    finally:
+        session.close()
+
+
 async def process_entry(
     update, context,
     text_input=None, image_bytes=None, source_file_id=None
@@ -1439,6 +1514,22 @@ async def process_entry(
         )
         return
 
+    # === Pas R1.2: detectam duplicate (numarul documentului + fallback) ===
+    duplicates = {}
+    if user_id:
+        for idx, it in enumerate(extraction["items"]):
+            suma = it.brut
+            if it.tip == DocType.FACTURA_COMISION:
+                suma = it.comision
+            elif it.tip == DocType.VENIT:
+                suma = it.net
+            dup = find_duplicate_document(
+                user_id, it.data, suma,
+                numar_document=getattr(it, "numar_document", None),
+            )
+            if dup:
+                duplicates[idx] = dup
+
     # === Pas R1: NU mai salvam direct. Afisam confirmare. ===
     # Datele extrase devin "pending" in user_data. Salvarea efectiva
     # se face in execute_confirmed_save() doar dupa ce user-ul confirma.
@@ -1448,6 +1539,7 @@ async def process_entry(
         source_file_id=source_file_id,
         raw_response=extraction["raw_response"],
         prompt_version=extraction["prompt_version"],
+        duplicates=duplicates,
     )
     await confirmare.show_confirmation(update.effective_chat.id, context)
 
@@ -1742,5 +1834,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v13 — + Confirmare date extrase ONLINE (Pas 11 + 10 + 13 + A + B + R1)")
+    print("🤖 Bot Contabil v15 — + Detectare duplicate pe nr. document ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
     app_bot.run_polling()
