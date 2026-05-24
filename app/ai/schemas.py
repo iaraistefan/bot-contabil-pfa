@@ -58,6 +58,8 @@ class ExtractionItem(BaseModel):
     net: float = 0.0
     cash: float = 0.0
     detalii: Optional[str] = Field(default="", max_length=500)
+    # Pas R1.2 - numarul documentului (serie + nr), ex "INSINT/1518242"
+    numar_document: Optional[str] = Field(default=None, max_length=80)
 
     # --- Validatori ---
     @field_validator("tip", mode="before")
@@ -133,7 +135,7 @@ class ExtractionItem(BaseModel):
         # Nu aruncam eroare — data poate lipsi legitim (bot-ul pune azi ca fallback).
         return None
 
-    @field_validator("platforma", "detalii", mode="before")
+    @field_validator("platforma", "detalii", "numar_document", mode="before")
     @classmethod
     def _strip_strings(cls, v):
         if v is None:
