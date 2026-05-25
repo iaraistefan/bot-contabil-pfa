@@ -639,7 +639,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v16* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
+        f"⚙️ Versiune: *v17* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -1847,7 +1847,13 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
         if handled:
             return
 
-    # Pas A.3: Comenzi foaie de parcurs (parcurs start/stop/...)
+    # Foaie parcurs v2: wizard cu butoane (asteapta numarul de km)
+    if foaie_parcurs.is_in_wizard(context):
+        handled = await foaie_parcurs.handle_wizard_text(update, context)
+        if handled:
+            return
+
+    # Pas A.3: Comenzi foaie de parcurs (parcurs start/stop/...) - backup
     if foaie_parcurs.match_command(text):
         await foaie_parcurs.handle_command(update, context)
         return
@@ -1915,5 +1921,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v16 — + Diagnostic cont (/cont) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
+    print("🤖 Bot Contabil v17 — + Foaie parcurs cu butoane ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
     app_bot.run_polling()
