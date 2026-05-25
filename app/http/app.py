@@ -136,13 +136,22 @@ def _resolve_user_id() -> Optional[int]:
                 finally:
                     session.close()
 
-    # Strategy 2: DEV fallback (env var) — numai pentru owner debug
-    dev_user_id = _os.environ.get("DEV_USER_ID")
-    if dev_user_id:
-        try:
-            return int(dev_user_id)
-        except ValueError:
-            pass
+    # Strategy 2: DEV fallback (env var) — DOAR in development.
+    # SECURITATE (fix Bug izolare dashboard): in productie aceasta cale
+    # este COMPLET dezactivata. Altfel DEV_USER_ID ar functiona ca o
+    # cheie universala — orice request fara init_data valid ar primi
+    # datele acelui user, expunand datele unui cont tuturor.
+    if settings.env != "production":
+        dev_user_id = _os.environ.get("DEV_USER_ID")
+        if dev_user_id:
+            try:
+                logger.warning(
+                    f"_resolve_user_id: folosesc fallback DEV_USER_ID="
+                    f"{dev_user_id} (permis DOAR in env={settings.env})"
+                )
+                return int(dev_user_id)
+            except ValueError:
+                pass
 
     return None
 
