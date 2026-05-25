@@ -230,7 +230,7 @@ def _execute_start(user_id: int, km: int, purpose: str = None) -> dict:
             f"📅 Data: *{zi}*\n"
             f"🕐 Ora: *{ora}*\n"
             f"🚙 Mașina: {vehicul.nr_inmatriculare}{traseu_line}\n\n"
-            f"_Când termini cursa, apasă „🏁 Închide tura"._"
+            f"_Când termini cursa, apasă butonul Închide tura._"
             f"{avertisment}"
         )}
     except Exception as e:
@@ -257,7 +257,7 @@ def _execute_stop(user_id: int, km: int) -> dict:
         if not open_trip:
             return {"ok": False, "message": (
                 "⚠️ Nu ai nicio tură pornită.\n\n"
-                "Pornește una din meniu cu „🚗 Pornește o tură"."
+                "Pornește una din meniu cu butonul Pornește o tură."
             )}
 
         start_km = open_trip.odometer_start or 0
@@ -554,7 +554,7 @@ async def _show_status(update, context, user_id, via_callback=False):
 
     if summary["nr_ture"] == 0 and not open_trip:
         lines.append("")
-        lines.append("_Nicio tură încă. Apasă „🚗 Pornește o tură"._")
+        lines.append("_Nicio tură încă. Apasă butonul Pornește o tură._")
 
     # Sectiunea combustibil deductibil
     try:
@@ -568,24 +568,29 @@ async def _show_status(update, context, user_id, via_callback=False):
 
     text = "\n".join(lines)
 
-    # --- Butoane contextuale ---
+    # --- Butoane contextuale (layout: actiune principala mare, rest 2x2) ---
     rows = []
     if open_trip:
         rows.append([InlineKeyboardButton(
-            "🏁 Închide tura de azi", callback_data="parcurs|wiz_stop"
+            "🏁  Închide tura de azi", callback_data="parcurs|wiz_stop"
         )])
     else:
         rows.append([InlineKeyboardButton(
-            "🚗 Pornește o tură", callback_data="parcurs|wiz_start"
+            "🚗  Pornește o tură", callback_data="parcurs|wiz_start"
         )])
     rows.append([
         InlineKeyboardButton(
-            "📋 Jurnalul lunii",
-            callback_data=f"parcurs|jurnal|{year}|{month}"
+            "📋 Jurnal", callback_data=f"parcurs|jurnal|{year}|{month}"
         ),
-        InlineKeyboardButton("🗓️ Altă lună", callback_data="parcurs|luni"),
+        InlineKeyboardButton(
+            "📥 Excel", callback_data=f"parcurs|excel|{year}|{month}"
+        ),
     ])
-    rows.append([InlineKeyboardButton("❌ Închide", callback_data="nav|close")])
+    rows.append([
+        InlineKeyboardButton("🗓️ Altă lună", callback_data="parcurs|luni"),
+        InlineKeyboardButton("🚙 Mașina mea", callback_data="vehicul|menu"),
+    ])
+    rows.append([InlineKeyboardButton("✖️ Închide", callback_data="nav|close")])
     markup = InlineKeyboardMarkup(rows)
 
     if via_callback and update.callback_query:
