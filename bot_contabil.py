@@ -639,7 +639,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v15* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
+        f"⚙️ Versiune: *v16* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -652,6 +652,86 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"_Sistemul funcționează normal._"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /cont - Diagnostic de izolare a datelor.
+
+    Arata EXACT ce vede contul curent: ID intern, telegram_id, profil,
+    si numarul de documente/tranzactii care apartin DOAR acestui cont.
+    Folosit pentru a verifica ca doi utilizatori diferiti NU vad
+    datele unul altuia.
+    """
+    user_id = ensure_user(update)
+    tg_user = update.effective_user
+    tg_id = tg_user.id if tg_user else "?"
+
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu te pot identifica.")
+        return
+
+    session = get_session()
+    try:
+        from app.models import Document, Transaction, User
+        from sqlalchemy import func
+
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+
+        doc_count = (
+            session.query(Document)
+            .filter(Document.user_id == user_id,
+                    Document.status != "rejected")
+            .count()
+        )
+        tx_count = (
+            session.query(Transaction)
+            .filter(Transaction.user_id == user_id)
+            .count()
+        )
+        venit_total = (
+            session.query(func.coalesce(func.sum(Transaction.amount_brut), 0.0))
+            .filter(
+                Transaction.user_id == user_id,
+                Transaction.tx_type == "INCOME",
+            )
+            .scalar()
+        ) or 0.0
+
+        total_users = session.query(User).count()
+
+        firma = profile.get("firma_nume") or "—"
+        cui = profile.get("firma_cui") or "—"
+        activitate = profile.get("activity_code") or "—"
+        nume = profile.get("name") or "—"
+        onb = "✅ Da" if profile.get("onboarding_completed") else "❌ Nu"
+
+        msg = (
+            "🆔 *Contul tău*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"👤 Nume: {nume}\n"
+            f"🔑 ID Telegram: `{tg_id}`\n"
+            f"🗄️ ID intern bot: *#{user_id}*\n"
+            f"📋 Onboarding complet: {onb}\n\n"
+            f"🏢 *Firmă:*\n"
+            f"• Denumire: {firma}\n"
+            f"• CUI: {cui}\n"
+            f"• Activitate: {activitate}\n\n"
+            f"📂 *Datele TALE în bot:*\n"
+            f"• Documente: *{doc_count}*\n"
+            f"• Tranzacții: *{tx_count}*\n"
+            f"• Venit total înregistrat: *{venit_total:.2f}* RON\n\n"
+            f"👥 Utilizatori totali în sistem: {total_users}\n\n"
+            f"_Fiecare cont vede DOAR datele lui. Dacă doi colegi "
+            f"compară acest ecran, „ID intern bot” trebuie să difere, "
+            f"iar fiecare vede doar propriile cifre._"
+        )
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"handle_cont error: {e}")
+        await update.message.reply_text("❌ Eroare la citirea contului.")
+    finally:
+        session.close()
 
 
 # ============================================================
@@ -1818,6 +1898,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1
+    app_bot.add_handler(CommandHandler("cont", handle_cont))  # diagnostic izolare
     app_bot.add_handler(CommandHandler("delete", handle_delete))
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
@@ -1834,5 +1915,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v15 — + Detectare duplicate pe nr. document ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
+    print("🤖 Bot Contabil v16 — + Diagnostic cont (/cont) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
     app_bot.run_polling()
