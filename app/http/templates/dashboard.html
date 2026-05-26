@@ -521,7 +521,20 @@
     return "";
   }
 
-  const initData = resolveInitData();
+  // Pe Android, Telegram populeaza URL-ul hash cu o mica intarziere
+  // dupa ce scriptul ruleaza. O singura citire la inceput poate prinde
+  // hash-ul inca gol, de aceea asteptam pana devine disponibil.
+  async function waitForInitData(maxMs = 4000) {
+    const step = 120;
+    let waited = 0;
+    while (waited < maxMs) {
+      const d = resolveInitData();
+      if (d && d.length > 0) return d;
+      await new Promise(r => setTimeout(r, step));
+      waited += step;
+    }
+    return resolveInitData();
+  }
 
   if (tg) {
     tg.ready();
@@ -545,7 +558,7 @@
       "Telegram SDK încărcat: " + (window.Telegram ? "DA" : "NU"),
       "WebApp disponibil: " + (t ? "DA" : "NU"),
       "tg.initData (SDK) lungime: " + ((t && t.initData && t.initData.length) || 0),
-      "init_data rezolvat lungime: " + (initData ? initData.length : 0),
+      "init_data rezolvat lungime: " + ((resolveInitData() || "").length),
       "URL hash lungime: " + ((window.location.hash || "").length),
       "URL search lungime: " + ((window.location.search || "").length),
       "platform: " + ((t && t.platform) || "?"),
@@ -557,8 +570,10 @@
   // Custom fetch — ataseaza automat header-ul Telegram init_data
   async function authFetch(url, options = {}) {
     const headers = options.headers || {};
-    if (initData) {
-      headers["X-Telegram-Init-Data"] = initData;
+    // Recitim init_data la fiecare cerere - hash-ul poate veni cu intarziere
+    const d = resolveInitData();
+    if (d) {
+      headers["X-Telegram-Init-Data"] = d;
     }
     return fetch(url, { ...options, headers });
   }
@@ -863,6 +878,7 @@
   //                    INIT
   // ==========================================================
   (async () => {
+    await waitForInitData();   // asteapta hash-ul Telegram (Android intarzie)
     const ok = await checkAuth();
     if (!ok) return;
     buildPeriodChips();
