@@ -55,6 +55,10 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
     Returnează dict cu fields parsate dacă semnătura e validă, altfel None.
     """
     if not init_data or not bot_token:
+        logger.warning(
+            f"init_data validate: init_data_present={bool(init_data)}, "
+            f"bot_token_present={bool(bot_token)}"
+        )
         return None
 
     try:
@@ -64,10 +68,17 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
         # 2. Extrage hash-ul transmis de client
         received_hash = parsed.pop("hash", None)
         if not received_hash:
+            logger.warning("init_data: campul 'hash' lipseste")
             return None
 
-        # 3. Construim data_check_string conform specificației Telegram
-        # (sortat alphabetic, fără hash, separate cu \n)
+        # IMPORTANT (fix dashboard): campul 'signature' este mecanismul
+        # Ed25519 pentru validare de catre terti. Telegram il adauga DUPA
+        # ce a calculat 'hash'. Daca ramane in data_check_string,
+        # verificarea HMAC esueaza mereu -> "Acces interzis".
+        parsed.pop("signature", None)
+
+        # 3. Construim data_check_string conform specificatiei Telegram
+        # (sortat alfabetic, fara hash si signature, separate cu \n)
         data_check_arr = [f"{k}={v}" for k, v in sorted(parsed.items())]
         data_check_string = "\n".join(data_check_arr)
 
@@ -83,7 +94,10 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
 
         # 6. Comparăm constant-time
         if not hmac.compare_digest(expected_hash, received_hash):
-            logger.warning("Telegram init_data hash mismatch — possible spoofing")
+            logger.warning(
+                f"init_data hash mismatch. Campuri folosite: "
+                f"{sorted(parsed.keys())}. Verifica TELEGRAM_TOKEN."
+            )
             return None
 
         # 7. Parse user JSON dacă există
@@ -115,6 +129,10 @@ def _resolve_user_id() -> Optional[int]:
     """
     # Strategy 1: Telegram WebApp init_data
     init_data = request.headers.get("X-Telegram-Init-Data", "")
+    logger.info(
+        f"_resolve_user_id: init_data header present={bool(init_data)}, "
+        f"len={len(init_data)}"
+    )
     if init_data:
         validated = _validate_telegram_init_data(init_data, settings.telegram_token)
         if validated:
@@ -127,9 +145,14 @@ def _resolve_user_id() -> Optional[int]:
                         session, telegram_id=int(telegram_id)
                     )
                     if user:
+                        logger.info(
+                            f"_resolve_user_id: OK, telegram_id={telegram_id} "
+                            f"-> user_id={user.id}"
+                        )
                         return user.id
                     logger.warning(
-                        f"Telegram WebApp user {telegram_id} not in DB"
+                        f"_resolve_user_id: telegram_id={telegram_id} "
+                        f"validat dar NU exista in DB"
                     )
                 except Exception as e:
                     logger.error(f"_resolve_user_id DB error: {e}")
