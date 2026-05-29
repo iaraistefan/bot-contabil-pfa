@@ -578,36 +578,25 @@
     return fetch(url, { ...options, headers });
   }
 
-  async function showAuthError() {
+  function showAuthError() {
     document.getElementById("auth-error").style.display = "block";
     document.getElementById("app-content").style.display = "none";
     const box = document.getElementById("debug-box");
     if (box) box.textContent = buildDebugInfo();
-    // Cerem serverului motivul exact (endpoint diagnostic /whoami)
-    try {
-      const r = await authFetch("/api/v1/whoami");
-      const j = await r.json();
-      if (box) {
-        box.textContent += "\n\n── SERVER (whoami) ──\n" +
-          JSON.stringify(j, null, 1);
-      }
-    } catch (e) {
-      if (box) box.textContent += "\n\n── SERVER ── eroare: " + e.message;
-    }
   }
 
   async function checkAuth() {
     try {
       const r = await authFetch("/api/v1/documents");
       if (r.status === 401) {
-        await showAuthError();
+        showAuthError();
         return false;
       }
       document.getElementById("app-content").style.display = "block";
       document.getElementById("auth-error").style.display = "none";
       return true;
     } catch (e) {
-      await showAuthError();
+      showAuthError();
       return false;
     }
   }
@@ -722,8 +711,7 @@
           (totals.activity_icon || "📊") + " " + totals.activity_name;
       }
       document.getElementById("s-income").textContent = fmt(totals.income_total);
-      document.getElementById("s-income-sub").textContent =
-        `${totals.tx_count || 0} tranzacții`;
+      document.getElementById("s-income-sub").textContent = "total încasări";
       document.getElementById("s-expense").textContent = fmt(totals.expense_deductible_total);
       document.getElementById("s-expense-sub").textContent =
         `brut: ${fmt(totals.expense_total_brut)}`;
