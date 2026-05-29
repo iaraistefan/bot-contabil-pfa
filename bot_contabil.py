@@ -38,6 +38,7 @@ from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
+    BotCommand, MenuButtonCommands,
 )
 from telegram.ext import (
     ApplicationBuilder, ContextTypes,
@@ -1883,6 +1884,34 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 #                    MAIN
 # ============================================================
 
+# ============================================================
+#          POST INIT - meniu comenzi (/) vizibil mereu
+# ============================================================
+
+async def post_init(application):
+    """
+    Seteaza lista de comenzi care apare la apasarea butonului de meniu
+    (sau a tastei /). Asa, orice utilizator vede usor /start si restul.
+    """
+    comenzi = [
+        BotCommand("start", "Pornire / meniul principal"),
+        BotCommand("ajutor", "Ghid de utilizare"),
+        BotCommand("profil", "Vezi profilul tau"),
+        BotCommand("plata_fiscala", "Calcul si IBAN pentru plata ANAF"),
+        BotCommand("status", "Starea bot-ului"),
+        BotCommand("cont", "Verifica datele contului tau"),
+        BotCommand("reset_profil", "Reia configurarea profilului"),
+    ]
+    try:
+        await application.bot.set_my_commands(comenzi)
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonCommands()
+        )
+        logger.info("Meniu comenzi setat (set_my_commands + menu button)")
+    except Exception as e:
+        logger.error(f"Nu am putut seta meniul de comenzi: {e}")
+
+
 if __name__ == '__main__':
     # Pas 13.1 - Sentry PRIMUL, ca sa capteze si erorile de pornire
     monitoring.init_sentry()
@@ -1914,7 +1943,7 @@ if __name__ == '__main__':
         logger.error(f"❌ Scheduler FAILED: {e}")
         monitoring.capture_exception(e, stage="start_scheduler")
 
-    app_bot = ApplicationBuilder().token(settings.telegram_token).build()
+    app_bot = ApplicationBuilder().token(settings.telegram_token).post_init(post_init).build()
 
     # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
@@ -1939,5 +1968,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v18 — + Dashboard fix (InlineKeyboardButton) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
+    print("🤖 Bot Contabil v19 — + Meniu comenzi (/start vizibil) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
     app_bot.run_polling()
