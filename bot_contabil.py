@@ -1165,8 +1165,17 @@ async def execute_fisa_d301(query, context, user_id, year, month):
                 text="ℹ️ Nu exista TVA D301 (reverse charge) pentru aceasta luna.",
             )
             return
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        adresa = ", ".join(
+            x for x in [profile.get("localitate"), profile.get("judet")] if x
+        ) or None
+        profil = {
+            "firma_cui": profile.get("firma_cui"),
+            "firma_nume": profile.get("firma_nume"),
+            "adresa": adresa,
+        }
         d = declaratii_spv.construieste_fisa_d301_din_tva(year, month, tva)
-        msg = declaratii_spv.format_fisa_d301(d)
+        msg = declaratii_spv.format_fisa_d301(d, profil)
         await context.bot.send_message(
             chat_id=query.message.chat_id, text=msg, parse_mode="Markdown",
         )
@@ -2033,5 +2042,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v21 — + Fisa completare D301 ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v22 — + Fisa D301 structurata ca formularul ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
