@@ -30,6 +30,7 @@ from app.integrations.exports.registru import (
 )
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
+from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301
 from app.migrations import run_migrations
 import io as _io
 import logging
@@ -1025,6 +1026,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await foaie_parcurs.handle_callback(update, context, parts)
             return
 
+        # Faza 1.3: Fisa completare D301
+        if namespace == "d301":
+            year = int(parts[1])
+            month = int(parts[2])
+            await execute_fisa_d301(query, context, user_id, year, month)
+            return
+
         # Faza 1: Declaratia Unica
         if namespace == "du":
             await du_ui.handle_callback(update, context, parts)
@@ -1112,7 +1120,16 @@ async def execute_raport(query, context, user_id, year, month):
         tax_periods_repo.save_totals(session, tp, totals)
         session.commit()
         msg = tax_engine.format_report_message(totals)
-        await query.edit_message_text(msg, parse_mode="Markdown")
+        # Faza 1.3: daca exista TVA D301 (reverse charge), oferim fisa D301
+        tva_d301 = totals.get("vat_out_total", 0) or 0
+        if tva_d301 > 0:
+            rm = InlineKeyboardMarkup([[InlineKeyboardButton(
+                "📋 Fisa completare D301",
+                callback_data=f"d301|{year}|{month}",
+            )]])
+            await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=rm)
+        else:
+            await query.edit_message_text(msg, parse_mode="Markdown")
 
         # Pas A+ : sectiunea combustibil deductibil (mesaj separat)
         try:
@@ -1130,6 +1147,35 @@ async def execute_raport(query, context, user_id, year, month):
         session.rollback()
         logger.error(f"execute_raport error: {e}")
         await query.edit_message_text("❌ Eroare la calculul raportului.")
+    finally:
+        session.close()
+
+
+async def execute_fisa_d301(query, context, user_id, year, month):
+    """Faza 1.3: genereaza fisa de completare D301 pentru o luna."""
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+        tva = totals.get("vat_out_total", 0) or 0
+        if tva <= 0:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="ℹ️ Nu exista TVA D301 (reverse charge) pentru aceasta luna.",
+            )
+            return
+        d = declaratii_spv.construieste_fisa_d301_din_tva(year, month, tva)
+        msg = declaratii_spv.format_fisa_d301(d)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id, text=msg, parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"execute_fisa_d301 error: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ Eroare la generarea fisei D301.",
+        )
     finally:
         session.close()
 
@@ -1987,5 +2033,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v20 — + Declaratia Unica (impozit+CAS+CASS) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1)")
+    print("🤖 Bot Contabil v21 — + Fisa completare D301 ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
