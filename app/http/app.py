@@ -49,11 +49,14 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
     """
     Valideaza semnatura HMAC a Telegram WebApp init_data.
 
-    IMPORTANT (fix HMAC mismatch):
-    - NU folosim parse_qsl, pentru ca acela aplica unquote_plus si transforma
-      orice '+' in spatiu, stricand data_check_string (campuri base64 ca
-      query_id pot contine '+'). Spargem manual si folosim unquote.
-    - Excludem 'hash' SI 'signature' din data_check_string (conform spec).
+    Surse oficiale se contrazic daca \'signature\' se include sau nu in
+    data_check_string la validarea cu hash. Asa ca incercam AMBELE variante:
+      A) exclude hash + signature
+      B) exclude doar hash (signature inclus)
+    Acceptam daca oricare se potriveste.
+
+    NU folosim parse_qsl (acela face unquote_plus si transforma \'+\' in spatiu,
+    stricand campuri base64 ca query_id). Folosim unquote.
     """
     if not init_data or not bot_token:
         logger.warning(
@@ -66,7 +69,7 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
         from urllib.parse import unquote
 
         received_hash = None
-        pairs = []
+        all_pairs = []  # toate campurile (mai putin hash), cu signature inclus
         for chunk in init_data.split("&"):
             if not chunk:
                 continue
@@ -74,35 +77,45 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
             if key == "hash":
                 received_hash = value
                 continue
-            if key == "signature":
-                # Exclus din data_check_string pentru validarea cu hash.
-                continue
-            # unquote (NU unquote_plus) - pastreaza '+' asa cum e
-            pairs.append((key, unquote(value)))
+            all_pairs.append((key, unquote(value)))
 
         if not received_hash:
-            logger.warning("init_data: campul 'hash' lipseste")
+            logger.warning("init_data: campul \'hash\' lipseste")
             return None
-
-        pairs.sort(key=lambda kv: kv[0])
-        data_check_string = "\n".join(f"{k}={v}" for k, v in pairs)
 
         secret_key = hmac.new(
             b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256
         ).digest()
-        expected_hash = hmac.new(
-            secret_key, data_check_string.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
 
-        if not hmac.compare_digest(expected_hash, received_hash):
+        def _matches(pairs) -> bool:
+            ordered = sorted(pairs, key=lambda kv: kv[0])
+            dcs = "\n".join(f"{k}={v}" for k, v in ordered)
+            expected = hmac.new(
+                secret_key, dcs.encode("utf-8"), hashlib.sha256
+            ).hexdigest()
+            return hmac.compare_digest(expected, received_hash)
+
+        pairs_no_sig = [(k, v) for k, v in all_pairs if k != "signature"]
+
+        matched = None
+        used = None
+        if _matches(pairs_no_sig):
+            matched = "fara_signature"
+            used = pairs_no_sig
+        elif _matches(all_pairs):
+            matched = "cu_signature"
+            used = all_pairs
+
+        if not matched:
             logger.warning(
-                f"init_data hash mismatch. Campuri folosite: "
-                f"{[k for k, _ in pairs]}. Verifica TELEGRAM_TOKEN."
+                f"init_data hash mismatch (ambele variante). "
+                f"Campuri: {[k for k, _ in all_pairs]}. Verifica TELEGRAM_TOKEN."
             )
             return None
 
-        # Reconstruim dict + parse user JSON
-        parsed = {k: v for k, v in pairs}
+        logger.info(f"init_data VALID (varianta={matched})")
+
+        parsed = {k: v for k, v in used}
         import json
         user_json = parsed.get("user")
         if user_json:
@@ -110,7 +123,6 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
                 parsed["user_obj"] = json.loads(user_json)
             except json.JSONDecodeError:
                 pass
-
         return parsed
 
     except Exception as e:
@@ -263,6 +275,30 @@ def whoami():
         out["has_signature"] = "signature" in parsed
     except Exception as e:
         out["parse_error"] = str(e)[:120]
+
+    # Debug: calculam hash-urile pentru ambele variante (primele 16 hex)
+    try:
+        from urllib.parse import unquote as _uq
+        _rh = None
+        _all = []
+        for _c in init_data.split("&"):
+            _k, _, _v = _c.partition("=")
+            if _k == "hash":
+                _rh = _v
+                continue
+            _all.append((_k, _uq(_v)))
+        _sk = hmac.new(b"WebAppData", (settings.telegram_token or "").encode(),
+                       hashlib.sha256).digest()
+        def _h(pairs):
+            o = sorted(pairs, key=lambda kv: kv[0])
+            d = "\n".join(f"{k}={v}" for k, v in o)
+            return hmac.new(_sk, d.encode(), hashlib.sha256).hexdigest()
+        _nosig = [(k, v) for k, v in _all if k != "signature"]
+        out["hash_received_pre"] = (_rh or "")[:16]
+        out["hash_fara_sig_pre"] = _h(_nosig)[:16]
+        out["hash_cu_sig_pre"] = _h(_all)[:16]
+    except Exception as e:
+        out["hash_debug_error"] = str(e)[:120]
 
     validated = _validate_telegram_init_data(init_data, settings.telegram_token)
     out["hmac_valid"] = validated is not None
