@@ -1175,9 +1175,19 @@ async def execute_fisa_d301(query, context, user_id, year, month):
             "adresa": adresa,
         }
         d = declaratii_spv.construieste_fisa_d301_din_tva(year, month, tva)
-        msg = declaratii_spv.format_fisa_d301(d, profil)
-        await context.bot.send_message(
-            chat_id=query.message.chat_id, text=msg, parse_mode="Markdown",
+        pdf_bytes = declaratii_spv.genereaza_pdf_d301(d, profil)
+        fname = declaratii_spv.nume_fisier_d301_pdf(year, month)
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=_io.BytesIO(pdf_bytes),
+            filename=fname,
+            caption=(
+                f"📋 *Fisa D301 — {month:02d}/{year}*\n"
+                f"De plata: *{round(tva)} lei*\n\n"
+                f"Deschide Excel-ul, transcrie valorile in PDF-ul inteligent "
+                f"D301 (ANAF), apoi VALIDARE + semnare + depunere SPV."
+            ),
+            parse_mode="Markdown",
         )
     except Exception as e:
         logger.error(f"execute_fisa_d301 error: {e}")
@@ -2042,5 +2052,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v22 — + Fisa D301 structurata ca formularul ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v24 — + Fisa D301 ca PDF (aspect ANAF) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
