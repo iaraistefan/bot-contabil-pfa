@@ -21,6 +21,7 @@ from app.services import vehicule  # Pas A.2
 from app.services import foaie_parcurs  # Pas A.3
 from app.services import combustibil  # Pas A+
 from app.services import confirmare  # Pas R1 - confirmare date extrase
+from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.exports import csv_export
@@ -60,12 +61,13 @@ BTN_DASHBOARD = "🖥️ Dashboard"
 BTN_CALENDAR = "📋 Calendar Fiscal"
 BTN_PLATA = plata_fiscala.BTN_PLATA  # Pas 11.4: "💳 Plată Fiscală"
 BTN_PARCURS = foaie_parcurs.BTN_PARCURS  # Pas A: "🛣️ Foaie parcurs"
+BTN_DU = du_ui.BTN_DU  # Faza 1: "🧮 Declaratia Unica"
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
-    BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_SETARI, BTN_AJUTOR,
+    BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_DU, BTN_SETARI, BTN_AJUTOR,
 }
 
 LUNI_SHORT = {
@@ -91,6 +93,7 @@ def build_main_menu():
             KeyboardButton(BTN_CALENDAR),
         ],
         [KeyboardButton(BTN_PLATA), KeyboardButton(BTN_PARCURS)],  # Pas 11.4 + A
+        [KeyboardButton(BTN_DU)],  # Faza 1: Declaratia Unica
         [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
@@ -802,6 +805,8 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode="Markdown",
             reply_markup=markup,
         )
+    elif text == BTN_DU:
+        await du_ui.handle_menu_button(update, context)
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
 
@@ -1018,6 +1023,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # Pas A.3: Foaie de parcurs
         if namespace == "parcurs":
             await foaie_parcurs.handle_callback(update, context, parts)
+            return
+
+        # Faza 1: Declaratia Unica
+        if namespace == "du":
+            await du_ui.handle_callback(update, context, parts)
             return
 
         # Pas R1: Confirmare date extrase de AI
@@ -1851,12 +1861,20 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
             vehicule.cancel_wizard(context)
         if confirmare.is_editing(context):
             confirmare.cancel_edit(context)
+        if du_ui.is_in_wizard(context):
+            du_ui.cancel_wizard(context)
         await handle_menu_button(update, context, text)
         return
 
     # Pas R1: Wizard editare camp (confirmare date extrase)
     if confirmare.is_editing(context):
         handled = await confirmare.handle_edit_text(update, context)
+        if handled:
+            return
+
+    # Faza 1: Wizard manual Declaratia Unica
+    if du_ui.is_in_wizard(context):
+        handled = await du_ui.handle_wizard_text(update, context)
         if handled:
             return
 
@@ -1956,6 +1974,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("anafdebug", handle_anafdebug))
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
     app_bot.add_handler(CommandHandler("sterge_tura", foaie_parcurs.handle_delete_command))  # Pas A.3
+    app_bot.add_handler(CommandHandler("declaratie_unica", du_ui.handle_command))  # Faza 1
 
     # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
@@ -1968,5 +1987,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v19 — + Meniu comenzi (/start vizibil) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
+    print("🤖 Bot Contabil v20 — + Declaratia Unica (impozit+CAS+CASS) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1)")
     app_bot.run_polling()
