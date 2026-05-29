@@ -1,206 +1,310 @@
 """
-Calcul taxe PFA in sistem real pentru Declaratia Unica (D212).
+Interfata (UI) pentru Declaratia Unica in bot.
 
-Acopera impozitul pe venit (10%), CAS (pensie 25%) si CASS (sanatate 10%),
-cu plafoanele raportate la salariul minim brut al anului.
+Flux complet:
+  1. Alegi anul
+  2. Alegi modul: Automat (din datele din bot) sau Manual (introduci cifrele)
+  3. Botul intreaba daca ai fost asigurat de sanatate prin alta sursa
+     (salariu >= 6 SMB, pensie) - conteaza pentru scutirea de CASS minim
+  4. Primesti calculul complet: impozit + CAS + CASS + total
 
-Pentru anul de realizare a venitului 2025, Declaratia Unica se depune
-pana la 25 mai 2026.
-
-ATENTIE: valorile fiscale (salariu minim, plafoane, cote) se actualizeaza
-anual. Parametrii pentru fiecare an sunt centralizati in PARAMETRI_FISCALI,
-ca sa poata fi actualizati usor.
+Calculul efectiv se face in app/domain/declaratie_unica.py (testat separat).
 """
 
+import logging
+from datetime import datetime
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from db import get_session
+from app.services import tax_engine
+from app.domain import declaratie_unica as du_calc
+from app.repositories import users as users_repo
+
+logger = logging.getLogger(__name__)
+
+BTN_DU = "🧮 Declarația Unică"
+
+_WIZ = "du_wizard"        # starea wizardului manual (asteapta cifre)
+_PENDING = "du_pending"   # date calculate, asteapta raspunsul despre asigurare
+
+
 # ============================================================
-#                    PARAMETRI FISCALI PE AN
+#                    HELPERS
 # ============================================================
-# Pentru fiecare an: salariul minim brut + cotele + numarul de salarii
-# minime care formeaza plafoanele. Plafoanele in lei se calculeaza din
-# salariul minim, ca sa nu existe valori dublate care pot intra in conflict.
 
-PARAMETRI_FISCALI = {
-    2025: {
-        "salariu_minim": 4050,
-        "cota_impozit": 0.10,
-        "cota_cas": 0.25,
-        "cota_cass": 0.10,
-        # praguri exprimate in numar de salarii minime
-        "cas_prag_jos": 12,    # sub acest prag CAS e optional
-        "cas_prag_sus": 24,    # peste acest prag baza CAS minima e 24 SMB
-        "cass_prag_jos": 6,    # sub acest prag se datoreaza minim la 6 SMB
-        "cass_prag_sus": 60,   # peste acest prag CASS se plafoneaza la 60 SMB
-    },
-    # 2026 este orientativ; salariul minim a fost majorat la 4.325 lei si
-    # plafoanele se pot schimba. De reconfirmat la implementarea pentru 2026.
-    2026: {
-        "salariu_minim": 4325,
-        "cota_impozit": 0.10,
-        "cota_cas": 0.25,
-        "cota_cass": 0.10,
-        "cas_prag_jos": 12,
-        "cas_prag_sus": 24,
-        "cass_prag_jos": 6,
-        "cass_prag_sus": 60,
-    },
-}
+def _parse_suma(text: str):
+    """Transforma text in numar. Accepta 1.854,50 sau 1854,50 sau 50000."""
+    if text is None:
+        return None
+    curat = text.strip().replace(" ", "").replace("lei", "").replace("RON", "")
+    curat = curat.replace(".", "").replace(",", ".")
+    try:
+        val = float(curat)
+        return val if val >= 0 else None
+    except ValueError:
+        return None
 
 
-def _params(an: int) -> dict:
-    if an not in PARAMETRI_FISCALI:
-        ani = sorted(PARAMETRI_FISCALI.keys())
-        an = ani[-1]
-    return PARAMETRI_FISCALI[an]
+def _resolve_uid(update: Update):
+    """Rezolva user_id-ul intern din telegram_id."""
+    tg = update.effective_user
+    if not tg:
+        return None
+    session = get_session()
+    try:
+        user = users_repo.get_by_telegram_id(session, telegram_id=tg.id)
+        return user.id if user else None
+    finally:
+        session.close()
 
 
-def calcul_cass(venit_net: float, an: int = 2025,
-                asigurat_salariat: bool = False) -> dict:
+def _ani_disponibili(user_id: int):
+    """Anii pentru care exista date, plus anul curent si cel precedent."""
+    ani = set()
+    try:
+        from app.models import Transaction
+        session = get_session()
+        try:
+            rows = (
+                session.query(Transaction.period_year)
+                .filter(Transaction.user_id == user_id)
+                .distinct()
+                .all()
+            )
+            ani = set(r[0] for r in rows if r[0])
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"_ani_disponibili: {e}")
+    acum = datetime.now().year
+    ani.add(acum)
+    ani.add(acum - 1)
+    return sorted(ani, reverse=True)
+
+
+def _sumar_anual_din_date(user_id: int, an: int):
     """
-    Contributia de asigurari sociale de sanatate (CASS), cota 10%.
-
-    Reguli pentru sistem real:
-      - venit net <= 0           -> nu se datoreaza (poate opta separat)
-      - 0 < venit net < 6 SMB    -> se datoreaza la baza de 6 SMB
-                                    (exceptie: asigurat ca salariat -> pe venit real)
-      - 6 SMB <= venit <= 60 SMB -> 10% din venitul net real
-      - venit net > 60 SMB       -> plafonat la 60 SMB
+    Sumeaza venitul brut si cheltuielile deductibile din datele din bot,
+    parcurgand cele 12 luni. Returneaza (venit_brut, chelt_ded, luni_cu_date).
     """
-    p = _params(an)
-    sm = p["salariu_minim"]
-    prag_jos = p["cass_prag_jos"] * sm
-    prag_sus = p["cass_prag_sus"] * sm
+    venit_brut = 0.0
+    chelt_ded = 0.0
+    luni_cu_date = 0
+    session = get_session()
+    try:
+        for luna in range(1, 13):
+            try:
+                totals = tax_engine.compute_period(
+                    session, user_id=user_id, year=an, month=luna
+                )
+            except Exception:
+                continue
+            if not totals:
+                continue
+            if totals.get("tx_count", 0):
+                luni_cu_date += 1
+            venit_brut += totals.get("income_total", 0) or 0
+            chelt_ded += totals.get("expense_deductible_total", 0) or 0
+    finally:
+        session.close()
+    return round(venit_brut, 2), round(chelt_ded, 2), luni_cu_date
 
-    if venit_net <= 0:
-        baza = 0.0
-        nota = "Venit net zero sau pierdere - CASS nu se datoreaza."
-    elif venit_net < prag_jos:
-        if asigurat_salariat:
-            baza = 0.0
-            nota = "Sub 6 salarii minime, dar asigurat prin alta sursa (salariu/pensie) - CASS nu se datoreaza."
-        else:
-            baza = prag_jos
-            nota = f"Sub 6 salarii minime - CASS la baza minima de {prag_jos:.0f} lei (6 SMB)."
-    elif venit_net <= prag_sus:
-        baza = venit_net
-        nota = "CASS 10% din venitul net realizat."
+
+# ============================================================
+#                    PORNIRE (comanda / buton)
+# ============================================================
+
+async def _arata_picker_an(send_func, user_id: int):
+    ani = _ani_disponibili(user_id)
+    rows = []
+    rand = []
+    for a in ani[:6]:
+        rand.append(InlineKeyboardButton(str(a), callback_data=f"du|an|{a}"))
+        if len(rand) == 3:
+            rows.append(rand)
+            rand = []
+    if rand:
+        rows.append(rand)
+    rows.append([InlineKeyboardButton("❌ Închide", callback_data="nav|close")])
+    await send_func(
+        "🧮 *Declarația Unică (D212)*\n"
+        "Calcul impozit + CAS + CASS pentru un an.\n\n"
+        "Alege anul de realizare a venitului:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = _resolve_uid(update)
+    await _arata_picker_an(update.message.reply_text, user_id)
+
+
+async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = _resolve_uid(update)
+    await _arata_picker_an(update.message.reply_text, user_id)
+
+
+# ============================================================
+#                    INTREBAREA DESPRE ASIGURARE
+# ============================================================
+
+async def _intreaba_asigurare(send_func):
+    rows = [
+        [InlineKeyboardButton("✅ Da, am fost asigurat altfel",
+                              callback_data="du|calc|asig")],
+        [InlineKeyboardButton("❌ Nu, doar PFA",
+                              callback_data="du|calc|noasig")],
+    ]
+    await send_func(
+        "🏥 *Asigurare de sănătate*\n\n"
+        "Ai fost asigurat de sănătate prin ALTĂ sursă în acel an?\n"
+        "_(salariu cu CASS la minim 6 salarii minime, pensie, etc.)_\n\n"
+        "Contează mult: dacă DA și venitul PFA e sub prag, ești scutit "
+        "de CASS-ul minim.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def _finalizeaza_calcul(send_func, venit_brut, chelt_ded, an, luni, asigurat):
+    rez = du_calc.calcul_declaratie_unica(
+        venit_brut, chelt_ded, an=an, asigurat_salariat=asigurat
+    )
+    corp = du_calc.format_telegram(rez)
+    if luni is not None and luni < 12:
+        luna_txt = "luna" if luni == 1 else "luni"
+        avert = (
+            f"ℹ️ *Am gasit {luni} {luna_txt} cu date pentru {an}.*\n\n"
+            f"Daca ai lucrat doar atat in {an}, cifrele sunt corecte si "
+            f"complete. Altfel, foloseste *Manual* cu totalul real.\n"
+            f"-----------------------------------\n\n"
+        )
+        msg = avert + corp
     else:
-        baza = prag_sus
-        nota = f"Peste 60 salarii minime - CASS plafonat la {prag_sus:.0f} lei (60 SMB)."
-
-    valoare = round(baza * p["cota_cass"], 0)
-    return {"valoare": valoare, "baza": baza, "nota": nota}
+        msg = corp
+    await send_func(msg, parse_mode="Markdown")
 
 
-def calcul_cas(venit_net: float, an: int = 2025,
-               baza_aleasa: float = None, pensionar: bool = False) -> dict:
-    """
-    Contributia de asigurari sociale (CAS - pensie), cota 25%.
+# ============================================================
+#                    CALLBACK (router du|...)
+# ============================================================
 
-    Reguli pentru sistem real:
-      - pensionar                  -> scutit
-      - venit net < 12 SMB         -> optional (implicit 0)
-      - 12 SMB <= venit < 24 SMB   -> baza minima 12 SMB
-      - venit net >= 24 SMB        -> baza minima 24 SMB
-    Contribuabilul poate alege o baza mai mare (baza_aleasa) - pensie mai mare.
-    Implicit folosim baza minima aplicabila (contributie minima).
-    """
-    p = _params(an)
-    sm = p["salariu_minim"]
-    prag_jos = p["cas_prag_jos"] * sm
-    prag_sus = p["cas_prag_sus"] * sm
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, parts):
+    query = update.callback_query
+    user_id = _resolve_uid(update)
+    actiune = parts[1] if len(parts) > 1 else ""
 
-    if pensionar:
-        return {"valoare": 0.0, "baza": 0.0,
-                "nota": "Pensionar - scutit de CAS."}
+    if actiune == "an":
+        an = int(parts[2])
+        rows = [
+            [InlineKeyboardButton("📊 Automat din datele mele",
+                                  callback_data=f"du|auto|{an}")],
+            [InlineKeyboardButton("✍️ Introduc eu cifrele",
+                                  callback_data=f"du|manual|{an}")],
+            [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
+        ]
+        await query.edit_message_text(
+            f"🧮 *Declarația Unică {an}*\n\nCum vrei să calculăm?",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
 
-    if venit_net < prag_jos:
-        baza_minima = 0.0
-        nota = "Sub 12 salarii minime - CAS optional (implicit nu se datoreaza)."
-    elif venit_net < prag_sus:
-        baza_minima = prag_jos
-        nota = f"Intre 12 si 24 salarii minime - baza CAS minima {prag_jos:.0f} lei (12 SMB)."
-    else:
-        baza_minima = prag_sus
-        nota = f"Peste 24 salarii minime - baza CAS minima {prag_sus:.0f} lei (24 SMB)."
+    if actiune == "auto":
+        an = int(parts[2])
+        await query.edit_message_text(f"🔄 Adun datele pe {an}...")
+        venit_brut, chelt_ded, luni = _sumar_anual_din_date(user_id, an)
+        if venit_brut <= 0 and chelt_ded <= 0:
+            await query.edit_message_text(
+                f"📭 Nu am date înregistrate pentru {an}.\n\n"
+                f"Folosește varianta manuală (introduci tu cifrele).",
+            )
+            return
+        context.user_data[_PENDING] = {
+            "venit_brut": venit_brut, "chelt_ded": chelt_ded,
+            "an": an, "luni": luni,
+        }
+        await _intreaba_asigurare(query.edit_message_text)
+        return
 
-    baza = baza_minima
-    if baza_aleasa is not None and baza_aleasa > baza_minima:
-        baza = baza_aleasa
-        nota += f" Baza aleasa: {baza_aleasa:.0f} lei."
+    if actiune == "manual":
+        an = int(parts[2])
+        context.user_data[_WIZ] = {"step": "venit", "an": an}
+        await query.edit_message_text(
+            f"✍️ *Declarația Unică {an} - manual*\n\n"
+            f"Scrie *venitul brut total* încasat în {an} (lei).\n"
+            f"_Exemplu: 52300 sau 52.300,50_",
+            parse_mode="Markdown",
+        )
+        return
 
-    valoare = round(baza * p["cota_cas"], 0)
-    return {"valoare": valoare, "baza": baza, "nota": nota}
-
-
-def calcul_declaratie_unica(venit_brut: float, cheltuieli_deductibile: float,
-                            an: int = 2025, baza_cas_aleasa: float = None,
-                            asigurat_salariat: bool = False,
-                            pensionar: bool = False) -> dict:
-    """
-    Calcul complet pentru Declaratia Unica (PFA sistem real).
-
-    Pasi:
-      1. venit net = venit brut incasat - cheltuieli deductibile platite
-      2. CASS (10%), cu plafoane
-      3. CAS (25%), cu baza minima sau aleasa
-      4. baza impozabila = venit net - CAS - CASS
-      5. impozit = 10% din baza impozabila
-    """
-    p = _params(an)
-    venit_net = round(venit_brut - cheltuieli_deductibile, 2)
-
-    cass = calcul_cass(venit_net, an=an, asigurat_salariat=asigurat_salariat)
-    cas = calcul_cas(venit_net, an=an, baza_aleasa=baza_cas_aleasa, pensionar=pensionar)
-
-    baza_impozabila = max(0.0, venit_net - cas["valoare"] - cass["valoare"])
-    impozit = round(baza_impozabila * p["cota_impozit"], 0)
-
-    total_taxe = cas["valoare"] + cass["valoare"] + impozit
-    venit_dupa_taxe = round(venit_net - total_taxe, 2)
-    rata_efectiva = round(total_taxe / venit_net * 100, 1) if venit_net > 0 else 0.0
-
-    return {
-        "an": an,
-        "salariu_minim": p["salariu_minim"],
-        "venit_brut": round(venit_brut, 2),
-        "cheltuieli_deductibile": round(cheltuieli_deductibile, 2),
-        "venit_net": venit_net,
-        "cass": cass,
-        "cas": cas,
-        "baza_impozabila": round(baza_impozabila, 2),
-        "impozit": impozit,
-        "total_taxe": round(total_taxe, 2),
-        "venit_dupa_taxe": venit_dupa_taxe,
-        "rata_efectiva": rata_efectiva,
-    }
+    if actiune == "calc":
+        asigurat = (len(parts) > 2 and parts[2] == "asig")
+        pending = context.user_data.pop(_PENDING, None)
+        if not pending:
+            await query.edit_message_text(
+                "⏳ Sesiunea a expirat. Reia cu /declaratie_unica."
+            )
+            return
+        await _finalizeaza_calcul(
+            query.edit_message_text,
+            pending["venit_brut"], pending["chelt_ded"],
+            pending["an"], pending["luni"], asigurat=asigurat,
+        )
+        return
 
 
-def format_telegram(rez: dict) -> str:
-    """Formateaza rezultatul pentru un mesaj Telegram (Markdown)."""
-    linii = []
-    linii.append(f"*Declaratia Unica {rez['an']} - estimare taxe*")
-    linii.append("-----------------------------------")
-    linii.append(f"Venit brut incasat: *{rez['venit_brut']:.2f}* lei")
-    linii.append(f"Cheltuieli deductibile: *{rez['cheltuieli_deductibile']:.2f}* lei")
-    linii.append(f"Venit net: *{rez['venit_net']:.2f}* lei")
-    linii.append("")
-    linii.append(f"CASS 10%: *{rez['cass']['valoare']:.0f}* lei")
-    linii.append(f"  {rez['cass']['nota']}")
-    linii.append(f"CAS 25%: *{rez['cas']['valoare']:.0f}* lei")
-    linii.append(f"  {rez['cas']['nota']}")
-    linii.append(f"Baza impozabila: {rez['baza_impozabila']:.2f} lei")
-    linii.append(f"Impozit 10%: *{rez['impozit']:.0f}* lei")
-    linii.append("")
-    linii.append(f"TOTAL DE PLATA: *{rez['total_taxe']:.2f}* lei")
-    linii.append(f"Venit dupa taxe: {rez['venit_dupa_taxe']:.2f} lei")
-    if rez['venit_net'] <= 0:
-        linii.append("Rata efectiva: nu se aplica (venit net zero sau pierdere)")
-    elif rez['rata_efectiva'] > 100:
-        linii.append("Rata efectiva: peste 100% - CASS minim obligatoriu "
-                     "depaseste venitul net mic")
-    else:
-        linii.append(f"Rata efectiva de taxare: {rez['rata_efectiva']:.1f}%")
-    linii.append("")
-    linii.append("_Estimare orientativa. Baza CAS poate fi aleasa mai mare "
-                 "pentru o pensie mai buna. Verificati cu un contabil inainte de depunere._")
-    return "\n".join(linii)
+# ============================================================
+#                    WIZARD MANUAL (text)
+# ============================================================
+
+def is_in_wizard(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return _WIZ in context.user_data
+
+
+def cancel_wizard(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop(_WIZ, None)
+    context.user_data.pop(_PENDING, None)
+
+
+async def handle_wizard_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    wiz = context.user_data.get(_WIZ)
+    if not wiz:
+        return False
+
+    suma = _parse_suma(update.message.text)
+    if suma is None:
+        await update.message.reply_text(
+            "⚠️ Nu am înțeles suma. Scrie doar un număr.\n"
+            "_Exemplu: 52300 sau 52.300,50_",
+            parse_mode="Markdown",
+        )
+        return True
+
+    if wiz["step"] == "venit":
+        wiz["venit_brut"] = suma
+        wiz["step"] = "cheltuieli"
+        await update.message.reply_text(
+            f"✅ Venit brut: *{suma:.2f}* lei\n\n"
+            f"Acum scrie *cheltuielile deductibile totale* din {wiz['an']} (lei).\n"
+            f"_Dacă nu ai cheltuieli, scrie 0._",
+            parse_mode="Markdown",
+        )
+        return True
+
+    if wiz["step"] == "cheltuieli":
+        venit_brut = wiz["venit_brut"]
+        an = wiz["an"]
+        context.user_data.pop(_WIZ, None)
+        # Datele manuale sunt pe tot anul (luni=None => fara avertisment).
+        context.user_data[_PENDING] = {
+            "venit_brut": venit_brut, "chelt_ded": suma,
+            "an": an, "luni": None,
+        }
+        await _intreaba_asigurare(update.message.reply_text)
+        return True
+
+    return False
