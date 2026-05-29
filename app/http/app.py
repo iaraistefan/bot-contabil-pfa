@@ -232,6 +232,63 @@ def metrics():
 
 
 # ============================================================
+#                    DEBUG — whoami (temporar)
+# ============================================================
+
+@flask_app.route("/api/v1/whoami")
+def whoami():
+    """
+    Diagnostic temporar: arata DE CE validarea init_data reuseste sau esueaza.
+    Nu expune secrete (doar lungimi si flag-uri). De sters dupa ce dashboard-ul
+    functioneaza.
+    """
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    out = {
+        "init_data_present": bool(init_data),
+        "init_data_len": len(init_data),
+        "token_present": bool(settings.telegram_token),
+        "token_len": len(settings.telegram_token or ""),
+    }
+    if not init_data:
+        out["verdict"] = "NU ajunge init_data la server"
+        return jsonify(out)
+
+    from urllib.parse import parse_qsl
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        out["fields"] = sorted(list(parsed.keys()))
+        out["has_hash"] = "hash" in parsed
+        out["has_signature"] = "signature" in parsed
+    except Exception as e:
+        out["parse_error"] = str(e)[:120]
+
+    validated = _validate_telegram_init_data(init_data, settings.telegram_token)
+    out["hmac_valid"] = validated is not None
+
+    if validated:
+        user_obj = validated.get("user_obj") or {}
+        tid = user_obj.get("id")
+        out["telegram_id"] = tid
+        session = get_session()
+        try:
+            user = None
+            if tid:
+                user = users_repo.get_by_telegram_id(session, telegram_id=int(tid))
+            out["user_found_in_db"] = user is not None
+            out["db_user_id"] = user.id if user else None
+            out["verdict"] = (
+                "OK - ar trebui sa mearga" if user
+                else "HMAC valid DAR user negasit in DB"
+            )
+        finally:
+            session.close()
+    else:
+        out["verdict"] = "HMAC INVALID - semnatura nu se potriveste"
+
+    return jsonify(out)
+
+
+# ============================================================
 #                    DASHBOARD
 # ============================================================
 
