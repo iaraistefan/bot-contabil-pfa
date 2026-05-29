@@ -47,12 +47,13 @@ if settings.env == "production":
 
 def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dict]:
     """
-    Validează semnătura HMAC a Telegram WebApp init_data.
+    Valideaza semnatura HMAC a Telegram WebApp init_data.
 
-    Conform documentației oficiale:
-    https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
-
-    Returnează dict cu fields parsate dacă semnătura e validă, altfel None.
+    IMPORTANT (fix HMAC mismatch):
+    - NU folosim parse_qsl, pentru ca acela aplica unquote_plus si transforma
+      orice '+' in spatiu, stricand data_check_string (campuri base64 ca
+      query_id pot contine '+'). Spargem manual si folosim unquote.
+    - Excludem 'hash' SI 'signature' din data_check_string (conform spec).
     """
     if not init_data or not bot_token:
         logger.warning(
@@ -62,45 +63,46 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
         return None
 
     try:
-        # 1. Parse init_data (URL-encoded query string)
-        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        from urllib.parse import unquote
 
-        # 2. Extrage hash-ul transmis de client
-        received_hash = parsed.pop("hash", None)
+        received_hash = None
+        pairs = []
+        for chunk in init_data.split("&"):
+            if not chunk:
+                continue
+            key, _, value = chunk.partition("=")
+            if key == "hash":
+                received_hash = value
+                continue
+            if key == "signature":
+                # Exclus din data_check_string pentru validarea cu hash.
+                continue
+            # unquote (NU unquote_plus) - pastreaza '+' asa cum e
+            pairs.append((key, unquote(value)))
+
         if not received_hash:
             logger.warning("init_data: campul 'hash' lipseste")
             return None
 
-        # IMPORTANT (fix dashboard): campul 'signature' este mecanismul
-        # Ed25519 pentru validare de catre terti. Telegram il adauga DUPA
-        # ce a calculat 'hash'. Daca ramane in data_check_string,
-        # verificarea HMAC esueaza mereu -> "Acces interzis".
-        parsed.pop("signature", None)
+        pairs.sort(key=lambda kv: kv[0])
+        data_check_string = "\n".join(f"{k}={v}" for k, v in pairs)
 
-        # 3. Construim data_check_string conform specificatiei Telegram
-        # (sortat alfabetic, fara hash si signature, separate cu \n)
-        data_check_arr = [f"{k}={v}" for k, v in sorted(parsed.items())]
-        data_check_string = "\n".join(data_check_arr)
-
-        # 4. Calculăm secret key = HMAC-SHA256("WebAppData", bot_token)
         secret_key = hmac.new(
             b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256
         ).digest()
-
-        # 5. Calculăm hash-ul așteptat = HMAC-SHA256(secret_key, data_check_string)
         expected_hash = hmac.new(
             secret_key, data_check_string.encode("utf-8"), hashlib.sha256
         ).hexdigest()
 
-        # 6. Comparăm constant-time
         if not hmac.compare_digest(expected_hash, received_hash):
             logger.warning(
                 f"init_data hash mismatch. Campuri folosite: "
-                f"{sorted(parsed.keys())}. Verifica TELEGRAM_TOKEN."
+                f"{[k for k, _ in pairs]}. Verifica TELEGRAM_TOKEN."
             )
             return None
 
-        # 7. Parse user JSON dacă există
+        # Reconstruim dict + parse user JSON
+        parsed = {k: v for k, v in pairs}
         import json
         user_json = parsed.get("user")
         if user_json:
