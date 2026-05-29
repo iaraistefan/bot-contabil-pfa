@@ -505,18 +505,26 @@
     if (tg && tg.initData && tg.initData.length > 0) {
       return tg.initData;
     }
-    // Sursa 2 — fragment URL (#...)
+    // Sursa 2 — fragment URL #tgWebAppData=...
     try {
       const raw = (window.location.hash || "").replace(/^#/, "");
       const hp = new URLSearchParams(raw);
       const fromHash = hp.get("tgWebAppData");
       if (fromHash && fromHash.length > 0) return fromHash;
     } catch (e) {}
-    // Sursa 3 — query string (?...)
+    // Sursa 3 — query string ?tgWebAppData=...
     try {
       const sp = new URLSearchParams(window.location.search || "");
       const fromQuery = sp.get("tgWebAppData");
       if (fromQuery && fromQuery.length > 0) return fromQuery;
+    } catch (e) {}
+    // Sursa 4 — fragment-ul ESTE init_data brut (fara cheia tgWebAppData)
+    // Heuristic: contine auth_date= si hash=
+    try {
+      const raw = (window.location.hash || "").replace(/^#/, "");
+      if (raw.indexOf("auth_date=") >= 0 && raw.indexOf("hash=") >= 0) {
+        return raw;
+      }
     } catch (e) {}
     return "";
   }
@@ -553,16 +561,34 @@
   // Panou de diagnostic — afisat doar daca auth-ul esueaza
   function buildDebugInfo() {
     const t = window.Telegram && window.Telegram.WebApp;
+    const hashRaw = (window.location.hash || "").replace(/^#/, "");
+    // Sample inceput din hash (primele 180 chars, fara secrete)
+    let hashSample = hashRaw.slice(0, 180);
+    // Cheile detectate de URLSearchParams in hash
+    let hashKeys = "?";
+    try {
+      const hp = new URLSearchParams(hashRaw);
+      hashKeys = Array.from(hp.keys()).join(", ") || "(niciuna)";
+    } catch (e) { hashKeys = "EROARE: " + e.message; }
+    // initDataUnsafe (obiect cu user, query_id etc.)
+    let unsafe = "?";
+    try {
+      if (t && t.initDataUnsafe) {
+        unsafe = JSON.stringify(t.initDataUnsafe).slice(0, 120);
+      } else {
+        unsafe = "(gol)";
+      }
+    } catch (e) { unsafe = "EROARE"; }
     const lines = [
       "── DIAGNOSTIC ──",
-      "Telegram SDK încărcat: " + (window.Telegram ? "DA" : "NU"),
-      "WebApp disponibil: " + (t ? "DA" : "NU"),
-      "tg.initData (SDK) lungime: " + ((t && t.initData && t.initData.length) || 0),
-      "init_data rezolvat lungime: " + ((resolveInitData() || "").length),
-      "URL hash lungime: " + ((window.location.hash || "").length),
-      "URL search lungime: " + ((window.location.search || "").length),
-      "platform: " + ((t && t.platform) || "?"),
-      "versiune: " + ((t && t.version) || "?"),
+      "SDK: " + (window.Telegram ? "DA" : "NU") + " | WebApp: " + (t ? "DA" : "NU"),
+      "platform: " + ((t && t.platform) || "?") + " | ver: " + ((t && t.version) || "?"),
+      "tg.initData len: " + ((t && t.initData && t.initData.length) || 0),
+      "init_data rezolvat len: " + ((resolveInitData() || "").length),
+      "URL hash len: " + hashRaw.length + " | search len: " + ((window.location.search || "").length),
+      "Hash chei: " + hashKeys,
+      "initDataUnsafe: " + unsafe,
+      "Hash sample: " + hashSample,
     ];
     return lines.join("\n");
   }
