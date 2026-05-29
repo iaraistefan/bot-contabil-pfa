@@ -66,25 +66,76 @@ def construieste_fisa_d301_din_tva(an: int, luna: int, tva_de_plata: float) -> d
     return d
 
 
-def format_fisa_d301(d: dict) -> str:
-    """Formateaza fisa de completare pentru un mesaj Telegram (Markdown)."""
-    linii = []
-    linii.append(f"📋 *Fisa completare D301 - {d['luna_nume']} {d['an']}*")
-    linii.append("-----------------------------------")
-    linii.append("*Decont special de TVA (formular 301)*")
-    linii.append("_Operatiune: achizitie intracomunitara de servicii,_")
-    linii.append("_taxare inversa, art. 317 Cod fiscal._")
-    linii.append("")
-    linii.append("*Valori de completat in formular:*")
-    linii.append(f"• Baza impozabila: *{d['baza']:.2f}* lei")
-    linii.append(f"• Cota TVA: *{d['cota_pct']}%*")
-    linii.append(f"• TVA datorata (colectata): *{d['tva_datorata']:.2f}* lei")
-    linii.append(f"• TVA de plata: *{d['tva_de_plata']:.2f}* lei")
-    linii.append("")
-    linii.append(f"💰 *DE PLATA catre ANAF: {d['tva_de_plata']:.2f} lei*")
-    linii.append(f"🗓️ Termen depunere si plata: pana pe {d['termen']} {d['an'] if d['luna'] < 12 else d['an']+1}")
-    linii.append("")
-    linii.append("_Aceste valori se trec in PDF-ul inteligent D301 din "
-                 "programul de asistenta ANAF. Reaminteste: cu D301 se "
-                 "coreleaza si D390 (recapitulativa VIES), cod S._")
-    return "\n".join(linii)
+def format_fisa_d301(d: dict, profil: dict = None) -> str:
+    """
+    Fisa de completare structurata EXACT ca formularul D301, sectiune cu
+    sectiune, ca sa poata fi transcrisa 1:1 in PDF-ul oficial ANAF.
+
+    Valorile din coloanele de baza/TVA se rotunjesc la leu (asa lucreaza
+    formularul). Suma de control si Nr. evidenta platii se genereaza automat
+    de PDF la validare - nu se completeaza manual.
+    """
+    p = profil or {}
+    baza_r = round(d["baza"])
+    tva_r = round(d["tva_datorata"])
+
+    L = []
+    L.append("📄 *DECONT SPECIAL DE TVA - 301*")
+    L.append(f"*Pentru luna {d['luna']:02d}  anul {d['an']}*")
+    L.append("(Declaratie rectificativa: NU)")
+    L.append("===================================")
+    L.append("")
+    L.append("*1) DATELE DE IDENTIFICARE*")
+    L.append(f"• Cod identificare fiscala: {p.get('firma_cui') or '—'}")
+    L.append(f"• Denumire / Nume: {p.get('firma_nume') or '—'}")
+    adr = p.get("adresa") or p.get("domiciliu") or "—"
+    L.append(f"• Adresa: {adr}")
+    L.append(f"• Telefon: {p.get('telefon') or '—'}")
+    L.append(f"• Banca: {p.get('banca') or '—'}")
+    L.append(f"• Cont (IBAN): {p.get('cont') or '—'}")
+    L.append("")
+    L.append("*2) TIP PERSOANA*")
+    L.append("• [X] Persoane inregistrate conform art. 317")
+    L.append("")
+    L.append("*3) REZUMAT DECLARATIE*")
+    L.append("• Suma de control: (auto, la validare)")
+    L.append("• Nr. evidenta platii: (auto, la validare)")
+    L.append("                    Baza imp.   TVA datorat")
+    L.append("  Sectiunea 1          0           0")
+    L.append("  Sectiunea 2          0           0")
+    L.append("  Sectiunea 3          0           0")
+    L.append(f"  Sectiunea 4        {baza_r:>4}        {tva_r:>4}")
+    L.append(f"  Sectiunea 4.1      {baza_r:>4}        {tva_r:>4}")
+    L.append("")
+    L.append("*4) SECTIUNEA 4.1 - detaliu factura*")
+    L.append("_Achizitii intracom. de servicii (taxare inversa)_")
+    L.append(f"  1. Document Nr/Data: [nr. factura comision] / "
+             f"{_ultima_zi(d['an'], d['luna'])}")
+    L.append(f"  2. Valoare in valuta: {d['baza']:.2f}")
+    L.append("  3. Tip valuta: RON")
+    L.append("  4. Curs de schimb: 1")
+    L.append(f"  5. Baza de impozitare: {baza_r}")
+    L.append(f"  6. TVA datorat: {tva_r}")
+    L.append("")
+    L.append("  ⚠️ Apasa apoi butonul din formular:")
+    L.append("  *Adauga facturi din sectiunea 4.1 in sectiunea 4*")
+    L.append("")
+    L.append("*5) DECLARATIE PE PROPRIA RASPUNDERE*")
+    nume = (p.get("firma_nume") or "").upper()
+    L.append(f"• Nume / Prenume: {nume or '—'}")
+    L.append("• Functia: TITULAR PFA")
+    L.append("")
+    L.append(f"💰 *DE PLATA catre ANAF: {tva_r} lei*")
+    L.append(f"🗓️ Termen depunere si plata: {d['termen']} "
+             f"{d['an'] if d['luna'] < 12 else d['an']+1}")
+    L.append("")
+    L.append("_In PDF: completeaza, apasa VALIDARE, semneaza, depune in SPV. "
+             "Se coreleaza cu D390 (cod S)._")
+    return "\n".join(L)
+
+
+def _ultima_zi(an: int, luna: int) -> str:
+    """Ultima zi a lunii, format dd/mm/yyyy (data uzuala a facturii de comision)."""
+    import calendar
+    zi = calendar.monthrange(an, luna)[1]
+    return f"{zi:02d}/{luna:02d}/{an}"
