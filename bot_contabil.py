@@ -86,7 +86,7 @@ def build_main_menu():
     return ReplyKeyboardMarkup([
         [KeyboardButton(BTN_RAPORT), KeyboardButton(BTN_REGISTRU)],
         [
-            KeyboardButton(BTN_DASHBOARD, web_app=WebAppInfo(url=DASHBOARD_URL)),
+            KeyboardButton(BTN_DASHBOARD),  # web_app mutat pe InlineKeyboardButton (init_data)
             KeyboardButton(BTN_CALENDAR),
         ],
         [KeyboardButton(BTN_PLATA), KeyboardButton(BTN_PARCURS)],  # Pas 11.4 + A
@@ -639,7 +639,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v17* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
+        f"⚙️ Versiune: *v18* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -782,6 +782,24 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
             "⚙️ *Setări*",
             parse_mode="Markdown",
             reply_markup=build_settings_menu(),
+        )
+    elif text == BTN_DASHBOARD:
+        # Telegram NU injecteaza init_data pentru KeyboardButton cu web_app
+        # (init_data e gol prin design Telegram). Trebuie deschis dintr-un
+        # InlineKeyboardButton intr-un mesaj - acolo init_data e populat corect.
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "🖥️  Deschide Dashboard",
+                web_app=WebAppInfo(url=DASHBOARD_URL),
+            )
+        ]])
+        await update.message.reply_text(
+            "🖥️ *Dashboard fiscal*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Apasa butonul de mai jos pentru a deschide dashboard-ul "
+            "(carduri venituri si cheltuieli, grafice TVA, export CSV).",
+            parse_mode="Markdown",
+            reply_markup=markup,
         )
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
@@ -1921,5 +1939,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v17 — + Foaie parcurs cu butoane ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
+    print("🤖 Bot Contabil v18 — + Dashboard fix (InlineKeyboardButton) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2)")
     app_bot.run_polling()
