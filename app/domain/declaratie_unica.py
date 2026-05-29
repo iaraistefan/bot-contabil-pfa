@@ -75,8 +75,8 @@ def calcul_cass(venit_net: float, an: int = 2025,
         nota = "Venit net zero sau pierdere - CASS nu se datoreaza."
     elif venit_net < prag_jos:
         if asigurat_salariat:
-            baza = venit_net
-            nota = "Sub 6 salarii minime, dar asigurat ca salariat - CASS pe venitul real."
+            baza = 0.0
+            nota = "Sub 6 salarii minime, dar asigurat prin alta sursa (salariu/pensie) - CASS nu se datoreaza."
         else:
             baza = prag_jos
             nota = f"Sub 6 salarii minime - CASS la baza minima de {prag_jos:.0f} lei (6 SMB)."
@@ -193,7 +193,13 @@ def format_telegram(rez: dict) -> str:
     linii.append("")
     linii.append(f"TOTAL DE PLATA: *{rez['total_taxe']:.2f}* lei")
     linii.append(f"Venit dupa taxe: {rez['venit_dupa_taxe']:.2f} lei")
-    linii.append(f"Rata efectiva de taxare: {rez['rata_efectiva']:.1f}%")
+    if rez['venit_net'] <= 0:
+        linii.append("Rata efectiva: nu se aplica (venit net zero sau pierdere)")
+    elif rez['rata_efectiva'] > 100:
+        linii.append("Rata efectiva: peste 100% - CASS minim obligatoriu "
+                     "depaseste venitul net mic")
+    else:
+        linii.append(f"Rata efectiva de taxare: {rez['rata_efectiva']:.1f}%")
     linii.append("")
     linii.append("_Estimare orientativa. Baza CAS poate fi aleasa mai mare "
                  "pentru o pensie mai buna. Verificati cu un contabil inainte de depunere._")
