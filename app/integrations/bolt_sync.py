@@ -334,6 +334,25 @@ def get_month_summary(user_id: int, year: int, month: int) -> dict:
 
     orders = _fetch_range(client, company_ids, q_start, q_end)
     flat = [_flat_from_api(o) for o in orders]
+
+    # IMPORTANT: salvam in cache TOT ce am tras (nu doar finished, ca sa avem istoric
+    # complet), ca a doua oara (ex. la apasarea butonului "Adauga in Registru")
+    # sa citim din cache si sa NU mai lovim API-ul Bolt -> evitam 429 Too Many Requests.
+    if flat:
+        session = get_session()
+        try:
+            for f in flat:
+                if f.get("finished_ts"):
+                    _cache_upsert(session, user_id, f)
+            session.commit()
+            logger.info(f"get_month_summary: {len(flat)} comenzi salvate in cache "
+                        f"(fallback API) pentru user {user_id} {year}-{month:02d}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"cache write (fallback) error: {e}")
+        finally:
+            session.close()
+
     in_month = [
         f for f in flat
         if f["order_status"] == "finished" and m_start <= (f["finished_ts"] or 0) <= m_end
@@ -512,7 +531,14 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         s = get_month_summary(user_id, year, month)
     except Exception as e:
-        await update.message.reply_text(f"Eroare Bolt: {str(e)[:300]}")
+        msg = str(e)
+        if "429" in msg or "Too Many Requests" in msg:
+            await update.message.reply_text(
+                "⏳ Bolt a limitat temporar cererile (prea multe într-un minut).\n"
+                "Așteaptă ~1-2 minute și încearcă din nou."
+            )
+        else:
+            await update.message.reply_text(f"Eroare Bolt: {msg[:300]}")
         return
 
     if s["n"] == 0:
@@ -573,7 +599,15 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except ApplicationHandlerStop:
         raise
     except Exception as e:
-        await query.edit_message_text(f"Eroare la salvare: {str(e)[:300]}")
+        msg = str(e)
+        if "429" in msg or "Too Many Requests" in msg:
+            await query.edit_message_text(
+                "⏳ Bolt a limitat temporar cererile (prea multe într-un minut).\n"
+                "Așteaptă ~1-2 minute și apasă din nou /bolt {} {}, apoi butonul."
+                .format(year, month)
+            )
+        else:
+            await query.edit_message_text(f"Eroare la salvare: {msg[:300]}")
     raise ApplicationHandlerStop
 
 
@@ -708,4 +742,3 @@ def register(app_bot):
     if token:
         _start_bolt_scheduler(token)
     logger.info("Bolt sync inregistrat (/bolt + joburi automate)")
-
