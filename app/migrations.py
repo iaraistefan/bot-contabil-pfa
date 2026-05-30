@@ -215,6 +215,42 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "008_bolt_orders_cache",
+        "description": (
+            "Pas 2 Bolt: tabel cache bolt_orders (istoric curse din API, "
+            "dedup pe order_reference) pentru colectare zilnica automata"
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS bolt_orders (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                order_reference VARCHAR(120) NOT NULL,
+                order_status    VARCHAR(40),
+                payment_method  VARCHAR(20),
+                ride_price      DOUBLE PRECISION NOT NULL DEFAULT 0,
+                commission      DOUBLE PRECISION NOT NULL DEFAULT 0,
+                net_earnings    DOUBLE PRECISION NOT NULL DEFAULT 0,
+                tip             DOUBLE PRECISION NOT NULL DEFAULT 0,
+                cash_discount   DOUBLE PRECISION NOT NULL DEFAULT 0,
+                finished_ts     BIGINT,
+                period_year     INTEGER,
+                period_month    INTEGER,
+                created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_bolt_orders_unique
+                ON bolt_orders (user_id, order_reference)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_bolt_orders_period
+                ON bolt_orders (user_id, period_year, period_month)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
