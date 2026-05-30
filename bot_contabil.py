@@ -2076,7 +2076,7 @@ async def handle_coduri_callback(update, context, parts, user_id):
             "🇪🇺 *Cod special TVA (art. 317)*\n\n"
             "Trimite-mi codul ca mesaj — doar cifrele.\n"
             "_Exemplu: 53148882_\n\n"
-            "Apasa /coduri_fiscale ca sa renunti.",
+            "Apasa `/coduri_fiscale` ca sa renunti.",
             parse_mode="Markdown",
         )
         return
@@ -2086,7 +2086,7 @@ async def handle_coduri_callback(update, context, parts, user_id):
             "🆔 *CNP*\n\n"
             "Trimite-mi CNP-ul (13 cifre).\n"
             "_Dato sensibila — se foloseste doar la Declaratia Unica D212._\n\n"
-            "Apasa /coduri_fiscale ca sa renunti.",
+            "Apasa `/coduri_fiscale` ca sa renunti.",
             parse_mode="Markdown",
         )
         return
@@ -2331,5 +2331,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v26 — + Coduri fiscale cu BUTOANE (set TVA/CNP) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v27 — + Fix Markdown comenzi cu underscore ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
