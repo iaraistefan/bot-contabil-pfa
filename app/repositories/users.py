@@ -1,8 +1,8 @@
 """
 Repository pentru User — acces la DB pentru users.
 
-Convenție: orice funcție care atinge DB acceptă o SQLAlchemy Session ca prim argument.
-Asta ține tranzacțiile sub controlul apelantului.
+Conventie: orice functie care atinge DB accepta o SQLAlchemy Session ca prim argument.
+Asta tine tranzactiile sub controlul apelantului.
 """
 
 from datetime import date
@@ -18,12 +18,12 @@ from app.models import User
 # ============================================================
 
 def get_by_telegram_id(session: Session, telegram_id: int) -> Optional[User]:
-    """Returnează user-ul cu acest telegram_id, sau None."""
+    """Returneaza user-ul cu acest telegram_id, sau None."""
     return session.query(User).filter(User.telegram_id == telegram_id).one_or_none()
 
 
 def get_by_id(session: Session, user_id: int) -> Optional[User]:
-    """Returnează user-ul după ID intern, sau None."""
+    """Returneaza user-ul dupa ID intern, sau None."""
     return session.query(User).filter(User.id == user_id).one_or_none()
 
 
@@ -33,8 +33,8 @@ def get_or_create_by_telegram_id(
     name: Optional[str] = None,
 ) -> User:
     """
-    Returnează user-ul existent sau îl creează dacă nu există.
-    Commit-ul rămâne în grija apelantului.
+    Returneaza user-ul existent sau il creeaza daca nu exista.
+    Commit-ul ramane in grija apelantului.
     """
     user = get_by_telegram_id(session, telegram_id)
     if user is not None:
@@ -49,7 +49,7 @@ def get_or_create_by_telegram_id(
 
 
 # ============================================================
-#                  PROFIL FIRMĂ — UPDATE
+#                  PROFIL FIRMA — UPDATE
 # ============================================================
 
 def update_profile(
@@ -60,6 +60,8 @@ def update_profile(
     firma_nume: Optional[str] = None,
     firma_cui: Optional[str] = None,
     firma_forma_juridica: Optional[str] = None,
+    cod_special_tva: Optional[str] = None,
+    cnp: Optional[str] = None,
     regim_tva: Optional[str] = None,
     regim_impunere: Optional[str] = None,
     caen_principal: Optional[str] = None,
@@ -71,8 +73,8 @@ def update_profile(
     telefon: Optional[str] = None,
 ) -> User:
     """
-    Actualizează câmpurile de profil ale user-ului.
-    Doar valorile non-None sunt aplicate (None = lasă neschimbat).
+    Actualizeaza campurile de profil ale user-ului.
+    Doar valorile non-None sunt aplicate (None = lasa neschimbat).
     Commit la apelant.
     """
     if name is not None:
@@ -84,6 +86,13 @@ def update_profile(
         user.firma_cui = cui_clean if cui_clean else None
     if firma_forma_juridica is not None:
         user.firma_forma_juridica = firma_forma_juridica
+    if cod_special_tva is not None:
+        # Pastram doar cifrele (prefixul RO se adauga la afisare)
+        cod_clean = "".join(c for c in str(cod_special_tva) if c.isdigit())
+        user.cod_special_tva = cod_clean if cod_clean else None
+    if cnp is not None:
+        cnp_clean = "".join(c for c in str(cnp) if c.isdigit())
+        user.cnp = cnp_clean if cnp_clean else None
     if regim_tva is not None:
         user.regim_tva = regim_tva
     if regim_impunere is not None:
@@ -112,7 +121,7 @@ def update_profile_by_id(
     user_id: int,
     **kwargs,
 ) -> Optional[User]:
-    """Variantă convenabilă: actualizează profilul după user_id."""
+    """Varianta convenabila: actualizeaza profilul dupa user_id."""
     user = get_by_id(session, user_id)
     if user is None:
         return None
@@ -171,7 +180,7 @@ def advance_onboarding_step(
     profile_updates: Optional[Dict[str, Any]] = None,
 ) -> User:
     """
-    Avansează la pasul următor și (opțional) actualizează profilul în același timp.
+    Avanseaza la pasul urmator si (optional) actualizeaza profilul in acelasi timp.
     """
     if profile_updates:
         update_profile(session, user, **profile_updates)
@@ -208,6 +217,8 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "firma_nume": user.firma_nume,
         "firma_cui": user.firma_cui,
         "firma_forma_juridica": user.firma_forma_juridica,
+        "cod_special_tva": user.cod_special_tva,
+        "cnp": user.cnp,
         "regim_tva": user.regim_tva,
         "regim_impunere": user.regim_impunere,
         "caen_principal": user.caen_principal,
@@ -242,7 +253,33 @@ def get_pfa_cui(session: Session, user_id: int) -> str:
 
 
 # ============================================================
-#                       VALIDĂRI
+#         CODURI FISCALE - care cod pe care declaratie
+# ============================================================
+
+def cod_pentru_declaratie(profile: Dict[str, Any], declaratie: str) -> Optional[str]:
+    """
+    Returneaza codul de identificare corect pentru o declaratie data,
+    pe baza profilului. Reguli:
+      - D301, D390  -> cod special TVA art. 317 (fallback CUI normal)
+      - D212        -> CNP (venit personal)
+      - D100, D300, alte -> CUI normal
+    'profile' e dict-ul de la get_profile_dict.
+    """
+    d = (declaratie or "").upper().replace("D", "")
+    cui = profile.get("firma_cui")
+    cod_tva = profile.get("cod_special_tva")
+    cnp = profile.get("cnp")
+
+    if d in ("301", "390"):
+        return cod_tva or cui
+    if d in ("212",):
+        return cnp
+    # D100, D300 si restul -> CUI normal
+    return cui
+
+
+# ============================================================
+#                       VALIDARI
 # ============================================================
 
 VALID_FORME_JURIDICE = {
