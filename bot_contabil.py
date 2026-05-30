@@ -32,6 +32,7 @@ from app.http.app import start_http_server
 from app.domain import fiscal_calendar
 from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301
 from app.migrations import run_migrations
+from app.migrare_coduri import ensure_coduri_fiscale_columns
 import io as _io
 import logging
 import traceback
@@ -1170,7 +1171,7 @@ async def execute_fisa_d301(query, context, user_id, year, month):
             x for x in [profile.get("localitate"), profile.get("judet")] if x
         ) or None
         profil = {
-            "firma_cui": profile.get("firma_cui"),
+            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D301"),
             "firma_nume": profile.get("firma_nume"),
             "adresa": adresa,
         }
@@ -1184,7 +1185,7 @@ async def execute_fisa_d301(query, context, user_id, year, month):
             caption=(
                 f"📋 *Fisa D301 — {month:02d}/{year}*\n"
                 f"De plata: *{round(tva)} lei*\n\n"
-                f"Deschide Excel-ul, transcrie valorile in PDF-ul inteligent "
+                f"Deschide PDF-ul, transcrie valorile in formularul inteligent "
                 f"D301 (ANAF), apoi VALIDARE + semnare + depunere SPV."
             ),
             parse_mode="Markdown",
@@ -1971,6 +1972,112 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 #          POST INIT - meniu comenzi (/) vizibil mereu
 # ============================================================
 
+
+# ============================================================
+#          COMENZI - CODURI FISCALE (Faza 1)
+# ============================================================
+
+async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/coduri_fiscale - afiseaza codurile si cum se seteaza."""
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+
+    cui = profile.get("firma_cui") or "—"
+    cod_tva = profile.get("cod_special_tva")
+    cnp = profile.get("cnp")
+    cod_tva_txt = f"RO {cod_tva}" if cod_tva else "— nesetat"
+    cnp_txt = "setat (ascuns)" if cnp else "— nesetat"
+
+    msg = (
+        "*🔑 Coduri fiscale*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🏢 *CUI normal:* `{cui}`\n"
+        "_folosit pe D100 si registre_\n\n"
+        f"🇪🇺 *Cod special TVA (art. 317):* {cod_tva_txt}\n"
+        "_folosit pe D301 si D390_\n\n"
+        f"🆔 *CNP:* {cnp_txt}\n"
+        "_folosit pe Declaratia Unica D212_\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "*Setare:*\n"
+        "• cod TVA:  `/cod_tva 53148882`\n"
+        "• CNP:  `/cnp 1234567890123`"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+async def handle_set_cod_tva(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/cod_tva NNNNNNNN - seteaza codul special TVA art. 317."""
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Scrie codul dupa comanda. Exemplu:\n`/cod_tva 53148882`",
+            parse_mode="Markdown",
+        )
+        return
+    cod = "".join(c for c in args[0] if c.isdigit())
+    if len(cod) < 2:
+        await update.message.reply_text(
+            "Cod invalid. Exemplu: /cod_tva 53148882"
+        )
+        return
+    session = get_session()
+    try:
+        users_repo.update_profile_by_id(session, user_id, cod_special_tva=cod)
+        session.commit()
+    finally:
+        session.close()
+    await update.message.reply_text(
+        f"✅ Cod special TVA salvat: *RO {cod}*\n"
+        "Se va folosi automat pe *D301* si *D390*.",
+        parse_mode="Markdown",
+    )
+
+
+async def handle_set_cnp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/cnp NNNNNNNNNNNNN - seteaza CNP-ul (pentru Declaratia Unica)."""
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+    args = context.args or []
+    if not args:
+        await update.message.reply_text(
+            "Scrie CNP-ul dupa comanda. Exemplu:\n`/cnp 1234567890123`\n\n"
+            "_Dato sensibila - se pastreaza doar pentru a completa "
+            "Declaratia Unica D212._",
+            parse_mode="Markdown",
+        )
+        return
+    cnp = "".join(c for c in args[0] if c.isdigit())
+    if len(cnp) != 13:
+        await update.message.reply_text(
+            "CNP-ul trebuie sa aiba 13 cifre. Verifica si reincearca."
+        )
+        return
+    session = get_session()
+    try:
+        users_repo.update_profile_by_id(session, user_id, cnp=cnp)
+        session.commit()
+    finally:
+        session.close()
+    await update.message.reply_text(
+        "✅ CNP salvat (ascuns).\n"
+        "Se va folosi pe *Declaratia Unica D212*.",
+        parse_mode="Markdown",
+    )
+
+
 async def post_init(application):
     """
     Seteaza lista de comenzi care apare la apasarea butonului de meniu
@@ -1981,6 +2088,7 @@ async def post_init(application):
         BotCommand("ajutor", "Ghid de utilizare"),
         BotCommand("profil", "Vezi profilul tau"),
         BotCommand("plata_fiscala", "Calcul si IBAN pentru plata ANAF"),
+        BotCommand("coduri_fiscale", "Coduri fiscale (CUI, TVA art.317, CNP)"),
         BotCommand("status", "Starea bot-ului"),
         BotCommand("cont", "Verifica datele contului tau"),
         BotCommand("reset_profil", "Reia configurarea profilului"),
@@ -2013,6 +2121,12 @@ if __name__ == '__main__':
         monitoring.capture_exception(e, stage="run_migrations")
 
     try:
+        ensure_coduri_fiscale_columns()
+    except Exception as e:
+        logger.error(f"❌ Migrare coduri fiscale FAILED: {e}")
+        monitoring.capture_exception(e, stage="migrare_coduri")
+
+    try:
         storage.ensure_storage_dir()
         logger.info("✅ Storage dir OK")
     except Exception as e:
@@ -2040,6 +2154,9 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
     app_bot.add_handler(CommandHandler("sterge_tura", foaie_parcurs.handle_delete_command))  # Pas A.3
     app_bot.add_handler(CommandHandler("declaratie_unica", du_ui.handle_command))  # Faza 1
+    app_bot.add_handler(CommandHandler("coduri_fiscale", handle_coduri_fiscale))  # Faza 1
+    app_bot.add_handler(CommandHandler("cod_tva", handle_set_cod_tva))  # Faza 1
+    app_bot.add_handler(CommandHandler("cnp", handle_set_cnp))  # Faza 1
 
     # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
@@ -2052,5 +2169,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v24 — + Fisa D301 ca PDF (aspect ANAF) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v25 — + Coduri fiscale (CUI/TVA/CNP) + D301 cu cod corect ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
