@@ -536,3 +536,184 @@ def genereaza_pdf_d301(d: dict, profil: dict = None) -> bytes:
 
 def nume_fisier_d301_pdf(an: int, luna: int) -> str:
     return f"D301_{an}_{luna:02d}.pdf"
+
+
+# ============================================================
+#     D390 - Declaratia recapitulativa VIES (perechea D301)
+# ============================================================
+# Pentru achizitii de servicii intracom (taxare inversa) -> cod S.
+# Se depune lunar pe codul special TVA art. 317, perechea D301.
+
+# Partener implicit pentru ridesharing (Bolt). Se poate suprascrie din profil.
+BOLT_TARA = "EE"
+BOLT_COD_TVA = "EE102090374"          # Bolt Operations OU (verifica pe factura)
+BOLT_DENUMIRE = "BOLT OPERATIONS OU"
+
+
+def construieste_fisa_d390_din_tva(an: int, luna: int, vat_out_total: float,
+                                   partener: dict = None) -> dict:
+    """
+    Construieste datele pentru fisa D390 (cod S - achizitii servicii intracom),
+    derivand baza din TVA-ul colectat (reverse charge), exact ca la D301.
+    """
+    d301 = construieste_fisa_d301_din_tva(an, luna, vat_out_total)
+    p = partener or {}
+    return {
+        "an": an,
+        "luna": luna,
+        "baza": d301["baza"],
+        "cota_pct": d301["cota_pct"],
+        "termen": d301["termen"],
+        "tara": p.get("tara") or BOLT_TARA,
+        "cod_operator": p.get("cod_tva") or BOLT_COD_TVA,
+        "denumire_operator": p.get("denumire") or BOLT_DENUMIRE,
+        "cod_operatiune": "S",
+    }
+
+
+def nume_fisier_d390_pdf(an: int, luna: int) -> str:
+    return f"D390_{an}_{luna:02d}.pdf"
+
+
+def genereaza_pdf_d390(d: dict, profil: dict = None) -> bytes:
+    """
+    PDF care reproduce aspectul Declaratiei recapitulative 390 (VIES),
+    completat pentru achizitii intracom de servicii (cod S).
+    """
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import mm
+
+    p = profil or {}
+    baza_r = round(d["baza"])
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    W, H = A4
+    M = 15 * mm
+
+    NEGRU = (0, 0, 0)
+    ALBASTRU = (0.06, 0.15, 0.42)
+
+    def box(x, y, w, h, lw=0.8):
+        c.setLineWidth(lw)
+        c.rect(x, y, w, h)
+
+    def txt(x, y, s, font="Helvetica", size=9, color=NEGRU):
+        c.setFont(font, size)
+        c.setFillColorRGB(*color)
+        c.drawString(x, y, str(s))
+
+    def txt_c(xc, y, s, font="Helvetica", size=9, color=NEGRU):
+        c.setFont(font, size)
+        c.setFillColorRGB(*color)
+        c.drawCentredString(xc, y, str(s))
+
+    def txt_r(xr, y, s, font="Helvetica", size=9, color=NEGRU):
+        c.setFont(font, size)
+        c.setFillColorRGB(*color)
+        c.drawRightString(xr, y, str(s))
+
+    def casete(x, y, text, n, cell=5.5 * mm, h=6 * mm):
+        s = str(text)
+        for i in range(n):
+            cx = x + i * cell
+            box(cx, y, cell, h, lw=0.5)
+            if i < len(s):
+                c.setFont("Helvetica", 9)
+                c.setFillColorRGB(*NEGRU)
+                c.drawCentredString(cx + cell / 2, y + 1.6 * mm, s[i])
+
+    y = H - M
+
+    # ===== ANTET =====
+    box(M, y - 18 * mm, 55 * mm, 18 * mm)
+    txt_c(M + 27.5 * mm, y - 8 * mm, "ANAF", "Helvetica-Bold", 20, ALBASTRU)
+    txt_c(M + 27.5 * mm, y - 13 * mm, "Agentia Nationala de", "Helvetica", 6, ALBASTRU)
+    txt_c(M + 27.5 * mm, y - 15.5 * mm, "Administrare Fiscala", "Helvetica", 6, ALBASTRU)
+
+    txt_c(M + 110 * mm, y - 6 * mm, "DECLARATIE RECAPITULATIVA", "Helvetica-Bold", 12)
+    txt_c(M + 110 * mm, y - 12 * mm, "privind livrarile / achizitiile / prestarile", "Helvetica", 8)
+    txt_c(M + 110 * mm, y - 15.5 * mm, "intracomunitare", "Helvetica", 8)
+    txt_r(W - M, y - 14 * mm, "390", "Helvetica-Bold", 28)
+    txt_r(W - M, y - 18 * mm, "VIES", "Helvetica-Bold", 10)
+
+    y -= 24 * mm
+    txt(M, y, "Perioada de raportare:  luna", "Helvetica", 9)
+    casete(M + 52 * mm, y - 1.5 * mm, f"{d['luna']:02d}", 2)
+    txt(M + 68 * mm, y, "anul", "Helvetica", 9)
+    casete(M + 78 * mm, y - 1.5 * mm, str(d["an"]), 4)
+
+    y -= 12 * mm
+    # ===== DATE IDENTIFICARE =====
+    box(M, y - 30 * mm, W - 2 * M, 30 * mm)
+    txt(M + 2 * mm, y - 5 * mm, "DATE DE IDENTIFICARE A PERSOANEI IMPOZABILE",
+        "Helvetica-Bold", 9)
+    yy = y - 11 * mm
+    txt(M + 2 * mm, yy, "Cod de identificare fiscala", "Helvetica", 8)
+    txt(M + 48 * mm, yy, "RO", "Helvetica-Bold", 9)
+    casete(M + 55 * mm, yy - 1.5 * mm, (p.get("firma_cui") or "").replace("RO", "").strip(), 10)
+    yy -= 9 * mm
+    txt(M + 2 * mm, yy, "Denumire / Nume, Prenume", "Helvetica", 8)
+    txt(M + 50 * mm, yy, p.get("firma_nume") or "—", "Helvetica-Bold", 9)
+    yy -= 8 * mm
+    txt(M + 2 * mm, yy, "Domiciliul fiscal", "Helvetica", 8)
+    txt(M + 50 * mm, yy, (p.get("adresa") or "—")[:60], "Helvetica", 8)
+
+    y -= 36 * mm
+    # ===== REZUMAT =====
+    txt(M, y, "REZUMAT DECLARATIE", "Helvetica-Bold", 10)
+    y -= 7 * mm
+    box(M, y - 6 * mm, W - 2 * M, 6 * mm, lw=0.5)
+    txt(M + 2 * mm, y - 4.2 * mm, "Numar total operatori intracomunitari", "Helvetica", 8)
+    txt_r(M + 120 * mm, y - 4.2 * mm, "1", "Helvetica-Bold", 9)
+    y -= 6 * mm
+    box(M, y - 6 * mm, W - 2 * M, 6 * mm, lw=0.5)
+    txt(M + 2 * mm, y - 4.2 * mm, "Valoare totala operatiuni intracom (lei)", "Helvetica", 8)
+    txt_r(M + 120 * mm, y - 4.2 * mm, baza_r, "Helvetica-Bold", 9)
+
+    y -= 16 * mm
+    # ===== SECTIUNEA cod S =====
+    c.setFillColorRGB(0.85, 0.88, 0.95)
+    c.rect(M, y - 6 * mm, W - 2 * M, 6 * mm, fill=1, stroke=1)
+    c.setFillColorRGB(*NEGRU)
+    txt(M + 2 * mm, y - 4.2 * mm,
+        "Achizitii INTRACOMUNITARE de SERVICII - taxare inversa  (cod operatiune: S)",
+        "Helvetica-Bold", 8)
+    y -= 6 * mm
+    cols = [("Nr", 10), ("Cod tara", 18), ("Cod operator intracom (TVA)", 45),
+            ("Denumire operator", 60), ("Baza impozit. (lei)", 28), ("Cod", 12)]
+    rh = 8 * mm
+    cx = M
+    for nume, w in cols:
+        box(cx, y - rh, w * mm, rh, lw=0.5)
+        txt_c(cx + w * mm / 2, y - rh + 3 * mm, nume, "Helvetica-Bold", 6.5)
+        cx += w * mm
+    y -= rh
+    vals = ["1", d["tara"], d["cod_operator"], d["denumire_operator"], str(baza_r), d["cod_operatiune"]]
+    cx = M
+    for (nume, w), v in zip(cols, vals):
+        box(cx, y - rh, w * mm, rh, lw=0.5)
+        txt_c(cx + w * mm / 2, y - rh + 3 * mm, v, "Helvetica", 7)
+        cx += w * mm
+    y -= rh
+    box(M, y - rh, sum(w for _, w in cols) * mm, rh, lw=0.5)
+    txt(M + 2 * mm, y - rh + 3 * mm, "TOTAL cod S", "Helvetica-Bold", 7)
+    txt_r(M + (10 + 18 + 45 + 60 + 28) * mm - 2 * mm, y - rh + 3 * mm, baza_r, "Helvetica-Bold", 8)
+
+    y -= rh + 12 * mm
+    nume = (p.get("firma_nume") or "—").upper()
+    txt(M, y, f"Declar pe propria raspundere: {nume}   Functia: TITULAR PFA",
+        "Helvetica", 8)
+    y -= 6 * mm
+    txt(M, y, "Document model. Se transcrie in formularul 390 VIES (ANAF), "
+        "apoi VALIDARE + semnare + depunere SPV. Se coreleaza cu D301.",
+        "Helvetica-Oblique", 7)
+    y -= 5 * mm
+    txt(M, y, "Atentie: verifica pe factura Bolt codul de TVA al partenerului "
+        "si suma comisionului.", "Helvetica-Oblique", 7)
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
