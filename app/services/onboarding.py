@@ -924,7 +924,7 @@ async def _finalize(update, context, session, user, user_id):
             "Dacă ai *cod special de TVA* (art. 317 — pentru tranzacții cu "
             "firme din UE) sau vrei să salvezi *CNP-ul* pentru Declarația "
             "Unică, le poți adăuga acum. Le poți seta oricând și din "
-            "/coduri_fiscale."
+            "`/coduri_fiscale`."
         ),
         parse_mode="Markdown",
         reply_markup=_kb_coduri_onboarding(),
