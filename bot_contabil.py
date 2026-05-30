@@ -838,6 +838,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await onboarding.handle_onboarding_callback(update, context, parts)
         return
 
+    # === CODURI FISCALE (Faza 1) ===
+    if namespace == "coduri":
+        await handle_coduri_callback(update, context, parts, user_id)
+        return
+
     try:
         if namespace == "nav":
             if parts[1] == "close":
@@ -1932,6 +1937,11 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
         await handle_menu_button(update, context, text)
         return
 
+    # Faza 1: Wizard coduri fiscale (asteapta cod TVA / CNP)
+    if context.user_data.get("coduri_wizard"):
+        await handle_coduri_wizard_text(update, context)
+        return
+
     # Pas R1: Wizard editare camp (confirmare date extrase)
     if confirmare.is_editing(context):
         handled = await confirmare.handle_edit_text(update, context)
@@ -1977,25 +1987,13 @@ async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE
 #          COMENZI - CODURI FISCALE (Faza 1)
 # ============================================================
 
-async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/coduri_fiscale - afiseaza codurile si cum se seteaza."""
-    user_id = ensure_user(update)
-    if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
-        return
-    session = get_session()
-    try:
-        profile = users_repo.get_profile_dict(session, user_id) or {}
-    finally:
-        session.close()
-
+async def _coduri_text(profile: dict) -> str:
     cui = profile.get("firma_cui") or "—"
     cod_tva = profile.get("cod_special_tva")
     cnp = profile.get("cnp")
     cod_tva_txt = f"RO {cod_tva}" if cod_tva else "— nesetat"
     cnp_txt = "setat (ascuns)" if cnp else "— nesetat"
-
-    msg = (
+    return (
         "*🔑 Coduri fiscale*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🏢 *CUI normal:* `{cui}`\n"
@@ -2005,11 +2003,175 @@ async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TY
         f"🆔 *CNP:* {cnp_txt}\n"
         "_folosit pe Declaratia Unica D212_\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "*Setare:*\n"
-        "• cod TVA:  `/cod_tva 53148882`\n"
-        "• CNP:  `/cnp 1234567890123`"
+        "_Apasa un buton ca sa setezi._"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+def _kb_coduri(profile: dict):
+    cod_tva = profile.get("cod_special_tva")
+    cnp = profile.get("cnp")
+    rows = []
+    if cod_tva:
+        rows.append([
+            InlineKeyboardButton("✏️ Schimba cod TVA", callback_data="coduri|set_tva"),
+            InlineKeyboardButton("🗑️ Sterge", callback_data="coduri|del_tva"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton(
+            "🇪🇺 Seteaza cod special TVA", callback_data="coduri|set_tva")])
+    if cnp:
+        rows.append([
+            InlineKeyboardButton("✏️ Schimba CNP", callback_data="coduri|set_cnp"),
+            InlineKeyboardButton("🗑️ Sterge", callback_data="coduri|del_cnp"),
+        ])
+    else:
+        rows.append([InlineKeyboardButton(
+            "🆔 Seteaza CNP", callback_data="coduri|set_cnp")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/coduri_fiscale - afiseaza codurile cu butoane de setare."""
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+    await update.message.reply_text(
+        await _coduri_text(profile),
+        parse_mode="Markdown",
+        reply_markup=_kb_coduri(profile),
+    )
+
+
+async def _reafiseaza_coduri(update, context, user_id, via_query=None):
+    """Reincarca profilul si afiseaza codurile cu butoane (mesaj nou)."""
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+    chat_id = (via_query.message.chat_id if via_query
+               else update.effective_chat.id)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=await _coduri_text(profile),
+        parse_mode="Markdown",
+        reply_markup=_kb_coduri(profile),
+    )
+
+
+async def handle_coduri_callback(update, context, parts, user_id):
+    """Router pentru butoanele coduri|... (apelat din handle_callback_query)."""
+    query = update.callback_query
+    action = parts[1] if len(parts) > 1 else ""
+
+    if action == "set_tva":
+        context.user_data["coduri_wizard"] = "cod_tva"
+        await query.edit_message_text(
+            "🇪🇺 *Cod special TVA (art. 317)*\n\n"
+            "Trimite-mi codul ca mesaj — doar cifrele.\n"
+            "_Exemplu: 53148882_\n\n"
+            "Apasa /coduri_fiscale ca sa renunti.",
+            parse_mode="Markdown",
+        )
+        return
+    if action == "set_cnp":
+        context.user_data["coduri_wizard"] = "cnp"
+        await query.edit_message_text(
+            "🆔 *CNP*\n\n"
+            "Trimite-mi CNP-ul (13 cifre).\n"
+            "_Dato sensibila — se foloseste doar la Declaratia Unica D212._\n\n"
+            "Apasa /coduri_fiscale ca sa renunti.",
+            parse_mode="Markdown",
+        )
+        return
+    if action == "del_tva":
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(session, user_id, cod_special_tva="")
+            session.commit()
+        finally:
+            session.close()
+        await query.edit_message_text("🗑️ Cod special TVA sters.")
+        await _reafiseaza_coduri(update, context, user_id, via_query=query)
+        return
+    if action == "del_cnp":
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(session, user_id, cnp="")
+            session.commit()
+        finally:
+            session.close()
+        await query.edit_message_text("🗑️ CNP sters.")
+        await _reafiseaza_coduri(update, context, user_id, via_query=query)
+        return
+    if action == "skip":
+        # folosit la onboarding - utilizatorul amana setarea codurilor
+        await query.edit_message_text(
+            "👍 OK. Poti seta codurile oricand din /coduri_fiscale."
+        )
+        return
+
+
+async def handle_coduri_wizard_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Proceseaza valoarea trimisa dupa apasarea unui buton de setare cod."""
+    kind = context.user_data.get("coduri_wizard")
+    text = update.message.text or ""
+    cifre = "".join(c for c in text if c.isdigit())
+    user_id = ensure_user(update)
+    if not user_id:
+        context.user_data.pop("coduri_wizard", None)
+        return
+
+    if kind == "cod_tva":
+        if len(cifre) < 2:
+            await update.message.reply_text(
+                "Cod invalid. Trimite doar cifrele. Exemplu: 53148882"
+            )
+            return
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(session, user_id, cod_special_tva=cifre)
+            session.commit()
+        finally:
+            session.close()
+        context.user_data.pop("coduri_wizard", None)
+        await update.message.reply_text(
+            f"✅ Cod special TVA salvat: *RO {cifre}*\n"
+            "Se foloseste automat pe *D301* si *D390*.",
+            parse_mode="Markdown",
+        )
+        await _reafiseaza_coduri(update, context, user_id)
+        return
+
+    if kind == "cnp":
+        if len(cifre) != 13:
+            await update.message.reply_text(
+                "CNP-ul trebuie sa aiba exact 13 cifre. Reincearca."
+            )
+            return
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(session, user_id, cnp=cifre)
+            session.commit()
+        finally:
+            session.close()
+        context.user_data.pop("coduri_wizard", None)
+        await update.message.reply_text(
+            "✅ CNP salvat (ascuns).\n"
+            "Se foloseste pe *Declaratia Unica D212*.",
+            parse_mode="Markdown",
+        )
+        await _reafiseaza_coduri(update, context, user_id)
+        return
+
+    # stare necunoscuta - curata
+    context.user_data.pop("coduri_wizard", None)
 
 
 async def handle_set_cod_tva(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2169,5 +2331,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v25 — + Coduri fiscale (CUI/TVA/CNP) + D301 cu cod corect ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v26 — + Coduri fiscale cu BUTOANE (set TVA/CNP) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
