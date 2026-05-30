@@ -251,6 +251,19 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "009_bolt_orders_ride_distance",
+        "description": (
+            "A.1: adauga ride_distance (metri, distanta cu pasager) in "
+            "bolt_orders pentru legarea cu foaia de parcurs / combustibil"
+        ),
+        "sql": [
+            """
+            ALTER TABLE bolt_orders
+                ADD COLUMN IF NOT EXISTS ride_distance INTEGER NOT NULL DEFAULT 0
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
