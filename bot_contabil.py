@@ -1039,6 +1039,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await execute_fisa_d301(query, context, user_id, year, month)
             return
 
+        # Faza 1: Fisa D390 (VIES) - perechea D301
+        if namespace == "d390":
+            year = int(parts[1])
+            month = int(parts[2])
+            await execute_fisa_d390(query, context, user_id, year, month)
+            return
+
         # Faza 1: Declaratia Unica
         if namespace == "du":
             await du_ui.handle_callback(update, context, parts)
@@ -1129,10 +1136,16 @@ async def execute_raport(query, context, user_id, year, month):
         # Faza 1.3: daca exista TVA D301 (reverse charge), oferim fisa D301
         tva_d301 = totals.get("vat_out_total", 0) or 0
         if tva_d301 > 0:
-            rm = InlineKeyboardMarkup([[InlineKeyboardButton(
-                "📋 Fisa completare D301",
-                callback_data=f"d301|{year}|{month}",
-            )]])
+            rm = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "📋 Fisa completare D301",
+                    callback_data=f"d301|{year}|{month}",
+                )],
+                [InlineKeyboardButton(
+                    "🇪🇺 Fisa D390 (VIES)",
+                    callback_data=f"d390|{year}|{month}",
+                )],
+            ])
             await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=rm)
         else:
             await query.edit_message_text(msg, parse_mode="Markdown")
@@ -1200,6 +1213,55 @@ async def execute_fisa_d301(query, context, user_id, year, month):
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❌ Eroare la generarea fisei D301.",
+        )
+    finally:
+        session.close()
+
+
+async def execute_fisa_d390(query, context, user_id, year, month):
+    """Faza 1: genereaza fisa D390 (VIES) pentru achizitii servicii intracom."""
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+        tva = totals.get("vat_out_total", 0) or 0
+        if tva <= 0:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="ℹ️ Nu exista achizitii intracom de servicii pentru aceasta luna.",
+            )
+            return
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        adresa = ", ".join(
+            x for x in [profile.get("localitate"), profile.get("judet")] if x
+        ) or None
+        profil = {
+            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D390"),
+            "firma_nume": profile.get("firma_nume"),
+            "adresa": adresa,
+        }
+        d = declaratii_spv.construieste_fisa_d390_din_tva(year, month, tva)
+        pdf_bytes = declaratii_spv.genereaza_pdf_d390(d, profil)
+        fname = declaratii_spv.nume_fisier_d390_pdf(year, month)
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=_io.BytesIO(pdf_bytes),
+            filename=fname,
+            caption=(
+                f"🇪🇺 *Fisa D390 (VIES) — {month:02d}/{year}*\n"
+                f"Cod operatiune: *S* (achizitii servicii intracom)\n"
+                f"Baza: *{round(d['baza'])} lei*\n\n"
+                f"Se depune impreuna cu D301, pe codul special TVA. "
+                f"Verifica pe factura Bolt codul partenerului si suma."
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"execute_fisa_d390 error: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ Eroare la generarea fisei D390.",
         )
     finally:
         session.close()
@@ -2331,5 +2393,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v27 — + Fix Markdown comenzi cu underscore ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v28 — + Fisa D390 VIES (perechea D301) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
