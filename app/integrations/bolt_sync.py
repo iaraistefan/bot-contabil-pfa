@@ -1,7 +1,7 @@
 """
 app/integrations/bolt_sync.py
 =============================
-Integrare Bolt Fleet API → venituri lunare in Registru.
+Integrare Bolt Fleet API -> venituri lunare in Registru.
 
 PASUL 1 (on-demand, cu confirmare):
   Comanda /bolt <luna> trage cursele din API, agrega venitul lunii si,
@@ -9,14 +9,14 @@ PASUL 1 (on-demand, cu confirmare):
   prin acelasi posting.post_document ca un screenshot manual.
 
   Mapare (validata cu factura + statementul oficial Bolt):
-    brut     = Σ ride_price (toate)          -> venit brut
-    cash     = Σ ride_price pe curse cash     -> income cash
-    comision = Σ commission                   -> cheltuiala deductibila 100%
-  D301 NU se atinge — vine din factura Bolt fotografiata (alt flux).
+    brut     = suma ride_price (toate)        -> venit brut
+    cash     = suma ride_price pe curse cash   -> income cash
+    comision = suma commission                 -> cheltuiala deductibila 100%
+  D301 NU se atinge - vine din factura Bolt fotografiata (alt flux).
 
 Credentiale din variabile de mediu (Render):
     BOLT_CLIENT_ID, BOLT_CLIENT_SECRET
-    (optional BOLT_API_BASE — default node.bolt.eu/fleet-integration-gateway)
+    (optional BOLT_API_BASE - default node.bolt.eu/fleet-integration-gateway)
 
 Inregistrare in bot (in fisierul principal, dupa ce ai app_bot):
     from app.integrations import bolt_sync
@@ -198,7 +198,9 @@ def get_month_summary(year: int, month: int) -> dict:
             cash += rp
             cash_discount += _num(p.get("cash_discount"))
 
-    R = lambda x: round(x, 2)
+    def R(x):
+        return round(x, 2)
+
     return {
         "year": year, "month": month, "n": len(fin),
         "brut": R(brut), "cash": R(cash), "card": R(brut - cash),
@@ -307,25 +309,27 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     tg_id = update.effective_user.id
     user_id = _resolve_user_id(tg_id)
     if not user_id:
-        await update.message.reply_text("⚠️ Foloseste mai intai /start.")
+        await update.message.reply_text("Foloseste mai intai /start.")
         return
     try:
         year, month = _parse_args(context.args or [])
     except (ValueError, IndexError):
-        await update.message.reply_text("Foloseste: `/bolt 2026 4` sau `/bolt 4`.", parse_mode="Markdown")
+        await update.message.reply_text("Foloseste: /bolt 2026 4 sau /bolt 4")
         return
 
-    await update.message.reply_text(f"🔄 Trag veniturile Bolt pentru {LUNI_LONG.get(month, month)} {year}...")
+    await update.message.reply_text(
+        f"Trag veniturile Bolt pentru {LUNI_LONG.get(month, month)} {year}..."
+    )
 
     try:
         s = get_month_summary(year, month)
     except Exception as e:
-        await update.message.reply_text(f"❌ Eroare Bolt: {str(e)[:300]}")
+        await update.message.reply_text(f"Eroare Bolt: {str(e)[:300]}")
         return
 
     if s["n"] == 0:
         await update.message.reply_text(
-            f"📭 Nicio cursa finalizata in {LUNI_LONG[month]} {year} "
+            f"Nicio cursa finalizata in {LUNI_LONG[month]} {year} "
             f"(sau luna nu mai e disponibila in API)."
         )
         return
@@ -336,18 +340,18 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"🚗 *Venituri Bolt — {LUNI_LONG[month]} {year}*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"Curse finalizate: *{s['n']}*\n\n"
-        f"💰 *Venit brut (Σ tarif): {s['brut']:.2f} lei*\n"
-        f"   💵 cash: {s['cash']:.2f}  (în mână ≈ {s['cash_in_hand']:.2f})\n"
+        f"💰 *Venit brut (tarif): {s['brut']:.2f} lei*\n"
+        f"   💵 cash: {s['cash']:.2f}  (in mana aprox {s['cash_in_hand']:.2f})\n"
         f"   💳 card/app: {s['card']:.2f}\n"
-        f"➖ Comision Bolt (cheltuială 100%): {s['comision']:.2f}\n"
+        f"➖ Comision Bolt (cheltuiala 100%): {s['comision']:.2f}\n"
         f"= Net: {s['net']:.2f} lei\n"
-        f"ℹ️ bacșiș (info): {s['tip']:.2f}\n\n"
-        f"_Compară cu ecranul „Defalcarea câștigurilor / Lunar" din Bolt._\n"
-        f"_D301 rămâne din factura Bolt — nu se atinge aici._"
+        f"ℹ️ bacsis (info): {s['tip']:.2f}\n\n"
+        f"_Compara cu ecranul Bolt: Defalcarea castigurilor, Lunar._\n"
+        f"_D301 ramane din factura Bolt, nu se atinge aici._"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Adaugă în Registru", callback_data="boltsync|confirm")],
-        [InlineKeyboardButton("❌ Anulează", callback_data="boltsync|cancel")],
+        [InlineKeyboardButton("✅ Adauga in Registru", callback_data="boltsync|confirm")],
+        [InlineKeyboardButton("❌ Anuleaza", callback_data="boltsync|cancel")],
     ])
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=kb)
 
@@ -359,27 +363,27 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if action == "cancel":
         context.user_data.pop("bolt_pending", None)
-        await query.edit_message_text("❌ Anulat. Nu am adăugat nimic.")
+        await query.edit_message_text("❌ Anulat. Nu am adaugat nimic.")
         raise ApplicationHandlerStop
 
     s = context.user_data.get("bolt_pending")
     if not s:
-        await query.edit_message_text("⏳ Sesiune expirată. Rulează din nou `/bolt`.")
+        await query.edit_message_text("Sesiune expirata. Ruleaza din nou /bolt")
         raise ApplicationHandlerStop
 
     user_id = _resolve_user_id(query.from_user.id)
     try:
         res = post_month(user_id, s)
-        repl = f"\n♻️ Am înlocuit înregistrarea Bolt anterioară a lunii." if res["replaced"] else ""
+        repl = "\n♻️ Am inlocuit inregistrarea Bolt anterioara a lunii." if res["replaced"] else ""
         await query.edit_message_text(
-            f"✅ *Adăugat în Registru — {LUNI_LONG[s['month']]} {s['year']}*\n"
-            f"Venit brut: {s['brut']:.2f} lei · Comision: {s['comision']:.2f} lei\n"
-            f"({res['tx_count']} tranzacții, doc #{res['doc_id']}){repl}\n\n"
-            f"Verifică din 📂 Registru sau 📊 Raport.",
+            f"✅ *Adaugat in Registru — {LUNI_LONG[s['month']]} {s['year']}*\n"
+            f"Venit brut: {s['brut']:.2f} lei, Comision: {s['comision']:.2f} lei\n"
+            f"({res['tx_count']} tranzactii, doc #{res['doc_id']}){repl}\n\n"
+            f"Verifica din Registru sau Raport.",
             parse_mode="Markdown",
         )
     except Exception as e:
-        await query.edit_message_text(f"❌ Eroare la salvare: {str(e)[:300]}")
+        await query.edit_message_text(f"Eroare la salvare: {str(e)[:300]}")
     finally:
         context.user_data.pop("bolt_pending", None)
     raise ApplicationHandlerStop
