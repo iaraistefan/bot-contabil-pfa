@@ -28,6 +28,7 @@ from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
 )
+from app.integrations import bolt_sync  # Bolt API - venituri automate (/bolt)
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
 from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301
@@ -522,6 +523,7 @@ async def send_ajutor(chat_id, context):
         "• `/profil` — vezi profilul tău\n"
         "• `/reset_profil` — refă onboarding\n"
         "• `/plata_fiscala` — wizard plată ANAF\n"
+        "• `/bolt <lună>` — venituri Bolt automat din API (ex: `/bolt 2026 4`)\n"
         "• `/sterge_tura <ID>` — șterge o tură\n"
         "• `/status` — starea bot-ului\n"
         "• `/delete <ID>` — șterge un document"
@@ -645,7 +647,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 *Status Bot Contabil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v18* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat pe nr. document)\n"
+        f"⚙️ Versiune: *v30* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat + Bolt API)\n"
         f"🗄️ Bază de date: {db_status}\n"
         f"📡 Error tracking: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
@@ -2370,6 +2372,7 @@ async def post_init(application):
         BotCommand("start", "Pornire / meniul principal"),
         BotCommand("ajutor", "Ghid de utilizare"),
         BotCommand("profil", "Vezi profilul tau"),
+        BotCommand("bolt", "Venituri Bolt automat din API (luna)"),
         BotCommand("plata_fiscala", "Calcul si IBAN pentru plata ANAF"),
         BotCommand("coduri_fiscale", "Coduri fiscale (CUI, TVA art.317, CNP)"),
         BotCommand("status", "Starea bot-ului"),
@@ -2452,5 +2455,8 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v29 — + Fisa D100 (impozit nerezident Bolt) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    # === Bolt API — venituri automate (/bolt) ===
+    bolt_sync.register(app_bot)
+
+    print("🤖 Bot Contabil v30 — + Bolt API venituri (/bolt) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3 + Bolt)")
     app_bot.run_polling()
