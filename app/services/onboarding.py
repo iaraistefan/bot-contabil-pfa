@@ -251,6 +251,15 @@ def _kb_final_confirm():
     ])
 
 
+def _kb_coduri_onboarding():
+    """Oferta de coduri fiscale la finalul onboarding-ului."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇪🇺 Adaugă cod special TVA", callback_data="coduri|set_tva")],
+        [InlineKeyboardButton("🆔 Adaugă CNP", callback_data="coduri|set_cnp")],
+        [InlineKeyboardButton("⏭️ Mai târziu", callback_data="coduri|skip")],
+    ])
+
+
 # ============================================================
 #                    START ONBOARDING
 # ============================================================
@@ -905,6 +914,20 @@ async def _finalize(update, context, session, user, user_id):
         "Acum poți trimite poze cu bonuri/facturi sau screenshot-uri "
         "Bolt — botul te ajută cu restul.",
         parse_mode="Markdown",
+    )
+
+    # === Faza 1: oferta coduri fiscale speciale (optional) ===
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "🔑 *Coduri fiscale (opțional)*\n\n"
+            "Dacă ai *cod special de TVA* (art. 317 — pentru tranzacții cu "
+            "firme din UE) sau vrei să salvezi *CNP-ul* pentru Declarația "
+            "Unică, le poți adăuga acum. Le poți seta oricând și din "
+            "/coduri_fiscale."
+        ),
+        parse_mode="Markdown",
+        reply_markup=_kb_coduri_onboarding(),
     )
 
     # Daca e ridesharing -> sugeram adaugarea masinii direct
