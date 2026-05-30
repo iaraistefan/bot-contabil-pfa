@@ -31,6 +31,13 @@ class User(Base):
     firma_forma_juridica = Column(String(20), nullable=True)
     # Valori: PFA / II / IF / SRL_MICRO / SRL_NORMAL / PROFESIE_LIBERALA
 
+    # === Coduri fiscale suplimentare (Faza 1 - declaratii) ===
+    # Cod special TVA art. 317 - pentru D301 / D390 (operatiuni intracom).
+    # La unii PFA difera de CUI-ul normal (ex: CUI 53067338, special 53148882).
+    cod_special_tva = Column(String(20), nullable=True)
+    # CNP titular - pentru Declaratia Unica D212 (venit personal). Dato sensibila.
+    cnp = Column(String(13), nullable=True)
+
     # === Regim fiscal ===
     regim_tva = Column(String(20), nullable=True)
     # Valori: NEPLATITOR / PLATITOR_21 / SPECIAL_INTRACOM
@@ -131,8 +138,6 @@ class Document(Base):
     vat_id = Column(String(20), nullable=True, index=True)
 
     # === Pas R1.2 - numarul documentului (serie + nr) ===
-    # Identificator unic al documentului fizic (ex: "INSINT/1518242").
-    # Folosit pentru detectarea EXACTA a duplicatelor.
     numar_document = Column(String(80), nullable=True, index=True)
 
     user = relationship("User", back_populates="documents")
@@ -297,11 +302,10 @@ class FiscalAlertSent(Base):
 # Pas A - Vehicul (masini PFA/SRL/II - flota)
 # ============================================================
 
-# Tipuri de detinere - relevante fiscal pentru deductibilitatea RCA/CASCO
-TIP_DETINERE_PROPRIETATE = "PROPRIETATE"   # achizitionat pe firma
-TIP_DETINERE_COMODAT = "COMODAT"           # masina personala in folosinta
-TIP_DETINERE_LEASING = "LEASING"           # leasing financiar/operational
-TIP_DETINERE_INCHIRIERE = "INCHIRIERE"     # inchiriat
+TIP_DETINERE_PROPRIETATE = "PROPRIETATE"
+TIP_DETINERE_COMODAT = "COMODAT"
+TIP_DETINERE_LEASING = "LEASING"
+TIP_DETINERE_INCHIRIERE = "INCHIRIERE"
 
 TIP_DETINERE_LABELS = {
     TIP_DETINERE_PROPRIETATE: "Proprietatea firmei",
@@ -312,21 +316,7 @@ TIP_DETINERE_LABELS = {
 
 
 class Vehicul(Base):
-    """
-    Pas A - Vehicul folosit in activitate.
-
-    Un PFA poate avea o singura masina (un titular). Un SRL sau I.I.
-    poate avea mai multe (flota, mai multi soferi) - constrangerea se
-    aplica la nivel de UI pe baza formei juridice.
-
-    Campuri relevante fiscal:
-      - norma_consum   : L/100km, folosita in foaia de parcurs
-      - tip_detinere   : decide daca RCA/CASCO sunt deductibile:
-                         PROPRIETATE/LEASING/INCHIRIERE -> da
-                         COMODAT (masina personala)     -> nu (doar combustibil)
-      - km_curent      : ultimul odometru cunoscut (sincronizat din foaia
-                         de parcurs)
-    """
+    """Pas A - Vehicul folosit in activitate."""
     __tablename__ = "vehicule"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -336,10 +326,10 @@ class Vehicul(Base):
     )
     nr_inmatriculare = Column(String(20), nullable=False)
     marca_model = Column(String(120), nullable=True)
-    norma_consum = Column(Float, nullable=False, default=7.5)  # L/100km
-    tip_detinere = Column(String(20), nullable=True)  # vezi TIP_DETINERE_*
+    norma_consum = Column(Float, nullable=False, default=7.5)
+    tip_detinere = Column(String(20), nullable=True)
     km_curent = Column(Integer, nullable=True)
-    activ = Column(Boolean, nullable=False, default=True)  # soft-delete
+    activ = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow,
@@ -364,36 +354,12 @@ class Vehicul(Base):
 # Pas 14 + A - TripLog (Foaie de parcurs / jurnal km auto)
 # ============================================================
 
-# Status-uri tura
-TRIP_STATUS_OPEN = "open"      # tura pornita (start dat, stop lipsa)
-TRIP_STATUS_CLOSED = "closed"  # tura incheiata (start + stop)
+TRIP_STATUS_OPEN = "open"
+TRIP_STATUS_CLOSED = "closed"
 
 
 class TripLog(Base):
-    """
-    Pas 14 + A - Foaie de parcurs: o intrare = o tura (zi de deplasare).
-
-    Justifica deductibilitatea cheltuielilor auto (combustibil) prin
-    documentarea km parcursi in interesul activitatii.
-
-    WORKFLOW start/stop:
-      1. `parcurs start 125430` -> creeaza rand status=open,
-         odometer_start=125430
-      2. `parcurs stop 125680`  -> completeaza odometer_end=125680,
-         km=250, status=closed
-
-    Campuri:
-      - vehicul_id     : masina folosita (Pas A)
-      - trip_date      : ziua deplasarii
-      - km             : km parcursi in interes business (= end - start)
-      - odometer_start : citire bord la inceputul turei
-      - odometer_end   : citire bord la sfarsitul turei
-      - status         : open / closed (vezi TRIP_STATUS_*)
-      - ora_start      : ora pornirii turei, format "HH:MM"
-      - ora_stop       : ora incheierii turei, format "HH:MM"
-      - purpose        : scop/traseu (ex: "curse Bolt Bistrita")
-      - period_*       : derivate din trip_date pentru raportare rapida
-    """
+    """Pas 14 + A - Foaie de parcurs: o intrare = o tura (zi de deplasare)."""
     __tablename__ = "trip_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -401,7 +367,6 @@ class TripLog(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    # Pas A - legatura cu masina
     vehicul_id = Column(
         Integer, ForeignKey("vehicule.id", ondelete="SET NULL"),
         nullable=True, index=True,
@@ -410,10 +375,9 @@ class TripLog(Base):
     km = Column(Float, nullable=False, default=0.0)
     odometer_start = Column(Integer, nullable=True)
     odometer_end = Column(Integer, nullable=True)
-    # Pas A - workflow start/stop
     status = Column(String(20), nullable=False, default=TRIP_STATUS_CLOSED)
-    ora_start = Column(String(5), nullable=True)   # "08:30"
-    ora_stop = Column(String(5), nullable=True)    # "17:45"
+    ora_start = Column(String(5), nullable=True)
+    ora_stop = Column(String(5), nullable=True)
     purpose = Column(String(255), nullable=True)
     period_year = Column(Integer, nullable=False, index=True)
     period_month = Column(Integer, nullable=False, index=True)
