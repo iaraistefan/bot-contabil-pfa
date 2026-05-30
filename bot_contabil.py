@@ -1046,6 +1046,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await execute_fisa_d390(query, context, user_id, year, month)
             return
 
+        # Faza 1: Fisa D100 (impozit nerezident - comision Bolt)
+        if namespace == "d100":
+            year = int(parts[1])
+            month = int(parts[2])
+            await execute_fisa_d100(query, context, user_id, year, month)
+            return
+
         # Faza 1: Declaratia Unica
         if namespace == "du":
             await du_ui.handle_callback(update, context, parts)
@@ -1144,6 +1151,10 @@ async def execute_raport(query, context, user_id, year, month):
                 [InlineKeyboardButton(
                     "🇪🇺 Fisa D390 (VIES)",
                     callback_data=f"d390|{year}|{month}",
+                )],
+                [InlineKeyboardButton(
+                    "🌍 Fisa D100 (nerezident)",
+                    callback_data=f"d100|{year}|{month}",
                 )],
             ])
             await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=rm)
@@ -1262,6 +1273,54 @@ async def execute_fisa_d390(query, context, user_id, year, month):
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❌ Eroare la generarea fisei D390.",
+        )
+    finally:
+        session.close()
+
+
+async def execute_fisa_d100(query, context, user_id, year, month):
+    """Faza 1: genereaza fisa D100 (impozit nerezident - comision Bolt)."""
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+        tva = totals.get("vat_out_total", 0) or 0
+        if tva <= 0:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text="ℹ️ Nu exista comision intracom de declarat pentru aceasta luna.",
+            )
+            return
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        profil = {
+            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D100"),
+            "firma_nume": profile.get("firma_nume"),
+        }
+        # Cota 2% (cu certificat rezidenta Bolt RO-Estonia)
+        d = declaratii_spv.construieste_fisa_d100_din_tva(
+            year, month, tva, cota_impozit_pct=2
+        )
+        pdf_bytes = declaratii_spv.genereaza_pdf_d100(d, profil)
+        fname = declaratii_spv.nume_fisier_d100_pdf(year, month)
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=_io.BytesIO(pdf_bytes),
+            filename=fname,
+            caption=(
+                f"🌍 *Fisa D100 (nerezident) — {month:02d}/{year}*\n"
+                f"Impozit comision Bolt: *{round(d['impozit'])} lei* "
+                f"({d['cota_impozit_pct']:g}% din {round(d['baza'])} lei)\n"
+                f"Pozitia *634*, termen {d['termen']}.\n\n"
+                f"Necesita certificat rezidenta Bolt (cota 2%). Anual: D207."
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"execute_fisa_d100 error: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ Eroare la generarea fisei D100.",
         )
     finally:
         session.close()
@@ -2393,5 +2452,5 @@ if __name__ == '__main__':
 
     app_bot.add_error_handler(handle_error)
 
-    print("🤖 Bot Contabil v28 — + Fisa D390 VIES (perechea D301) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
+    print("🤖 Bot Contabil v29 — + Fisa D100 (impozit nerezident Bolt) ONLINE (Pas 11 + 10 + 13 + A + B + R1 + R1.2 + F1 + F1.3)")
     app_bot.run_polling()
