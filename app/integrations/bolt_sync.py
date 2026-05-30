@@ -167,6 +167,7 @@ def _flat_from_api(o):
         "net_earnings": _num(p.get("net_earnings")),
         "tip": _num(p.get("tip")),
         "cash_discount": _num(p.get("cash_discount")),
+        "ride_distance": int(_num(o.get("ride_distance"))),  # metri, cu pasager
         "finished_ts": int(_num(fts)),
     }
 
@@ -204,6 +205,7 @@ def _fetch_range(client, company_ids, start_ts, end_ts):
 def _aggregate(rows):
     """Agrega o lista de dict-uri plate (din cache sau API). Numara doar 'finished'."""
     brut = cash = comision = net = tip = cash_discount = 0.0
+    km_m = 0.0  # metri parcursi cu pasager (ride_distance), doar finished
     n = 0
     for r in rows:
         if r.get("order_status") != "finished":
@@ -214,6 +216,7 @@ def _aggregate(rows):
         comision += _num(r.get("commission"))
         net += _num(r.get("net_earnings"))
         tip += _num(r.get("tip"))
+        km_m += _num(r.get("ride_distance"))
         if r.get("payment_method") == "cash":
             cash += rp
             cash_discount += _num(r.get("cash_discount"))
@@ -222,6 +225,7 @@ def _aggregate(rows):
         "brut": _R(brut), "cash": _R(cash), "card": _R(brut - cash),
         "comision": _R(comision), "net": _R(net), "tip": _R(tip),
         "cash_in_hand": _R(cash - cash_discount),
+        "km": _R(km_m / 1000.0),  # km cu pasager (din ride_distance)
     }
 
 
@@ -233,11 +237,11 @@ _UPSERT_SQL = text("""
     INSERT INTO bolt_orders (
         user_id, order_reference, order_status, payment_method,
         ride_price, commission, net_earnings, tip, cash_discount,
-        finished_ts, period_year, period_month, updated_at
+        ride_distance, finished_ts, period_year, period_month, updated_at
     ) VALUES (
         :uid, :ref, :status, :pm,
         :rp, :comm, :net, :tip, :cd,
-        :fts, :py, :pmonth, CURRENT_TIMESTAMP
+        :rd, :fts, :py, :pmonth, CURRENT_TIMESTAMP
     )
     ON CONFLICT (user_id, order_reference) DO UPDATE SET
         order_status   = EXCLUDED.order_status,
@@ -247,6 +251,7 @@ _UPSERT_SQL = text("""
         net_earnings   = EXCLUDED.net_earnings,
         tip            = EXCLUDED.tip,
         cash_discount  = EXCLUDED.cash_discount,
+        ride_distance  = EXCLUDED.ride_distance,
         finished_ts    = EXCLUDED.finished_ts,
         period_year    = EXCLUDED.period_year,
         period_month   = EXCLUDED.period_month,
@@ -255,10 +260,30 @@ _UPSERT_SQL = text("""
 
 _SELECT_PERIOD_SQL = text("""
     SELECT order_status, payment_method, ride_price, commission,
-           net_earnings, tip, cash_discount
+           net_earnings, tip, cash_discount, ride_distance
     FROM bolt_orders
     WHERE user_id = :uid AND period_year = :py AND period_month = :pmonth
 """)
+
+_DELETE_PERIOD_SQL = text("""
+    DELETE FROM bolt_orders
+    WHERE user_id = :uid AND period_year = :py AND period_month = :pmonth
+""")
+
+
+def _cache_clear_period(user_id, year, month):
+    """Sterge cache-ul unei luni, ca urmatorul /bolt sa re-traga din API."""
+    session = get_session()
+    try:
+        session.execute(_DELETE_PERIOD_SQL, {
+            "uid": user_id, "py": year, "pmonth": month,
+        })
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"cache clear error: {e}")
+    finally:
+        session.close()
 
 
 def _cache_upsert(session, user_id, flat):
@@ -273,6 +298,7 @@ def _cache_upsert(session, user_id, flat):
         "net": flat.get("net_earnings") or 0.0,
         "tip": flat.get("tip") or 0.0,
         "cd": flat.get("cash_discount") or 0.0,
+        "rd": flat.get("ride_distance") or 0,
         "fts": flat.get("finished_ts") or None,
         "py": py, "pmonth": pmonth,
     })
@@ -288,6 +314,7 @@ def _cache_read_period(session, user_id, year, month):
             "order_status": r[0], "payment_method": r[1],
             "ride_price": r[2], "commission": r[3],
             "net_earnings": r[4], "tip": r[5], "cash_discount": r[6],
+            "ride_distance": r[7],
         })
     return rows
 
@@ -474,7 +501,8 @@ def _format_summary_text(s: dict, auto=False) -> str:
         f"   💳 card/app: {s['card']:.2f}\n"
         f"➖ Comision Bolt (cheltuiala 100%): {s['comision']:.2f}\n"
         f"= Net: {s['net']:.2f} lei\n"
-        f"ℹ️ bacsis (info): {s['tip']:.2f}\n\n"
+        f"ℹ️ bacsis (info): {s['tip']:.2f}\n"
+        f"📏 km cu pasageri: {s.get('km', 0):.1f} km  _(din curse)_\n\n"
         f"_Compara cu ecranul Bolt: Defalcarea castigurilor, Lunar._\n"
         f"_D301 ramane din factura Bolt, nu se atinge aici._"
     )
@@ -519,11 +547,21 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not user_id:
         await update.message.reply_text("Foloseste mai intai /start.")
         return
+    raw_args = context.args or []
+    resync = any(a.lower() == "resync" for a in raw_args)
+    clean_args = [a for a in raw_args if a.lower() != "resync"]
     try:
-        year, month = _parse_args(context.args or [])
+        year, month = _parse_args(clean_args)
     except (ValueError, IndexError):
         await update.message.reply_text("Foloseste: /bolt 2026 4 sau /bolt 4")
         return
+
+    if resync:
+        _cache_clear_period(user_id, year, month)
+        await update.message.reply_text(
+            f"♻️ Re-sincronizez {LUNI_LONG.get(month, month)} {year} din API "
+            f"(golesc cache-ul lunii)..."
+        )
 
     await update.message.reply_text(
         f"Trag veniturile Bolt pentru {LUNI_LONG.get(month, month)} {year}..."
