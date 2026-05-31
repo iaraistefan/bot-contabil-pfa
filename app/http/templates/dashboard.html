@@ -70,8 +70,14 @@
   }
   .topbar .page-title{font-family:var(--display);font-weight:600;font-size:1.32rem;letter-spacing:-.01em}
   .topbar .page-title span{display:block;font-family:var(--body);font-weight:400;font-size:.76rem;color:var(--muted)}
-  .periods{margin-left:auto;display:flex;gap:7px;background:var(--night);padding:5px;border-radius:13px;border:1px solid var(--line)}
-  .pchip{padding:6px 13px;border-radius:9px;font-size:.8rem;font-weight:600;color:var(--muted);cursor:pointer;transition:all .16s;white-space:nowrap}
+  .periods{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--night);padding:5px;border-radius:13px;border:1px solid var(--line);min-width:0}
+  .ynav{display:flex;align-items:center;gap:3px;flex:none}
+  .ybtn{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:var(--night-2);border:1px solid var(--line);color:var(--muted);cursor:pointer;font-size:.85rem;user-select:none;transition:all .15s}
+  .ybtn:active{background:var(--emerald);color:#04140d}
+  .yval{font-size:.82rem;font-weight:700;color:var(--cream);min-width:42px;text-align:center}
+  .months{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0;scrollbar-width:none}
+  .months::-webkit-scrollbar{display:none}
+  .pchip{padding:6px 13px;border-radius:9px;font-size:.8rem;font-weight:600;color:var(--muted);cursor:pointer;transition:all .16s;white-space:nowrap;flex:none}
   .pchip.active{background:linear-gradient(135deg,var(--emerald),#0E9C70);color:#04140d;box-shadow:0 6px 14px -6px rgba(25,198,145,.6)}
   .topbar .ico-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--night);display:grid;place-items:center;cursor:pointer;color:var(--muted);transition:all .16s}
   .topbar .ico-btn:hover{color:var(--emerald-br);border-color:var(--line-2)}
@@ -192,8 +198,10 @@
     .mobile-bar{display:flex}
     .topbar{padding:14px 16px}
     .topbar .page-title{font-size:1.1rem}
-    .periods{padding:4px;gap:4px}
+    .periods{padding:4px;gap:5px}
     .pchip{padding:6px 10px;font-size:.74rem}
+    .ybtn{width:25px;height:25px;font-size:.8rem}
+    .yval{font-size:.76rem;min-width:38px}
     .scroll{padding:18px 14px 80px}
     .hamb{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--night);display:grid;place-items:center;cursor:pointer;color:var(--cream)}
   }
@@ -291,7 +299,14 @@
         <svg width="20" height="20" fill="none" stroke="currentColor"><path d="M3 6h14M3 10h14M3 14h14" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
       <div class="page-title" id="pageTitle">Prezentare<span id="pageSub">PFA · Ridesharing Bolt · Bistrița</span></div>
-      <div class="periods" id="periods"></div>
+      <div class="periods">
+        <div class="ynav">
+          <div class="ybtn" id="y-prev">‹</div>
+          <div class="yval" id="y-val">2026</div>
+          <div class="ybtn" id="y-next">›</div>
+        </div>
+        <div class="months" id="months"></div>
+      </div>
       <div class="ico-btn" title="Notificări">
         <svg width="18" height="18" fill="none" stroke="currentColor"><path d="M9 2a5 5 0 0 0-5 5v3l-1.5 3h13L14 10V7a5 5 0 0 0-5-5zM7 16a2 2 0 0 0 4 0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -876,32 +891,35 @@
     nav("overview");
   })();
 
-  // ---- SELECTOR PERIOADĂ ----
+  // ---- SELECTOR PERIOADĂ (an + luni) ----
+  let pickYear = Y;   // anul afișat în selector (poate diferi de anul activ până apeși o lună)
   function buildPeriods(){
-    const box=document.getElementById("periods");
+    const yv=document.getElementById("y-val");
+    if(yv) yv.textContent=pickYear;
+    const box=document.getElementById("months");
     if(!box)return;
     box.innerHTML="";
-    for(let i=4;i>=0;i--){
-      let mm=M-i, yy=Y; while(mm<=0){mm+=12;yy--;}
-      const active=(mm===M && yy===Y);
-      const label = active ? `${MSHORT[mm]} ${yy}` : MSHORT[mm];
+    for(let m=1;m<=12;m++){
+      const active=(m===M && pickYear===Y);
       const chip=document.createElement("div");
       chip.className="pchip"+(active?" active":"");
-      chip.textContent=label;
-      chip.onclick=()=>selectPeriod(yy,mm);
+      chip.textContent=MSHORT[m];
+      chip.onclick=()=>selectPeriod(pickYear,m);
       box.appendChild(chip);
+      if(active) setTimeout(()=>chip.scrollIntoView({inline:"center",block:"nearest"}),50);
     }
+    // săgeți an (reatașate de fiecare dată — onclick suprascrie, fără dublare)
+    const prev=document.getElementById("y-prev"), next=document.getElementById("y-next");
+    if(prev) prev.onclick=()=>{pickYear--;buildPeriods();};
+    if(next) next.onclick=()=>{pickYear++;buildPeriods();};
   }
   function selectPeriod(y,m){
-    if(y===Y && m===M) return;
-    Y=y; M=m;
-    // golim cache-ul și marcajele de "deja încărcat"
+    if(y===Y && m===M){return;}
+    Y=y; M=m; pickYear=y;
     for(const k in cache) delete cache[k];
     for(const k in loaded) delete loaded[k];
-    // distrugem graficele ca să se redeseneze cu datele noi
     for(const k in charts){ try{charts[k].destroy();}catch(e){} delete charts[k]; }
     buildPeriods();
-    // reîncărcăm pagina activă curentă
     const act=document.querySelector(".nav-item.active");
     loadPage(act?act.dataset.page:"overview");
   }
