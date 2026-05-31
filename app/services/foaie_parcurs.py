@@ -36,6 +36,7 @@ CALLBACK namespace "parcurs":
 CHANGELOG:
   - v1 (Pas A.3): Versiune initiala (comenzi text)
   - v2 (Modernizare): wizard cu butoane, meniu contextual, mesaje curate
+  - v2.1 (A.1.b): defalcare km business in cu pasager (Bolt) vs pozitionare
 """
 
 import logging
@@ -52,6 +53,7 @@ from app.repositories import trip_logs as trip_repo
 from app.repositories import audit as audit_repo
 from app.integrations.exports import foaie_parcurs_export
 from app.services import combustibil
+from app.integrations import bolt_sync  # A.1.b: km cu pasager (cache-only)
 from app.models import TRIP_STATUS_OPEN, TRIP_STATUS_CLOSED
 
 logger = logging.getLogger(__name__)
@@ -551,6 +553,37 @@ async def _show_status(update, context, user_id, via_callback=False):
             f"🏠 {_fmt_km(summary['km_personal'])} km personali · "
             f"business {summary['pct_business']:.0f}%"
         )
+
+    # A.1.b: defalcare business = cu pasager (Bolt) + pozitionare (mers gol)
+    try:
+        bolt_km = bolt_sync.get_month_km(user_id, year, month)
+        km_bolt = bolt_km.get("km", 0.0)
+        if km_bolt > 0:
+            kmb = summary["km_business"]
+            if kmb > 0:
+                km_poz = kmb - km_bolt
+                if km_poz >= -1:  # toleranta mica de rotunjire
+                    km_poz = max(km_poz, 0.0)
+                    lines.append(
+                        f"🚗 cu pasager (Bolt): *{_fmt_km(km_bolt)} km* · "
+                        f"poziționare: {_fmt_km(km_poz)} km"
+                    )
+                else:
+                    lines.append(
+                        f"🚗 cu pasager (Bolt): *{_fmt_km(km_bolt)} km*"
+                    )
+                    lines.append(
+                        "⚠️ _Bolt arată mai mulți km cu pasager decât ai în "
+                        "foaie — probabil ai ture neînchise sau lipsă._"
+                    )
+            else:
+                lines.append(
+                    f"🚗 _Bolt confirmă {_fmt_km(km_bolt)} km cu pasager luna "
+                    f"asta. Pornește/închide ture ca să adaugi poziționarea "
+                    f"și să justifici combustibilul._"
+                )
+    except Exception as e:
+        logger.error(f"bolt km in status error: {e}")
 
     if summary["nr_ture"] == 0 and not open_trip:
         lines.append("")
