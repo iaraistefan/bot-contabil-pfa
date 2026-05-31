@@ -389,6 +389,29 @@ def get_month_summary(user_id: int, year: int, month: int) -> dict:
     return s
 
 
+def get_month_km(user_id: int, year: int, month: int) -> dict:
+    """
+    Km cu pasager (ride_distance) ai lunii, DOAR din cache (nu loveste API).
+
+    Folosit din ecranul foii de parcurs ca sa nu riscam 429. Daca luna nu e
+    in cache, intoarce km=0 (nu fortam tragere din API de aici).
+
+    Returneaza {"km": float, "n": int}.
+    """
+    session = get_session()
+    try:
+        cached = _cache_read_period(session, user_id, year, month)
+    except Exception as e:
+        logger.error(f"get_month_km cache error: {e}")
+        cached = []
+    finally:
+        session.close()
+
+    finished = [r for r in cached if r.get("order_status") == "finished"]
+    s = _aggregate(finished)
+    return {"km": s.get("km", 0.0), "n": s.get("n", 0)}
+
+
 def collect_recent(user_id: int, days: int = 4) -> int:
     """Trage ultimele `days` zile din API si face upsert in cache. Returneaza nr comenzi."""
     client = BoltClient()
