@@ -6,6 +6,10 @@ AUTH (Bug #6 fix):
   WebApp init_data pentru identificare.
 - Validare HMAC cu bot token (Telegram standard) — niciun spoofing posibil.
 - Fallback DEV_USER_ID din env pentru testare în browser direct (numai dev/owner).
+
+CHANGELOG:
+- + /api/v1/parcurs/<year>/<month> — date foaie de parcurs pentru dashboard
+  (ture, km business/pasager/pozitionare, combustibil, vehicul).
 """
 
 import os as _os
@@ -49,13 +53,13 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
     """
     Valideaza semnatura HMAC a Telegram WebApp init_data.
 
-    Surse oficiale se contrazic daca \'signature\' se include sau nu in
+    Surse oficiale se contrazic daca 'signature' se include sau nu in
     data_check_string la validarea cu hash. Asa ca incercam AMBELE variante:
       A) exclude hash + signature
       B) exclude doar hash (signature inclus)
     Acceptam daca oricare se potriveste.
 
-    NU folosim parse_qsl (acela face unquote_plus si transforma \'+\' in spatiu,
+    NU folosim parse_qsl (acela face unquote_plus si transforma '+' in spatiu,
     stricand campuri base64 ca query_id). Folosim unquote.
     """
     if not init_data or not bot_token:
@@ -80,7 +84,7 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
             all_pairs.append((key, unquote(value)))
 
         if not received_hash:
-            logger.warning("init_data: campul \'hash\' lipseste")
+            logger.warning("init_data: campul 'hash' lipseste")
             return None
 
         secret_key = hmac.new(
@@ -321,6 +325,110 @@ def transactions_list(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
     finally:
         session.close()
+
+
+@flask_app.route("/api/v1/parcurs/<int:year>/<int:month>")
+def parcurs_summary(year: int, month: int):
+    """
+    Date foaie de parcurs pentru dashboard.
+
+    Intoarce: ture, km business/personal/total, km cu pasager (Bolt) +
+    pozitionare, vehiculul default, tura deschisa (daca exista) si sumarul
+    de combustibil (plafon vs bonuri).
+    """
+    if not (1 <= month <= 12 and 2020 <= year <= 2099):
+        return jsonify({"error": "invalid period"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.services import foaie_parcurs
+    from app.repositories import trip_logs as trip_repo
+    from app.repositories import vehicule as vehicule_repo
+
+    # --- 1. Date din DB (ture, vehicul, tura deschisa) ---
+    session = get_session()
+    try:
+        trips = trip_repo.list_for_month(session, user_id, year, month)
+        summary = foaie_parcurs.compute_month_summary(trips)
+        open_trip = trip_repo.get_open_trip(session, user_id)
+        vehicul = vehicule_repo.get_default(session, user_id)
+
+        ture = [{
+            "id": t.id,
+            "trip_date": t.trip_date.isoformat() if t.trip_date else None,
+            "odometer_start": t.odometer_start,
+            "odometer_end": t.odometer_end,
+            "km": t.km,
+            "status": t.status,
+            "ora_start": t.ora_start,
+            "ora_stop": t.ora_stop,
+            "purpose": t.purpose,
+        } for t in trips]
+
+        resp = {
+            "year": year, "month": month,
+            "nr_ture": summary["nr_ture"],
+            "km_business": summary["km_business"],
+            "km_personal": summary["km_personal"],
+            "km_total": summary["km_total"],
+            "pct_business": summary["pct_business"],
+            "has_open": summary["has_open"],
+            "open_trip": ({
+                "odometer_start": open_trip.odometer_start,
+                "ora_start": open_trip.ora_start,
+                "trip_date": open_trip.trip_date.isoformat() if open_trip.trip_date else None,
+            } if open_trip else None),
+            "vehicul": ({
+                "nr_inmatriculare": vehicul.nr_inmatriculare,
+                "marca_model": vehicul.marca_model,
+                "norma_consum": vehicul.norma_consum,
+                "km_curent": vehicul.km_curent,
+            } if vehicul else None),
+            "ture": ture,
+        }
+    except Exception as e:
+        logger.error(f"API parcurs error {year}/{month} user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    # --- 2. Km cu pasager (Bolt) — cache only, sesiune proprie ---
+    try:
+        from app.integrations import bolt_sync
+        bolt_km = bolt_sync.get_month_km(user_id, year, month)
+        km_bolt = bolt_km.get("km", 0.0)
+    except Exception as e:
+        logger.error(f"API parcurs bolt km error: {e}")
+        km_bolt = 0.0
+
+    km_business = resp["km_business"]
+    resp["km_bolt_pasager"] = km_bolt
+    resp["km_pozitionare"] = (
+        max(round(km_business - km_bolt, 1), 0.0) if km_business > 0 else 0.0
+    )
+
+    # --- 3. Combustibil — sesiune proprie in get_fuel_summary ---
+    try:
+        from app.services import combustibil
+        fuel = combustibil.get_fuel_summary(user_id, year, month)
+        resp["combustibil"] = {
+            "plafon_litri": fuel["plafon_litri"],
+            "plafon_lei": fuel["plafon_lei"],
+            "total_bonuri_lei": fuel["total_bonuri_lei"],
+            "total_litri": fuel["total_litri"],
+            "pret_mediu": fuel["pret_mediu"],
+            "pret_din_bonuri": fuel["pret_din_bonuri"],
+            "mai_poti_lei": fuel["mai_poti_lei"],
+            "norma_consum": fuel["norma_consum"],
+            "nr_bonuri": fuel["nr_bonuri"],
+        }
+    except Exception as e:
+        logger.error(f"API parcurs fuel error: {e}")
+        resp["combustibil"] = None
+
+    return jsonify(resp)
 
 
 @flask_app.route("/api/v1/documents")
