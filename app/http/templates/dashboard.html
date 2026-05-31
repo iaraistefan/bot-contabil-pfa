@@ -3,886 +3,650 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Contabil PFA Pro</title>
+  <title>Contai — Dashboard</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #0a0a0f;
-      --bg2: #12121a;
-      --bg3: #1a1a26;
-      --border: #2a2a3d;
-      --accent: #4f46e5;
-      --accent2: #7c3aed;
-      --green: #10b981;
-      --red: #ef4444;
-      --yellow: #f59e0b;
-      --blue: #3b82f6;
-      --text: #e2e8f0;
-      --text2: #94a3b8;
-      --text3: #475569;
-      --card-h: 120px;
+    :root{
+      /* Identitate Contai — Fintech de noapte */
+      --ink:#080D17;
+      --night:#0E1726;
+      --night-2:#152339;
+      --night-3:#1B2C47;
+      --border:rgba(255,255,255,.08);
+      --border-2:rgba(255,255,255,.13);
+      --emerald:#19C691;
+      --emerald-br:#3DE7AE;
+      --gold:#E6B566;
+      --red:#F2685C;
+      --blue:#5AA9E6;
+      --cream:#F4F1E8;
+      --muted:#8FA0B8;
+      --muted-2:#5C6B82;
+      --display:"Bricolage Grotesque",sans-serif;
+      --body:"Hanken Grotesk",sans-serif;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      overflow-x: hidden;
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    body{
+      font-family:var(--body);
+      background:var(--ink);
+      color:var(--cream);
+      min-height:100vh;
+      overflow-x:hidden;
+      position:relative;
     }
+    /* atmosfera de fundal */
+    body::before{
+      content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:
+        radial-gradient(55% 40% at 15% 0%, rgba(25,198,145,.13), transparent 70%),
+        radial-gradient(45% 35% at 90% 2%, rgba(230,181,102,.07), transparent 70%);
+    }
+    #app-content,#auth-error{position:relative;z-index:1}
+
+    /* numere tabulare peste tot */
+    .num,.card-value,.summary-value,.tx-amount,.profit-value{font-variant-numeric:tabular-nums}
 
     /* HEADER */
-    .header {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      padding: 16px 16px 20px;
-      position: relative;
-      overflow: hidden;
+    .header{
+      padding:18px 18px 22px;
+      position:relative;overflow:hidden;
+      background:linear-gradient(135deg,var(--night-2),var(--night));
+      border-bottom:1px solid var(--border);
     }
-    .header::before {
-      content: "";
-      position: absolute;
-      top: -40px; right: -40px;
-      width: 140px; height: 140px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.07);
+    .header::before{
+      content:"";position:absolute;top:-60px;right:-50px;width:180px;height:180px;border-radius:50%;
+      background:radial-gradient(circle,rgba(25,198,145,.18),transparent 70%);
     }
-    .header-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 4px;
+    .header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;position:relative}
+    .brand{display:flex;align-items:center;gap:11px}
+    .brand svg{width:30px;height:30px;flex:none;filter:drop-shadow(0 4px 12px rgba(25,198,145,.45))}
+    .brand .name{font-family:var(--display);font-weight:700;font-size:1.32rem;letter-spacing:-.02em}
+    .brand .name b{color:var(--emerald-br)}
+    .header-badge{
+      background:rgba(25,198,145,.14);color:var(--emerald-br);
+      padding:5px 12px;border-radius:20px;font-size:.72rem;font-weight:700;letter-spacing:.02em;
+      border:1px solid rgba(25,198,145,.25);white-space:nowrap;
     }
-    .header-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; }
-    .header-badge {
-      background: rgba(255,255,255,0.2);
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-size: 0.72rem;
-      font-weight: 600;
-    }
-    .header-subtitle { font-size: 0.78rem; opacity: 0.75; }
+    .header-subtitle{font-size:.8rem;color:var(--muted);position:relative;margin-top:2px}
 
-    /* PERIOD SELECTOR */
-    .period-row {
-      display: flex;
-      gap: 8px;
-      padding: 12px 16px;
-      background: var(--bg2);
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+    /* PERIOD */
+    .period-row{
+      display:flex;gap:8px;padding:13px 16px;background:var(--night);
+      border-bottom:1px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;
     }
-    .period-row::-webkit-scrollbar { display: none; }
-    .period-chip {
-      flex-shrink: 0;
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: var(--bg3);
-      color: var(--text2);
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: all 0.15s;
+    .period-row::-webkit-scrollbar{display:none}
+    .period-chip{
+      flex-shrink:0;padding:7px 15px;border-radius:20px;border:1px solid var(--border-2);
+      background:var(--night-2);color:var(--muted);font-size:.82rem;font-weight:500;cursor:pointer;
+      transition:all .18s;white-space:nowrap;
     }
-    .period-chip.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-      font-weight: 600;
+    .period-chip.active{
+      background:linear-gradient(135deg,var(--emerald),#0E9C70);border-color:transparent;
+      color:#04140d;font-weight:700;box-shadow:0 6px 16px -6px rgba(25,198,145,.6);
     }
 
     /* TABS */
-    .tabs {
-      display: flex;
-      background: var(--bg2);
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+    .tabs{
+      display:flex;background:var(--night);border-bottom:1px solid var(--border);
+      overflow-x:auto;-webkit-overflow-scrolling:touch;
     }
-    .tabs::-webkit-scrollbar { display: none; }
-    .tab {
-      flex-shrink: 0;
-      padding: 11px 16px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      color: var(--text3);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all 0.15s;
-      white-space: nowrap;
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{
+      flex-shrink:0;padding:13px 17px;font-size:.83rem;font-weight:600;color:var(--muted-2);
+      cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;white-space:nowrap;
     }
-    .tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-      font-weight: 700;
-    }
+    .tab.active{color:var(--emerald-br);border-bottom-color:var(--emerald);font-weight:700}
 
-    .tab-content { display: none; padding: 16px; }
-    .tab-content.active { display: block; }
+    .tab-content{display:none;padding:18px 16px}
+    .tab-content.active{display:block;animation:fade .4s ease}
+    @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-    .cards {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 16px;
+    /* PROFIT CARD */
+    .profit-card{
+      background:linear-gradient(135deg,var(--night-3),var(--night-2));
+      border:1px solid rgba(25,198,145,.25);border-radius:20px;padding:20px;text-align:center;
+      margin-bottom:16px;position:relative;overflow:hidden;
     }
-    .card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      position: relative;
-      overflow: hidden;
+    .profit-card::before{
+      content:"";position:absolute;inset:0;
+      background:radial-gradient(60% 80% at 50% 0%, rgba(25,198,145,.14), transparent 70%);
     }
-    .card::after {
-      content: "";
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      border-radius: 14px 14px 0 0;
-    }
-    .card.green::after { background: var(--green); }
-    .card.red::after { background: var(--red); }
-    .card.yellow::after { background: var(--yellow); }
-    .card.blue::after { background: var(--blue); }
-    .card-icon { font-size: 1.3rem; margin-bottom: 6px; }
-    .card-label {
-      font-size: 0.7rem;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 4px;
-    }
-    .card-value {
-      font-size: 1.25rem;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-      line-height: 1.1;
-    }
-    .card-value.green { color: var(--green); }
-    .card-value.red { color: var(--red); }
-    .card-value.yellow { color: var(--yellow); }
-    .card-value.blue { color: var(--blue); }
-    .card-sub { font-size: 0.68rem; color: var(--text3); margin-top: 4px; }
+    .profit-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;position:relative}
+    .profit-value{font-family:var(--display);font-size:2.1rem;font-weight:800;letter-spacing:-.02em;position:relative;line-height:1}
+    .profit-value.positive{color:var(--emerald-br)}
+    .profit-value.negative{color:var(--red)}
+    .profit-sub{font-size:.72rem;color:var(--muted-2);margin-top:7px;position:relative}
 
-    .section-title {
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--text3);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin: 16px 0 10px;
+    /* CARDS */
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px}
+    .card{
+      background:var(--night-2);border:1px solid var(--border);border-radius:16px;padding:15px;
+      position:relative;overflow:hidden;transition:transform .25s,border-color .25s;
     }
+    .card:active{transform:scale(.98)}
+    .card::after{content:"";position:absolute;top:0;left:0;right:0;height:2.5px}
+    .card.green::after{background:var(--emerald)}
+    .card.red::after{background:var(--red)}
+    .card.gold::after{background:var(--gold)}
+    .card.blue::after{background:var(--blue)}
+    .card-icon{font-size:1.2rem;margin-bottom:7px}
+    .card-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+    .card-value{font-family:var(--display);font-size:1.28rem;font-weight:700;line-height:1.1;letter-spacing:-.01em}
+    .card-value.green{color:var(--emerald-br)}
+    .card-value.red{color:var(--red)}
+    .card-value.gold{color:var(--gold)}
+    .card-value.blue{color:var(--blue)}
+    .card-sub{font-size:.66rem;color:var(--muted-2);margin-top:5px}
 
-    .chart-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 16px;
+    .section-title{
+      font-size:.74rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+      letter-spacing:.09em;margin:18px 0 11px;display:flex;align-items:center;gap:9px;
     }
-    .chart-title {
-      font-size: 0.82rem;
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: var(--text2);
-    }
-    .chart-wrap { position: relative; height: 160px; }
+    .section-title::before{content:"";width:18px;height:1.5px;background:var(--emerald)}
 
-    .tx-list { display: flex; flex-direction: column; gap: 8px; }
-    .tx-item {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .tx-icon {
-      width: 36px; height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      flex-shrink: 0;
-    }
-    .tx-icon.INCOME { background: rgba(16,185,129,0.15); }
-    .tx-icon.EXPENSE { background: rgba(239,68,68,0.15); }
-    .tx-icon.VAT_OUT { background: rgba(245,158,11,0.15); }
-    .tx-icon.VAT_IN { background: rgba(59,130,246,0.15); }
-    .tx-info { flex: 1; min-width: 0; }
-    .tx-category {
-      font-size: 0.82rem;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tx-meta { font-size: 0.72rem; color: var(--text3); margin-top: 2px; }
-    .tx-amount {
-      font-size: 0.88rem;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-      text-align: right;
-      flex-shrink: 0;
-    }
-    .tx-amount.INCOME { color: var(--green); }
-    .tx-amount.EXPENSE { color: var(--red); }
-    .tx-amount.VAT_OUT { color: var(--yellow); }
-    .tx-amount.VAT_IN { color: var(--blue); }
-    .tx-deductible { font-size: 0.68rem; color: var(--text3); text-align: right; margin-top: 2px; }
+    .chart-card{background:var(--night-2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px}
+    .chart-title{font-size:.82rem;font-weight:600;margin-bottom:14px;color:var(--muted)}
+    .chart-wrap{position:relative;height:175px}
 
-    .summary-list { display: flex; flex-direction: column; gap: 6px; }
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 14px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
+    /* TX LIST */
+    .tx-list{display:flex;flex-direction:column;gap:9px}
+    .tx-item{
+      background:var(--night-2);border:1px solid var(--border);border-radius:14px;padding:13px 14px;
+      display:flex;align-items:center;gap:12px;transition:border-color .2s;
     }
-    .summary-label { font-size: 0.82rem; color: var(--text2); }
-    .summary-value { font-size: 0.88rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .tx-item:active{border-color:var(--border-2)}
+    .tx-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0}
+    .tx-icon.INCOME{background:rgba(25,198,145,.16)}
+    .tx-icon.EXPENSE{background:rgba(242,104,92,.16)}
+    .tx-icon.VAT_OUT{background:rgba(230,181,102,.16)}
+    .tx-icon.VAT_IN{background:rgba(90,169,230,.16)}
+    .tx-info{flex:1;min-width:0}
+    .tx-category{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tx-meta{font-size:.72rem;color:var(--muted-2);margin-top:2px}
+    .tx-amount{font-size:.9rem;font-weight:700;text-align:right;flex-shrink:0}
+    .tx-amount.INCOME{color:var(--emerald-br)}
+    .tx-amount.EXPENSE{color:var(--red)}
+    .tx-amount.VAT_OUT{color:var(--gold)}
+    .tx-amount.VAT_IN{color:var(--blue)}
+    .tx-deductible{font-size:.66rem;color:var(--muted-2);text-align:right;margin-top:2px}
 
-    .profit-card {
-      background: linear-gradient(135deg, rgba(79,70,229,0.2), rgba(124,58,237,0.2));
-      border: 1px solid rgba(79,70,229,0.4);
-      border-radius: 14px;
-      padding: 16px;
-      text-align: center;
-      margin-bottom: 16px;
+    /* SUMMARY */
+    .summary-list{display:flex;flex-direction:column;gap:7px}
+    .summary-row{
+      display:flex;justify-content:space-between;align-items:center;padding:12px 15px;
+      background:var(--night-2);border:1px solid var(--border);border-radius:13px;
     }
-    .profit-label { font-size: 0.75rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
-    .profit-value { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .profit-value.positive { color: var(--green); }
-    .profit-value.negative { color: var(--red); }
-    .profit-sub { font-size: 0.72rem; color: var(--text3); margin-top: 4px; }
+    .summary-label{font-size:.83rem;color:var(--muted)}
+    .summary-value{font-size:.9rem;font-weight:700}
 
-    .loading {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 40px;
-      gap: 12px;
-      color: var(--text3);
-      font-size: 0.85rem;
+    /* VAT ALERT */
+    .vat-alert{
+      background:rgba(230,181,102,.08);border:1px solid rgba(230,181,102,.28);
+      border-radius:14px;padding:13px 15px;margin-bottom:14px;
     }
-    .spin {
-      width: 28px; height: 28px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .empty { text-align: center; padding: 32px 16px; color: var(--text3); font-size: 0.85rem; }
+    .vat-alert-title{font-size:.81rem;font-weight:700;color:var(--gold);margin-bottom:5px}
+    .vat-alert-text{font-size:.76rem;color:var(--muted);line-height:1.5}
 
-    .auth-error {
-      max-width: 480px;
-      margin: 60px auto;
-      padding: 32px 24px;
-      background: var(--bg2);
-      border: 1px solid var(--red);
-      border-radius: 14px;
-      text-align: center;
+    /* EXPORT */
+    .export-row{display:flex;gap:9px;margin-top:18px}
+    .export-btn{
+      display:flex;align-items:center;justify-content:center;gap:8px;flex:1;padding:14px;
+      border-radius:14px;font-size:.86rem;font-weight:700;border:none;cursor:pointer;text-decoration:none;
+      background:linear-gradient(135deg,var(--emerald),#0E9C70);color:#04140d;
+      box-shadow:0 8px 20px -8px rgba(25,198,145,.5);transition:transform .2s,opacity .2s;
     }
-    .auth-error h2 { color: var(--red); font-size: 1.2rem; margin-bottom: 12px; }
-    .auth-error p { color: var(--text2); font-size: 0.9rem; line-height: 1.5; }
-    .debug-box {
-      margin-top: 16px;
-      padding: 12px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 0.7rem;
-      color: var(--text3);
-      text-align: left;
-      white-space: pre-wrap;
-      word-break: break-all;
-      font-family: monospace;
-    }
+    .export-btn.alt{background:linear-gradient(135deg,var(--night-3),var(--night-2));color:var(--cream);border:1px solid var(--border-2);box-shadow:none}
+    .export-btn:active{transform:translateY(1px);opacity:.9}
 
-    .export-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      padding: 13px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: #fff;
-      font-size: 0.88rem;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-      margin-top: 16px;
-      text-decoration: none;
-    }
-    .export-btn:active { opacity: 0.85; }
-    .export-row { display: flex; gap: 8px; margin-top: 16px; }
-    .export-row .export-btn { margin-top: 0; }
+    /* LOADING / EMPTY */
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px;gap:14px;color:var(--muted-2);font-size:.85rem}
+    .spin{width:30px;height:30px;border:3px solid var(--border-2);border-top-color:var(--emerald);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty{text-align:center;padding:36px 16px;color:var(--muted-2);font-size:.85rem}
 
-    .vat-alert {
-      background: rgba(245,158,11,0.1);
-      border: 1px solid rgba(245,158,11,0.3);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
-    }
-    .vat-alert-title { font-size: 0.8rem; font-weight: 700; color: var(--yellow); margin-bottom: 4px; }
-    .vat-alert-text { font-size: 0.75rem; color: var(--text2); line-height: 1.5; }
+    /* AUTH ERROR */
+    .auth-error{max-width:480px;margin:60px auto;padding:34px 26px;background:var(--night-2);border:1px solid rgba(242,104,92,.4);border-radius:18px;text-align:center}
+    .auth-error .lock{font-size:2rem;margin-bottom:10px}
+    .auth-error h2{color:var(--red);font-size:1.2rem;margin-bottom:12px;font-family:var(--display);font-weight:700}
+    .auth-error p{color:var(--muted);font-size:.9rem;line-height:1.6}
+    .auth-error b{color:var(--emerald-br)}
+    .debug-box{margin-top:16px;padding:13px;background:var(--ink);border:1px solid var(--border);border-radius:10px;font-size:.7rem;color:var(--muted-2);text-align:left;white-space:pre-wrap;word-break:break-all;font-family:monospace}
 
-    .bottom-safe { height: env(safe-area-inset-bottom, 16px); }
+    .bottom-safe{height:env(safe-area-inset-bottom,18px)}
   </style>
 </head>
 <body>
 
 <div id="app-content" style="display:none">
 
-<div class="header">
-  <div class="header-top">
-    <div class="header-title">🧾 Contabil PFA Pro</div>
-    <div class="header-badge" id="header-badge">—</div>
-  </div>
-  <div class="header-subtitle" id="header-subtitle">Dashboard fiscal</div>
-</div>
-
-<div class="period-row" id="period-chips"></div>
-
-<div class="tabs">
-  <div class="tab active" data-tab="sumar">📊 Sumar</div>
-  <div class="tab" data-tab="tranzactii">💳 Tranzacții</div>
-  <div class="tab" data-tab="tva">🏛️ TVA D301</div>
-  <div class="tab" data-tab="export">⬇️ Export</div>
-</div>
-
-<div class="tab-content active" id="tab-sumar">
-  <div id="sumar-loading" class="loading">
-    <div class="spin"></div>Se încarcă...
-  </div>
-  <div id="sumar-content" style="display:none">
-    <div class="profit-card" style="margin-top:4px">
-      <div class="profit-label">📈 Profit estimat</div>
-      <div class="profit-value" id="s-profit">0.00 RON</div>
-      <div class="profit-sub">venituri − cheltuieli deductibile</div>
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <svg viewBox="0 0 64 64" fill="none">
+          <path d="M52 20.5A22 22 0 1 0 52 43.5" stroke="#3DE7AE" stroke-width="7.5" stroke-linecap="round"/>
+          <path d="M30 33.5l6.5 6.5L52 23" stroke="#E6B566" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="name">Cont<b>ai</b></div>
+      </div>
+      <div class="header-badge" id="header-badge">—</div>
     </div>
-    <div class="cards">
-      <div class="card green">
-        <div class="card-icon">💰</div>
-        <div class="card-label">Venituri</div>
-        <div class="card-value green" id="s-income">—</div>
-        <div class="card-sub" id="s-income-sub">total brut</div>
-      </div>
-      <div class="card red">
-        <div class="card-icon">💸</div>
-        <div class="card-label">Cheltuieli deductibile</div>
-        <div class="card-value red" id="s-expense">—</div>
-        <div class="card-sub" id="s-expense-sub"></div>
-      </div>
-      <div class="card yellow">
-        <div class="card-icon">🏛️</div>
-        <div class="card-label">TVA D301</div>
-        <div class="card-value yellow" id="s-vat">—</div>
-        <div class="card-sub">reverse charge</div>
-      </div>
-      <div class="card blue">
-        <div class="card-icon">📄</div>
-        <div class="card-label">Tranzacții</div>
-        <div class="card-value blue" id="s-txcount">—</div>
-        <div class="card-sub">în perioada selectată</div>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">📊 Distribuție cheltuieli</div>
-      <div class="chart-wrap">
-        <canvas id="expense-chart"></canvas>
-      </div>
-    </div>
-    <div class="section-title">Detaliu cheltuieli</div>
-    <div class="summary-list" id="expense-breakdown"></div>
+    <div class="header-subtitle" id="header-subtitle">Dashboard fiscal</div>
   </div>
-</div>
 
-<div class="tab-content" id="tab-tranzactii">
-  <div id="tx-loading" class="loading" style="display:none">
-    <div class="spin"></div>Se încarcă...
-  </div>
-  <div id="tx-list" class="tx-list"></div>
-</div>
+  <div class="period-row" id="period-chips"></div>
 
-<div class="tab-content" id="tab-tva">
-  <div id="tva-loading" class="loading" style="display:none">
-    <div class="spin"></div>Se încarcă...
+  <div class="tabs">
+    <div class="tab active" data-tab="sumar">📊 Sumar</div>
+    <div class="tab" data-tab="tranzactii">💳 Tranzacții</div>
+    <div class="tab" data-tab="tva">🏛️ TVA D301</div>
+    <div class="tab" data-tab="export">⬇️ Export</div>
   </div>
-  <div id="tva-content" style="display:none">
-    <div class="vat-alert">
-      <div class="vat-alert-title">ℹ️ Taxare inversă (Reverse Charge)</div>
-      <div class="vat-alert-text">
-        TVA-ul de mai jos trebuie declarat în <strong>D301</strong> și
-        <strong>D390</strong>. Verificați cu contabilul.
+
+  <div class="tab-content active" id="tab-sumar">
+    <div id="sumar-loading" class="loading"><div class="spin"></div>Se încarcă...</div>
+    <div id="sumar-content" style="display:none">
+      <div class="profit-card">
+        <div class="profit-label">Profit estimat</div>
+        <div class="profit-value" id="s-profit">0,00 RON</div>
+        <div class="profit-sub">venituri − cheltuieli deductibile</div>
       </div>
+      <div class="cards">
+        <div class="card green">
+          <div class="card-icon">💰</div>
+          <div class="card-label">Venituri</div>
+          <div class="card-value green" id="s-income">—</div>
+          <div class="card-sub" id="s-income-sub">total brut</div>
+        </div>
+        <div class="card red">
+          <div class="card-icon">💸</div>
+          <div class="card-label">Cheltuieli deductibile</div>
+          <div class="card-value red" id="s-expense">—</div>
+          <div class="card-sub" id="s-expense-sub"></div>
+        </div>
+        <div class="card gold">
+          <div class="card-icon">🏛️</div>
+          <div class="card-label">TVA D301</div>
+          <div class="card-value gold" id="s-vat">—</div>
+          <div class="card-sub">reverse charge</div>
+        </div>
+        <div class="card blue">
+          <div class="card-icon">📄</div>
+          <div class="card-label">Tranzacții</div>
+          <div class="card-value blue" id="s-txcount">—</div>
+          <div class="card-sub">în perioada selectată</div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Distribuție cheltuieli</div>
+        <div class="chart-wrap"><canvas id="expense-chart"></canvas></div>
+      </div>
+      <div class="section-title">Detaliu cheltuieli</div>
+      <div class="summary-list" id="expense-breakdown"></div>
     </div>
+  </div>
+
+  <div class="tab-content" id="tab-tranzactii">
+    <div id="tx-list" class="tx-list"></div>
+  </div>
+
+  <div class="tab-content" id="tab-tva">
+    <div id="tva-loading" class="loading" style="display:none"><div class="spin"></div>Se încarcă...</div>
+    <div id="tva-content" style="display:none">
+      <div class="vat-alert">
+        <div class="vat-alert-title">ℹ️ Taxare inversă (Reverse Charge)</div>
+        <div class="vat-alert-text">TVA-ul de mai jos se declară în <b style="color:var(--gold)">D301</b> și <b style="color:var(--gold)">D390</b>, lunar până pe 25. Verifică cu contabilul.</div>
+      </div>
+      <div class="summary-list">
+        <div class="summary-row"><div class="summary-label">🧾 Bază impozabilă</div><div class="summary-value" id="v-base">—</div></div>
+        <div class="summary-row"><div class="summary-label">⬆️ TVA colectat (VAT_OUT)</div><div class="summary-value" id="v-out" style="color:var(--red)">—</div></div>
+        <div class="summary-row"><div class="summary-label">⬇️ TVA deductibil (VAT_IN)</div><div class="summary-value" id="v-in" style="color:var(--emerald-br)">—</div></div>
+        <div class="summary-row" style="border-color:rgba(230,181,102,.3);background:rgba(230,181,102,.05)"><div class="summary-label" style="font-weight:700;color:var(--cream)">💰 NET de plătit ANAF</div><div class="summary-value" id="v-net" style="color:var(--gold)">—</div></div>
+      </div>
+      <div class="section-title" style="margin-top:20px">Tranzacții TVA</div>
+      <div class="tx-list" id="vat-tx-list"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-export">
+    <div class="section-title">Exportă date</div>
     <div class="summary-list">
-      <div class="summary-row">
-        <div class="summary-label">🧾 Bază impozabilă</div>
-        <div class="summary-value" id="v-base" style="color:var(--text)">—</div>
-      </div>
-      <div class="summary-row">
-        <div class="summary-label">⬆️ TVA colectat (VAT_OUT)</div>
-        <div class="summary-value" id="v-out" style="color:var(--red)">—</div>
-      </div>
-      <div class="summary-row">
-        <div class="summary-label">⬇️ TVA deductibil (VAT_IN)</div>
-        <div class="summary-value" id="v-in" style="color:var(--green)">—</div>
-      </div>
-      <div class="summary-row" style="border-color:rgba(245,158,11,0.3)">
-        <div class="summary-label" style="font-weight:700;color:var(--text)">💰 NET de plătit ANAF</div>
-        <div class="summary-value" id="v-net" style="color:var(--yellow)">—</div>
-      </div>
+      <div class="summary-row"><div class="summary-label">📅 Perioadă selectată</div><div class="summary-value" id="exp-period" style="color:var(--emerald-br)">—</div></div>
+      <div class="summary-row"><div class="summary-label">💳 Tranzacții totale</div><div class="summary-value" id="exp-txcount">—</div></div>
     </div>
-    <div class="section-title" style="margin-top:20px">Tranzacții TVA</div>
-    <div class="tx-list" id="vat-tx-list"></div>
-  </div>
-</div>
-
-<div class="tab-content" id="tab-export">
-  <div class="section-title">Exportă date</div>
-  <div class="summary-list">
-    <div class="summary-row">
-      <div class="summary-label">📅 Perioadă selectată</div>
-      <div class="summary-value" id="exp-period" style="color:var(--accent)">—</div>
-    </div>
-    <div class="summary-row">
-      <div class="summary-label">💳 Tranzacții totale</div>
-      <div class="summary-value" id="exp-txcount" style="color:var(--text)">—</div>
+    <div class="export-row">
+      <a id="exp-btn-tx" class="export-btn" href="#" target="_blank">📊 CSV Tranzacții</a>
+      <a id="exp-btn-rez" class="export-btn alt" href="#" target="_blank">📋 CSV Rezumat</a>
     </div>
   </div>
-  <div class="export-row">
-    <a id="exp-btn-tx" class="export-btn" href="#" target="_blank">
-      📊 CSV Tranzacții
-    </a>
-    <a id="exp-btn-rez" class="export-btn" href="#" target="_blank"
-       style="background:linear-gradient(135deg,#059669,#10b981)">
-      📋 CSV Rezumat
-    </a>
-  </div>
-</div>
 
-<div class="bottom-safe"></div>
-
-</div> <!-- /app-content -->
+  <div class="bottom-safe"></div>
+</div><!-- /app-content -->
 
 <div id="auth-error" class="auth-error" style="display:none">
-  <h2>🔒 Acces interzis</h2>
-  <p>
-    Acest dashboard se accesează doar prin botul Telegram.<br><br>
-    Deschide <strong>@ContabilPFA_bot</strong> și apasă pe
-    butonul <strong>🖥️ Dashboard</strong> din meniu.
-  </p>
+  <div class="lock">🔒</div>
+  <h2>Acces interzis</h2>
+  <p>Acest dashboard se accesează doar prin botul Telegram.<br><br>Deschide <b>@ContabilPFA_bot</b> și apasă pe butonul <b>🖥️ Dashboard</b> din meniu.</p>
   <pre id="debug-box" class="debug-box"></pre>
 </div>
 
 <script>
   // ==========================================================
-  //          AUTH SETUP — rezolvare init_data din 3 surse
+  //   AUTH SETUP — IDENTIC cu varianta anterioara (nu se atinge)
   // ==========================================================
   const tg = window.Telegram?.WebApp;
 
-  // Telegram poate livra init_data in mai multe locuri. Le incercam pe rand:
-  //  1. SDK: tg.initData
-  //  2. URL fragment:  #tgWebAppData=...
-  //  3. Query string:  ?tgWebAppData=...
-  function resolveInitData() {
-    // Sursa 1 — SDK
-    if (tg && tg.initData && tg.initData.length > 0) {
-      return tg.initData;
-    }
-    // Sursa 2 — fragment URL (#...)
-    try {
-      const raw = (window.location.hash || "").replace(/^#/, "");
-      const hp = new URLSearchParams(raw);
-      const fromHash = hp.get("tgWebAppData");
-      if (fromHash && fromHash.length > 0) return fromHash;
-    } catch (e) {}
-    // Sursa 3 — query string (?...)
-    try {
-      const sp = new URLSearchParams(window.location.search || "");
-      const fromQuery = sp.get("tgWebAppData");
-      if (fromQuery && fromQuery.length > 0) return fromQuery;
-    } catch (e) {}
+  function resolveInitData(){
+    if(tg && tg.initData && tg.initData.length>0) return tg.initData;
+    try{
+      const raw=(window.location.hash||"").replace(/^#/,"");
+      const hp=new URLSearchParams(raw);
+      const fromHash=hp.get("tgWebAppData");
+      if(fromHash && fromHash.length>0) return fromHash;
+    }catch(e){}
+    try{
+      const sp=new URLSearchParams(window.location.search||"");
+      const fromQuery=sp.get("tgWebAppData");
+      if(fromQuery && fromQuery.length>0) return fromQuery;
+    }catch(e){}
     return "";
   }
 
-  // Pe Android, Telegram populeaza URL-ul hash cu o mica intarziere
-  // dupa ce scriptul ruleaza. O singura citire la inceput poate prinde
-  // hash-ul inca gol, de aceea asteptam pana devine disponibil.
-  async function waitForInitData(maxMs = 4000) {
-    const step = 120;
-    let waited = 0;
-    while (waited < maxMs) {
-      const d = resolveInitData();
-      if (d && d.length > 0) return d;
-      await new Promise(r => setTimeout(r, step));
-      waited += step;
+  async function waitForInitData(maxMs=4000){
+    const step=120;let waited=0;
+    while(waited<maxMs){
+      const d=resolveInitData();
+      if(d && d.length>0) return d;
+      await new Promise(r=>setTimeout(r,step));
+      waited+=step;
     }
     return resolveInitData();
   }
 
-  if (tg) {
+  if(tg){
     tg.ready();
     tg.expand();
-    if (tg.colorScheme === 'light') {
-      document.documentElement.style.setProperty('--bg', '#f1f5f9');
-      document.documentElement.style.setProperty('--bg2', '#ffffff');
-      document.documentElement.style.setProperty('--bg3', '#f8fafc');
-      document.documentElement.style.setProperty('--border', '#e2e8f0');
-      document.documentElement.style.setProperty('--text', '#0f172a');
-      document.documentElement.style.setProperty('--text2', '#475569');
-      document.documentElement.style.setProperty('--text3', '#94a3b8');
-    }
+    // Identitate Contai = dark fix. Nu mai comutam pe light;
+    // pastram brandul coerent indiferent de tema telefonului.
+    try{ tg.setHeaderColor && tg.setHeaderColor("#080D17"); }catch(e){}
+    try{ tg.setBackgroundColor && tg.setBackgroundColor("#080D17"); }catch(e){}
   }
 
-  // Panou de diagnostic — afisat doar daca auth-ul esueaza
-  function buildDebugInfo() {
-    const t = window.Telegram && window.Telegram.WebApp;
-    const lines = [
+  function buildDebugInfo(){
+    const t=window.Telegram && window.Telegram.WebApp;
+    return [
       "── DIAGNOSTIC ──",
-      "Telegram SDK încărcat: " + (window.Telegram ? "DA" : "NU"),
-      "WebApp disponibil: " + (t ? "DA" : "NU"),
-      "tg.initData (SDK) lungime: " + ((t && t.initData && t.initData.length) || 0),
-      "init_data rezolvat lungime: " + ((resolveInitData() || "").length),
-      "URL hash lungime: " + ((window.location.hash || "").length),
-      "URL search lungime: " + ((window.location.search || "").length),
-      "platform: " + ((t && t.platform) || "?"),
-      "versiune: " + ((t && t.version) || "?"),
-    ];
-    return lines.join("\n");
+      "Telegram SDK încărcat: "+(window.Telegram?"DA":"NU"),
+      "WebApp disponibil: "+(t?"DA":"NU"),
+      "tg.initData (SDK) lungime: "+((t&&t.initData&&t.initData.length)||0),
+      "init_data rezolvat lungime: "+((resolveInitData()||"").length),
+      "URL hash lungime: "+((window.location.hash||"").length),
+      "URL search lungime: "+((window.location.search||"").length),
+      "platform: "+((t&&t.platform)||"?"),
+      "versiune: "+((t&&t.version)||"?"),
+    ].join("\n");
   }
 
-  // Custom fetch — ataseaza automat header-ul Telegram init_data
-  async function authFetch(url, options = {}) {
-    const headers = options.headers || {};
-    // Recitim init_data la fiecare cerere - hash-ul poate veni cu intarziere
-    const d = resolveInitData();
-    if (d) {
-      headers["X-Telegram-Init-Data"] = d;
-    }
-    return fetch(url, { ...options, headers });
+  async function authFetch(url,options={}){
+    const headers=options.headers||{};
+    const d=resolveInitData();
+    if(d) headers["X-Telegram-Init-Data"]=d;
+    return fetch(url,{...options,headers});
   }
 
-  function showAuthError() {
-    document.getElementById("auth-error").style.display = "block";
-    document.getElementById("app-content").style.display = "none";
-    const box = document.getElementById("debug-box");
-    if (box) box.textContent = buildDebugInfo();
+  function showAuthError(){
+    document.getElementById("auth-error").style.display="block";
+    document.getElementById("app-content").style.display="none";
+    const box=document.getElementById("debug-box");
+    if(box) box.textContent=buildDebugInfo();
   }
 
-  async function checkAuth() {
-    try {
-      const r = await authFetch("/api/v1/documents");
-      if (r.status === 401) {
-        showAuthError();
-        return false;
-      }
-      document.getElementById("app-content").style.display = "block";
-      document.getElementById("auth-error").style.display = "none";
+  async function checkAuth(){
+    try{
+      const r=await authFetch("/api/v1/documents");
+      if(r.status===401){showAuthError();return false;}
+      document.getElementById("app-content").style.display="block";
+      document.getElementById("auth-error").style.display="none";
       return true;
-    } catch (e) {
-      showAuthError();
-      return false;
-    }
+    }catch(e){showAuthError();return false;}
   }
 
   // ==========================================================
   //                    APP STATE
   // ==========================================================
-  const MONTHS = {
-    1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",
-    7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"
-  };
-  const MONTHS_FULL = {
-    1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",5:"Mai",6:"Iunie",
-    7:"Iulie",8:"August",9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"
-  };
-  const TX_ICONS = {
-    INCOME: "💰", EXPENSE: "🛒", VAT_OUT: "🏛️", VAT_IN: "↩️", ADJUSTMENT: "⚖️"
-  };
+  const MONTHS={1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"};
+  const MONTHS_FULL={1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",5:"Mai",6:"Iunie",7:"Iulie",8:"August",9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"};
+  const TX_ICONS={INCOME:"💰",EXPENSE:"🛒",VAT_OUT:"🏛️",VAT_IN:"↩️",ADJUSTMENT:"⚖️"};
 
-  let currentYear = new Date().getFullYear();
-  let currentMonth = new Date().getMonth() + 1;
-  let cachedTotals = null;
-  let cachedTxs = null;
-  let expenseChart = null;
+  let currentYear=new Date().getFullYear();
+  let currentMonth=new Date().getMonth()+1;
+  let cachedTotals=null,cachedTxs=null,expenseChart=null;
 
-  function fmt(v) {
-    if (v == null) return "—";
-    return Number(v).toLocaleString("ro-RO", {minimumFractionDigits:2,maximumFractionDigits:2}) + " RON";
+  function fmt(v){
+    if(v==null) return "—";
+    return Number(v).toLocaleString("ro-RO",{minimumFractionDigits:2,maximumFractionDigits:2})+" RON";
   }
 
-  function buildPeriodChips() {
-    const container = document.getElementById("period-chips");
-    container.innerHTML = "";
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const m = d.getMonth() + 1;
-      const y = d.getFullYear();
-      const chip = document.createElement("div");
-      chip.className = "period-chip" + (m === currentMonth && y === currentYear ? " active" : "");
-      chip.textContent = `${MONTHS[m]} ${y}`;
-      chip.onclick = () => selectPeriod(y, m);
+  function buildPeriodChips(){
+    const container=document.getElementById("period-chips");
+    container.innerHTML="";
+    const now=new Date();
+    for(let i=5;i>=0;i--){
+      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      const m=d.getMonth()+1,y=d.getFullYear();
+      const chip=document.createElement("div");
+      chip.className="period-chip"+(m===currentMonth&&y===currentYear?" active":"");
+      chip.textContent=`${MONTHS[m]} ${y}`;
+      chip.onclick=()=>selectPeriod(y,m);
       container.appendChild(chip);
     }
   }
 
-  function selectPeriod(year, month) {
-    currentYear = year;
-    currentMonth = month;
-    cachedTotals = null;
-    cachedTxs = null;
-    document.querySelectorAll(".period-chip").forEach(c => {
+  function selectPeriod(year,month){
+    currentYear=year;currentMonth=month;cachedTotals=null;cachedTxs=null;
+    document.querySelectorAll(".period-chip").forEach(c=>{
       c.classList.remove("active");
-      if (c.textContent === `${MONTHS[month]} ${year}`) c.classList.add("active");
+      if(c.textContent===`${MONTHS[month]} ${year}`) c.classList.add("active");
     });
-    document.getElementById("header-badge").textContent =
-      `${MONTHS_FULL[month]} ${year}`;
+    document.getElementById("header-badge").textContent=`${MONTHS_FULL[month]} ${year}`;
     loadCurrentTab();
   }
 
-  document.querySelectorAll(".tab").forEach(tab => {
-    tab.onclick = () => {
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(tab=>{
+    tab.onclick=()=>{
+      document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
       tab.classList.add("active");
-      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+      document.getElementById("tab-"+tab.dataset.tab).classList.add("active");
       loadCurrentTab();
     };
   });
 
-  function activeTab() {
-    return document.querySelector(".tab.active")?.dataset.tab;
+  function activeTab(){return document.querySelector(".tab.active")?.dataset.tab;}
+
+  function loadCurrentTab(){
+    const tab=activeTab();
+    if(tab==="sumar") loadSumar();
+    else if(tab==="tranzactii") loadTranzactii();
+    else if(tab==="tva") loadTVA();
+    else if(tab==="export") loadExport();
   }
 
-  function loadCurrentTab() {
-    const tab = activeTab();
-    if (tab === "sumar") loadSumar();
-    else if (tab === "tranzactii") loadTranzactii();
-    else if (tab === "tva") loadTVA();
-    else if (tab === "export") loadExport();
-  }
-
-  async function fetchTotals() {
-    if (cachedTotals) return cachedTotals;
-    const r = await authFetch(`/api/v1/period/${currentYear}/${currentMonth}`);
-    if (!r.ok) throw new Error("API error " + r.status);
-    cachedTotals = await r.json();
+  async function fetchTotals(){
+    if(cachedTotals) return cachedTotals;
+    const r=await authFetch(`/api/v1/period/${currentYear}/${currentMonth}`);
+    if(!r.ok) throw new Error("API error "+r.status);
+    cachedTotals=await r.json();
     return cachedTotals;
   }
 
-  async function fetchTxs() {
-    if (cachedTxs) return cachedTxs;
-    const r = await authFetch(`/api/v1/transactions/${currentYear}/${currentMonth}`);
-    if (!r.ok) throw new Error("API error " + r.status);
-    const data = await r.json();
-    cachedTxs = data.transactions || [];
+  async function fetchTxs(){
+    if(cachedTxs) return cachedTxs;
+    const r=await authFetch(`/api/v1/transactions/${currentYear}/${currentMonth}`);
+    if(!r.ok) throw new Error("API error "+r.status);
+    const data=await r.json();
+    cachedTxs=data.transactions||[];
     return cachedTxs;
   }
 
-  async function loadSumar() {
-    const loading = document.getElementById("sumar-loading");
-    const content = document.getElementById("sumar-content");
-    loading.style.display = "flex";
-    content.style.display = "none";
-    try {
-      const totals = await fetchTotals();
-      const profitEl = document.getElementById("s-profit");
-      profitEl.textContent = fmt(totals.profit_estimated);
-      profitEl.className = "profit-value " + (totals.profit_estimated >= 0 ? "positive" : "negative");
-      if (totals.activity_name) {
-        document.getElementById("header-subtitle").textContent =
-          (totals.activity_icon || "📊") + " " + totals.activity_name;
+  async function loadSumar(){
+    const loading=document.getElementById("sumar-loading");
+    const content=document.getElementById("sumar-content");
+    loading.style.display="flex";content.style.display="none";
+    try{
+      const totals=await fetchTotals();
+      const profitEl=document.getElementById("s-profit");
+      profitEl.textContent=fmt(totals.profit_estimated);
+      profitEl.className="profit-value "+(totals.profit_estimated>=0?"positive":"negative");
+      if(totals.activity_name){
+        document.getElementById("header-subtitle").textContent=(totals.activity_icon||"📊")+" "+totals.activity_name;
       }
-      document.getElementById("s-income").textContent = fmt(totals.income_total);
-      document.getElementById("s-income-sub").textContent = "total încasări";
-      document.getElementById("s-expense").textContent = fmt(totals.expense_deductible_total);
-      document.getElementById("s-expense-sub").textContent =
-        `brut: ${fmt(totals.expense_total_brut)}`;
-      document.getElementById("s-vat").textContent = fmt(totals.vat_out_total);
-      document.getElementById("s-txcount").textContent = totals.tx_count;
+      document.getElementById("s-income").textContent=fmt(totals.income_total);
+      document.getElementById("s-income-sub").textContent="total încasări";
+      document.getElementById("s-expense").textContent=fmt(totals.expense_deductible_total);
+      document.getElementById("s-expense-sub").textContent=`brut: ${fmt(totals.expense_total_brut)}`;
+      document.getElementById("s-vat").textContent=fmt(totals.vat_out_total);
+      document.getElementById("s-txcount").textContent=totals.tx_count;
       renderExpenseChart(totals);
-      const breakdown = document.getElementById("expense-breakdown");
-      breakdown.innerHTML = "";
-      const items = totals.expense_breakdown || [];
-      if (items.length === 0) {
-        breakdown.innerHTML = '<div class="empty">📭 Nicio cheltuială înregistrată.</div>';
-      } else {
-        items.forEach(item => {
-          const subText = item.deductibility_pct < 100
-            ? `deductibil: ${fmt(item.amount_deductible)} (${item.deductibility_pct}%)`
-            : "100% deductibil";
-          breakdown.innerHTML += `
+      const breakdown=document.getElementById("expense-breakdown");
+      breakdown.innerHTML="";
+      const items=totals.expense_breakdown||[];
+      if(items.length===0){
+        breakdown.innerHTML='<div class="empty">📭 Nicio cheltuială înregistrată.</div>';
+      }else{
+        items.forEach(item=>{
+          const subText=item.deductibility_pct<100
+            ?`deductibil: ${fmt(item.amount_deductible)} (${item.deductibility_pct}%)`
+            :"100% deductibil";
+          breakdown.innerHTML+=`
             <div class="summary-row">
               <div>
-                <div class="summary-label">${item.icon || "💸"} ${item.label}</div>
-                <div style="font-size:0.68rem;color:var(--text3)">${subText}</div>
+                <div class="summary-label">${item.icon||"💸"} ${item.label}</div>
+                <div style="font-size:.68rem;color:var(--muted-2);margin-top:2px">${subText}</div>
               </div>
               <div class="summary-value" style="color:var(--red)">${fmt(item.amount_brut)}</div>
             </div>`;
         });
       }
-      loading.style.display = "none";
-      content.style.display = "block";
-    } catch(e) {
-      loading.innerHTML = '<div style="color:var(--red);font-size:0.85rem">⚠️ Eroare la încărcare.</div>';
+      loading.style.display="none";content.style.display="block";
+    }catch(e){
+      loading.innerHTML='<div style="color:var(--red);font-size:.85rem">⚠️ Eroare la încărcare.</div>';
     }
   }
 
-  function renderExpenseChart(totals) {
-    const ctx = document.getElementById("expense-chart").getContext("2d");
-    if (expenseChart) expenseChart.destroy();
-    const items = totals.expense_breakdown || [];
-    const labels = items.map(i => i.label);
-    const data = items.map(i => i.amount_brut);
-    const colors = [
-      "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b",
-      "#ef4444", "#06b6d4", "#ec4899", "#84cc16"
-    ];
-    if (data.length === 0) {
-      document.querySelector(".chart-card").style.display = "none";
-      return;
-    }
-    document.querySelector(".chart-card").style.display = "block";
-    expenseChart = new Chart(ctx, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [{
-          data,
-          backgroundColor: colors.slice(0, data.length),
-          borderWidth: 0,
-          hoverOffset: 6,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "65%",
-        plugins: {
-          legend: {
-            position: "right",
-            labels: { color: "#94a3b8", font: { size: 11 }, boxWidth: 12, padding: 10 }
-          },
-          tooltip: {
-            callbacks: {
-              label: ctx => ` ${ctx.label}: ${Number(ctx.raw).toLocaleString("ro-RO",{minimumFractionDigits:2})} RON`
-            }
+  function renderExpenseChart(totals){
+    const ctx=document.getElementById("expense-chart").getContext("2d");
+    if(expenseChart) expenseChart.destroy();
+    const items=totals.expense_breakdown||[];
+    const labels=items.map(i=>i.label);
+    const data=items.map(i=>i.amount_brut);
+    // Paleta Contai pentru grafic
+    const colors=["#19C691","#E6B566","#5AA9E6","#3DE7AE","#F2685C","#C9A14A","#7FC8A0","#B0894B"];
+    if(data.length===0){document.querySelector(".chart-card").style.display="none";return;}
+    document.querySelector(".chart-card").style.display="block";
+    expenseChart=new Chart(ctx,{
+      type:"doughnut",
+      data:{labels,datasets:[{data,backgroundColor:colors.slice(0,data.length),borderWidth:2,borderColor:"#0E1726",hoverOffset:7}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,cutout:"66%",
+        plugins:{
+          legend:{position:"right",labels:{color:"#8FA0B8",font:{size:11,family:"Hanken Grotesk"},boxWidth:12,padding:11}},
+          tooltip:{
+            backgroundColor:"#152339",borderColor:"#19C691",borderWidth:1,
+            titleColor:"#F4F1E8",bodyColor:"#F4F1E8",padding:10,
+            callbacks:{label:ctx=>` ${ctx.label}: ${Number(ctx.raw).toLocaleString("ro-RO",{minimumFractionDigits:2})} RON`}
           }
         }
       }
     });
   }
 
-  async function loadTranzactii() {
-    const list = document.getElementById("tx-list");
-    list.innerHTML = '<div class="loading"><div class="spin"></div>Se încarcă...</div>';
-    try {
-      const txs = await fetchTxs();
-      if (txs.length === 0) {
-        list.innerHTML = '<div class="empty">📭 Nicio tranzacție în această perioadă.</div>';
-        return;
-      }
-      list.innerHTML = "";
-      txs.forEach(tx => {
-        const isIncome = tx.tx_type === "INCOME";
-        const ded = tx.deductibility_pct < 100
-          ? `Deductibil ${tx.deductibility_pct}% (${(tx.amount_brut * tx.deductibility_pct / 100).toFixed(2)} RON)`
-          : "";
-        list.innerHTML += `
+  async function loadTranzactii(){
+    const list=document.getElementById("tx-list");
+    list.innerHTML='<div class="loading"><div class="spin"></div>Se încarcă...</div>';
+    try{
+      const txs=await fetchTxs();
+      if(txs.length===0){list.innerHTML='<div class="empty">📭 Nicio tranzacție în această perioadă.</div>';return;}
+      list.innerHTML="";
+      txs.forEach(tx=>{
+        const isIncome=tx.tx_type==="INCOME";
+        const ded=tx.deductibility_pct<100
+          ?`Deductibil ${tx.deductibility_pct}% (${(tx.amount_brut*tx.deductibility_pct/100).toFixed(2)} RON)`:"";
+        list.innerHTML+=`
           <div class="tx-item">
-            <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type] || "💱"}</div>
+            <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type]||"💱"}</div>
             <div class="tx-info">
               <div class="tx-category">${tx.category}</div>
-              <div class="tx-meta">${tx.occurred_on || "—"} · ${tx.counterparty || "—"}</div>
+              <div class="tx-meta">${tx.occurred_on||"—"} · ${tx.counterparty||"—"}</div>
             </div>
             <div>
-              <div class="tx-amount ${tx.tx_type}">${isIncome ? "+" : "−"}${Number(tx.amount_brut).toFixed(2)} RON</div>
-              ${ded ? `<div class="tx-deductible">${ded}</div>` : ""}
+              <div class="tx-amount ${tx.tx_type}">${isIncome?"+":"−"}${Number(tx.amount_brut).toFixed(2)} RON</div>
+              ${ded?`<div class="tx-deductible">${ded}</div>`:""}
             </div>
           </div>`;
       });
-    } catch(e) {
-      list.innerHTML = '<div style="color:var(--red);padding:20px;text-align:center">⚠️ Eroare la încărcare.</div>';
+    }catch(e){
+      list.innerHTML='<div style="color:var(--red);padding:20px;text-align:center">⚠️ Eroare la încărcare.</div>';
     }
   }
 
-  async function loadTVA() {
-    const loading = document.getElementById("tva-loading");
-    const content = document.getElementById("tva-content");
-    loading.style.display = "flex";
-    content.style.display = "none";
-    try {
-      const [totals, txs] = await Promise.all([fetchTotals(), fetchTxs()]);
-      const baseAmount = totals.vat_out_total > 0 ? totals.vat_out_total / 0.21 : 0;
-      document.getElementById("v-base").textContent = fmt(baseAmount);
-      document.getElementById("v-out").textContent = fmt(totals.vat_out_total);
-      document.getElementById("v-in").textContent = fmt(totals.vat_in_total);
-      document.getElementById("v-net").textContent = fmt(totals.vat_net);
-      const vatTxs = txs.filter(t => t.tx_type === "VAT_OUT" || t.tx_type === "VAT_IN");
-      const vatList = document.getElementById("vat-tx-list");
-      vatList.innerHTML = "";
-      if (vatTxs.length === 0) {
-        vatList.innerHTML = '<div class="empty">📭 Nicio tranzacție TVA.</div>';
-      } else {
-        vatTxs.forEach(tx => {
-          vatList.innerHTML += `
+  async function loadTVA(){
+    const loading=document.getElementById("tva-loading");
+    const content=document.getElementById("tva-content");
+    loading.style.display="flex";content.style.display="none";
+    try{
+      const [totals,txs]=await Promise.all([fetchTotals(),fetchTxs()]);
+      const baseAmount=totals.vat_out_total>0?totals.vat_out_total/0.21:0;
+      document.getElementById("v-base").textContent=fmt(baseAmount);
+      document.getElementById("v-out").textContent=fmt(totals.vat_out_total);
+      document.getElementById("v-in").textContent=fmt(totals.vat_in_total);
+      document.getElementById("v-net").textContent=fmt(totals.vat_net);
+      const vatTxs=txs.filter(t=>t.tx_type==="VAT_OUT"||t.tx_type==="VAT_IN");
+      const vatList=document.getElementById("vat-tx-list");
+      vatList.innerHTML="";
+      if(vatTxs.length===0){
+        vatList.innerHTML='<div class="empty">📭 Nicio tranzacție TVA.</div>';
+      }else{
+        vatTxs.forEach(tx=>{
+          vatList.innerHTML+=`
             <div class="tx-item">
               <div class="tx-icon ${tx.tx_type}">${TX_ICONS[tx.tx_type]}</div>
               <div class="tx-info">
-                <div class="tx-category">${tx.tx_type === "VAT_OUT" ? "TVA Colectat" : "TVA Deductibil"}</div>
-                <div class="tx-meta">${tx.occurred_on || "—"} · ${tx.counterparty || "—"}</div>
+                <div class="tx-category">${tx.tx_type==="VAT_OUT"?"TVA Colectat":"TVA Deductibil"}</div>
+                <div class="tx-meta">${tx.occurred_on||"—"} · ${tx.counterparty||"—"}</div>
               </div>
               <div class="tx-amount ${tx.tx_type}">${Number(tx.amount_brut).toFixed(2)} RON</div>
             </div>`;
         });
       }
-      loading.style.display = "none";
-      content.style.display = "block";
-    } catch(e) {
-      loading.innerHTML = '<div style="color:var(--red);font-size:0.85rem">⚠️ Eroare la încărcare.</div>';
+      loading.style.display="none";content.style.display="block";
+    }catch(e){
+      loading.innerHTML='<div style="color:var(--red);font-size:.85rem">⚠️ Eroare la încărcare.</div>';
     }
   }
 
-  async function loadExport() {
-    try {
-      const totals = await fetchTotals();
-      document.getElementById("exp-period").textContent =
-        `${MONTHS_FULL[currentMonth]} ${currentYear}`;
-      document.getElementById("exp-txcount").textContent = totals.tx_count;
-      document.getElementById("exp-btn-tx").href =
-        `/api/v1/transactions/export/${currentYear}/${currentMonth}`;
-      document.getElementById("exp-btn-rez").href =
-        `/api/v1/period/export/${currentYear}/${currentMonth}`;
-    } catch(e) {}
+  async function loadExport(){
+    try{
+      const totals=await fetchTotals();
+      document.getElementById("exp-period").textContent=`${MONTHS_FULL[currentMonth]} ${currentYear}`;
+      document.getElementById("exp-txcount").textContent=totals.tx_count;
+      document.getElementById("exp-btn-tx").href=`/api/v1/transactions/export/${currentYear}/${currentMonth}`;
+      document.getElementById("exp-btn-rez").href=`/api/v1/period/export/${currentYear}/${currentMonth}`;
+    }catch(e){}
   }
 
   // ==========================================================
   //                    INIT
   // ==========================================================
-  (async () => {
-    await waitForInitData();   // asteapta hash-ul Telegram (Android intarzie)
-    const ok = await checkAuth();
-    if (!ok) return;
+  (async()=>{
+    await waitForInitData();
+    const ok=await checkAuth();
+    if(!ok) return;
     buildPeriodChips();
-    document.getElementById("header-badge").textContent =
-      `${MONTHS_FULL[currentMonth]} ${currentYear}`;
+    document.getElementById("header-badge").textContent=`${MONTHS_FULL[currentMonth]} ${currentYear}`;
     loadSumar();
   })();
 </script>
