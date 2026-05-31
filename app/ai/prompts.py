@@ -14,9 +14,16 @@ CHANGELOG:
 - v7: tratarea chitantelor de plata servicii (asigurari, chirii,
       abonamente) - clarificare "am primit de la" = CHELTUIALA pentru
       utilizator; document fiscal definit mai larg.
+- v8: -
+- v9: DEZAMBIGUIZARE FACTURA RO vs UE. O factura de la furnizor ROMANESC
+      (DigiSign, Inter Broker, orice CUI "RO" sau furnizor local) este
+      CHELTUIALA simpla (brut = total cu TVA inclus), NU FACTURA_COMISION.
+      Doar facturile de la platforme intracomunitare (Bolt EE, AWS, Google IE,
+      Adobe etc.) sunt FACTURA_COMISION (taxare inversa). Rezolva problema
+      "factura" clasificata gresit + citirea facturilor DigiSign/Inter Broker.
 """
 
-PROMPT_VERSION = "extract.v8"
+PROMPT_VERSION = "extract.v9"
 
 
 def build_extraction_system_prompt(today_str: str) -> str:
@@ -44,11 +51,12 @@ NU raspunde cu [] doar pentru ca documentul nu e un bon de casa de marcat.
 
 REGULA #2 — VALORI ACCEPTATE pentru campul "tip":
 - "VENIT" — incasari (raport aplicatie, bacsis, cash, plata client).
-- "CHELTUIALA" — bonuri fiscale, chitante de plata, orice cumparatura
-  sau plata facuta de utilizator (combustibil, materiale, servicii,
-  asigurari, chirii, abonamente).
-- "FACTURA_COMISION" — facturi comision platforme intracomunitare (Bolt,
-  Uber, AWS, Adobe, Google etc — taxare inversa TVA).
+- "CHELTUIALA" — bonuri fiscale, chitante de plata, FACTURI DE LA FURNIZORI
+  ROMANESTI, orice cumparatura sau plata facuta de utilizator (combustibil,
+  materiale, servicii, asigurari, chirii, abonamente, certificate digitale).
+- "FACTURA_COMISION" — DOAR facturi de comision de la platforme
+  INTRACOMUNITARE (Bolt Estonia, Uber, AWS, Adobe, Google etc — taxare
+  inversa TVA). Vezi REGULA #6 pentru cum distingi.
 - NU inventa alte valori. Daca nu esti sigur, pune "CHELTUIALA".
 
 REGULA #3 — DATA DOCUMENTULUI (CRITICA):
@@ -77,9 +85,11 @@ REGULA #4 — RECUNOASTERE TIP DIN TEXT:
   "cheltuiala", + orice mentioneaza un furnizor + suma.
 - Cuvinte cheie pentru VENIT: "venit", "incasat", "castiguri",
   "bacsis", referinte la rapoarte de aplicatie.
-- Cuvinte cheie pentru FACTURA_COMISION: facturi de la entitati intracomunitare
-  (cu VAT EE/IE/NL/etc), "commission", "service fee".
-- Daca textul contine o suma si un furnizor/descriere → extrage ca CHELTUIALA.
+- ATENTIE: cuvantul "factura" SINGUR nu inseamna FACTURA_COMISION. O factura
+  poate fi CHELTUIALA simpla (furnizor romanesc) sau FACTURA_COMISION
+  (platforma intracomunitara). Decizi pe baza FURNIZORULUI — vezi REGULA #6.
+- Daca textul contine o suma si un furnizor/descriere → extrage ca CHELTUIALA
+  (decat daca furnizorul e o platforma intracomunitara, vezi REGULA #6).
 
 REGULA #5 — CITIREA IMAGINILOR (bonuri, facturi, chitante):
 Cand primesti o IMAGINE, citeste cu MAXIMA ATENTIE tot textul vizibil.
@@ -129,20 +139,46 @@ D) IMAGINI NECLARE / ILIZIBILE:
 E) ORIENTARE: documentul poate fi rotit sau fotografiat din unghi —
    citeste-l oricum, indiferent de orientare.
 
+REGULA #6 — FACTURA ROMANEASCA vs FACTURA INTRACOMUNITARA (CRITICA):
+Aceasta regula decide intre CHELTUIALA si FACTURA_COMISION.
+
+➤ Este CHELTUIALA (factura obisnuita) daca furnizorul este ROMANESC:
+   - CUI-ul furnizorului incepe cu "RO" sau e un cod fiscal romanesc.
+   - Furnizorul e o firma din Romania (SRL, PFA, SA romanesti).
+   - Exemple concrete: DigiSign (certificate digitale), Inter Broker
+     (asigurari), Dedeman, Lukoil, OMV, Rompetrol, Orange, Vodafone,
+     RCS-RDS, furnizori de service auto, magazine etc.
+   - Pentru aceste facturi: "tip" = "CHELTUIALA", "brut" = TOTALUL de plata
+     cu TVA inclus, "comision" = 0. (Utilizatorul e neplatitor de TVA, deci
+     TVA-ul ramane in cost — NU se calculeaza taxare inversa.)
+
+➤ Este FACTURA_COMISION (taxare inversa) DOAR daca furnizorul este o
+  platforma INTRACOMUNITARA / din afara Romaniei:
+   - VAT ID-ul furnizorului incepe cu prefix UE NE-romanesc
+     (EE, IE, NL, DE, FR, LU, etc — NU "RO").
+   - Sunt platforme straine: Bolt Operations OU (Estonia, EE),
+     Uber, AWS (Amazon), Google (IE), Adobe, Booking, etc.
+   - Pentru acestea: "tip" = "FACTURA_COMISION", se aplica taxare inversa.
+
+➤ REGULA DE AUR: daca nu vezi clar un VAT ID strain (non-RO) si furnizorul
+  pare romanesc sau local → este CHELTUIALA, NU FACTURA_COMISION.
+  In caz de dubiu intre cele doua → alege CHELTUIALA.
+
 REGULI ANALIZA:
 
 1. FACTURA COMISION (intracomunitar — Bolt, Uber, AWS, Adobe, etc.):
+   - DOAR pentru furnizori straini cu VAT ID non-RO (vezi REGULA #6).
    - Cauta data pe factura.
    - Comision = Total Factura.
    - TVA Datorat = Comision * 0.21 (Taxare Inversa).
-   - Identificator: VAT ID al furnizorului incepe cu prefix UE
-     (EE, IE, NL, DE, FR, etc — NU "RO").
 
-2. BON FISCAL / CHITANTA / CHELTUIALA:
+2. BON FISCAL / CHITANTA / FACTURA ROMANEASCA / CHELTUIALA:
    - Cauta data documentului sau din text.
-   - Brut = Total cu TVA inclus.
+   - Brut = Total cu TVA inclus (suma finala de plata).
+   - comision = 0.
    - detalii = descriere scurta a cheltuielii bazata pe ce vezi
-     (ex: "Combustibil", "Service auto", "Poliță asigurare", "Chirie").
+     (ex: "Certificat digital", "Poliță asigurare", "Combustibil",
+     "Service auto", "Chirie").
 
 3. RAPORT VENITURI LUNAR (Screenshot aplicatie — Bolt, Uber, etc.):
    - PRIMUL LUCRU: citeste luna afisata in titlul ecranului.
@@ -180,9 +216,21 @@ Input: "bon 19.01.2026 Electro Supermax 1330 lei accesorii"
 Output:
 [{{"data":"19.01.2026","platforma":"Electro Supermax","tip":"CHELTUIALA","brut":1330,"comision":0,"tva":0,"net":1330,"cash":0,"detalii":"Electro Supermax - accesorii","numar_document":null}}]
 
+Input: "factura 29.01.2026 DigiSign 202.80 lei certificat digital"
+Output:
+[{{"data":"29.01.2026","platforma":"DigiSign","tip":"CHELTUIALA","brut":202.80,"comision":0,"tva":0,"net":202.80,"cash":0,"detalii":"Certificat digital calificat","numar_document":null}}]
+
+Input: "factura 23.03.2026 Inter Broker 42 lei asigurare RCA"
+Output:
+[{{"data":"23.03.2026","platforma":"Inter Broker","tip":"CHELTUIALA","brut":42,"comision":0,"tva":0,"net":42,"cash":0,"detalii":"Poliță asigurare RCA","numar_document":null}}]
+
 Input: "factura 31.03.2026 AWS 245.50 lei hosting"
 Output:
 [{{"data":"31.03.2026","platforma":"AWS","tip":"FACTURA_COMISION","brut":245.50,"comision":245.50,"tva":51.56,"net":245.50,"cash":0,"detalii":"AWS hosting martie 2026","numar_document":null}}]
+
+Input: (imagine factura DigiSign: emitent "DIGISIGN S.A.", CUI RO17781032, certificat digital calificat + eToken, TOTAL 202.80 lei, data 29.01.2026, Seria DGS Nr. 445566)
+Output:
+[{{"data":"29.01.2026","platforma":"DigiSign","tip":"CHELTUIALA","brut":202.80,"comision":0,"tva":0,"net":202.80,"cash":0,"detalii":"Certificat digital + eToken","numar_document":"DGS/445566"}}]
 
 Input: (imagine factura cu 8 produse, total de plata 1240.50 lei, TVA 215.30, data 12.04.2026, furnizor Dedeman, Seria DDM Nr. 00457)
 Output:
