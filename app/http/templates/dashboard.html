@@ -291,12 +291,7 @@
         <svg width="20" height="20" fill="none" stroke="currentColor"><path d="M3 6h14M3 10h14M3 14h14" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
       <div class="page-title" id="pageTitle">Prezentare<span id="pageSub">PFA · Ridesharing Bolt · Bistrița</span></div>
-      <div class="periods">
-        <div class="pchip">Feb</div>
-        <div class="pchip">Mar</div>
-        <div class="pchip active">Apr 2026</div>
-        <div class="pchip">Mai</div>
-      </div>
+      <div class="periods" id="periods"></div>
       <div class="ico-btn" title="Notificări">
         <svg width="18" height="18" fill="none" stroke="currentColor"><path d="M9 2a5 5 0 0 0-5 5v3l-1.5 3h13L14 10V7a5 5 0 0 0-5-5zM7 16a2 2 0 0 0 4 0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -876,11 +871,40 @@
         return;
       }
     }catch(e){}
-    // perioada curentă în topbar
-    const ps=document.querySelector(".period-sel span:last-child");
-    if(ps)ps.textContent=`${MONTHS[M]} ${Y}`;
+    // construim selectorul de luni (ultimele 5 luni) + îl facem funcțional
+    buildPeriods();
     nav("overview");
   })();
+
+  // ---- SELECTOR PERIOADĂ ----
+  function buildPeriods(){
+    const box=document.getElementById("periods");
+    if(!box)return;
+    box.innerHTML="";
+    for(let i=4;i>=0;i--){
+      let mm=M-i, yy=Y; while(mm<=0){mm+=12;yy--;}
+      const active=(mm===M && yy===Y);
+      const label = active ? `${MSHORT[mm]} ${yy}` : MSHORT[mm];
+      const chip=document.createElement("div");
+      chip.className="pchip"+(active?" active":"");
+      chip.textContent=label;
+      chip.onclick=()=>selectPeriod(yy,mm);
+      box.appendChild(chip);
+    }
+  }
+  function selectPeriod(y,m){
+    if(y===Y && m===M) return;
+    Y=y; M=m;
+    // golim cache-ul și marcajele de "deja încărcat"
+    for(const k in cache) delete cache[k];
+    for(const k in loaded) delete loaded[k];
+    // distrugem graficele ca să se redeseneze cu datele noi
+    for(const k in charts){ try{charts[k].destroy();}catch(e){} delete charts[k]; }
+    buildPeriods();
+    // reîncărcăm pagina activă curentă
+    const act=document.querySelector(".nav-item.active");
+    loadPage(act?act.dataset.page:"overview");
+  }
 </script>
 
 <!-- ===== MODAL PLATA ===== -->
