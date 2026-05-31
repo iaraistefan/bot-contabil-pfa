@@ -431,6 +431,95 @@ def parcurs_summary(year: int, month: int):
     return jsonify(resp)
 
 
+@flask_app.route("/api/v1/obligatii/<int:year>/<int:month>")
+def obligatii_fiscale(year: int, month: int):
+    """
+    Obligatii fiscale calculate pentru luna (Calendar + Plati in dashboard).
+
+    Foloseste fiscal_calendar.get_obligations_for_user cu profilul real al
+    user-ului. Baza intracomunitara (comision Bolt) vine din TVA colectat
+    (vat_out_total / 0.21), deci nu mai sapam separat in facturi.
+    """
+    if not (1 <= month <= 12 and 2020 <= year <= 2099):
+        return jsonify({"error": "invalid period"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.domain import fiscal_calendar
+
+    # mapare judet -> cod (extensibil)
+    JUDET_MAP = {
+        "BISTRITA-NASAUD": "BN", "BISTRIȚA-NĂSĂUD": "BN",
+        "CLUJ": "CJ", "BUCURESTI": "B", "BUCUREȘTI": "B",
+    }
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+
+        # parametri profil (cu fallback-uri sigure pentru PFA ridesharing)
+        forma_juridica = profile.get("forma_juridica") or "PFA"
+        activity_code = profile.get("activity_code") or "ridesharing"
+        regim_tva = (profile.get("regim_tva") or "").lower()
+        is_vat_payer = ("platitor" in regim_tva) and ("neplatitor" not in regim_tva)
+        # cod special TVA (art. 317): explicit din profil, altfel dedus
+        has_cod_special = bool(profile.get("cod_special_tva"))
+        if not has_cod_special and activity_code == "ridesharing" and not is_vat_payer:
+            has_cod_special = True
+        judet_raw = (profile.get("judet") or "").upper().strip()
+        judet = JUDET_MAP.get(judet_raw, judet_raw[:2] if judet_raw else None)
+
+        # baza intracom (comision Bolt) din TVA colectat
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+        vat_out = float(totals.get("vat_out_total") or 0.0)
+        intracom_base = round(vat_out / 0.21, 2) if vat_out > 0 else 0.0
+        has_intracom = vat_out > 0
+    except Exception as e:
+        logger.error(f"API obligatii profil error {year}/{month} user={user_id}: {e}")
+        session.close()
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    try:
+        obligatii = fiscal_calendar.get_obligations_for_user(
+            year, month, forma_juridica, activity_code,
+            has_intracom_invoice=has_intracom,
+            intracom_base_amount=intracom_base,
+            has_cod_special_tva=has_cod_special,
+            is_vat_payer=is_vat_payer,
+            judet=judet,
+            only_applicable=True,
+        )
+        data = [{
+            "cod": o.definitie.cod,
+            "nume": o.definitie.nume,
+            "descriere": o.definitie.descriere,
+            "frecventa": o.definitie.frecventa.value,
+            "termen": o.termen.isoformat(),
+            "zile_ramase": o.zile_ramase,
+            "status": o.status.value,
+            "suma_estimata": o.suma_estimata,
+            "baza_calcul": o.baza_calcul,
+            "iban": (o.iban_cont.iban if o.iban_cont else None),
+            "cod_buget": (o.iban_cont.cod_buget if o.iban_cont else None),
+            "bonus_info": o.definitie.bonus_info,
+        } for o in obligatii]
+        return jsonify({
+            "year": year, "month": month,
+            "intracom_base": intracom_base,
+            "count": len(data),
+            "obligatii": data,
+        })
+    except Exception as e:
+        logger.error(f"API obligatii calc error {year}/{month} user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+
+
 @flask_app.route("/api/v1/documents")
 def documents_recent():
     user_id, err = _require_user()
