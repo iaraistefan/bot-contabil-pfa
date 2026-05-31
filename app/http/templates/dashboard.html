@@ -471,12 +471,9 @@
       <section class="page" id="page-calendar">
         <div class="grid g-2">
           <div class="panel">
-            <div class="panel-h"><div class="t">Obligații 2026</div></div>
-            <div class="timeline">
-              <div class="tl-item"><div class="tl-dot danger"></div><div class="tl-date">25 mai · AZI</div><div class="tl-title">D301 + D390 — TVA Aprilie</div><div class="tl-desc">149,65 RON · taxare inversă Bolt</div></div>
-              <div class="tl-item"><div class="tl-dot danger"></div><div class="tl-date">25 mai · AZI</div><div class="tl-title">D212 — Declarația Unică 2025</div><div class="tl-desc">Impozit 10% + CAS + CASS</div></div>
-              <div class="tl-item"><div class="tl-dot ok"></div><div class="tl-date">25 iunie</div><div class="tl-title">D301 + D390 — TVA Mai</div><div class="tl-desc">Lunar, taxare inversă</div></div>
-              <div class="tl-item"><div class="tl-dot ok"></div><div class="tl-date">28 februarie 2027</div><div class="tl-title">D207 — Informativă nerezidenți</div><div class="tl-desc">Anual</div></div>
+            <div class="panel-h"><div class="t">Obligații</div><span id="cal-luna" class="hint"></span></div>
+            <div class="timeline" id="cal-timeline">
+              <div class="hint" style="padding:10px">Se încarcă…</div>
             </div>
           </div>
           <div class="panel">
@@ -498,13 +495,11 @@
           <div><div class="t">Plătește prin ghiseul.ro</div><div class="d">Contai calculează suma, tu plătești cu cardul pe ghiseul.ro — contul corect e ales automat de ANAF pe CNP/CUI. Fără IBAN-uri greșite.</div></div>
         </div>
         <div class="panel">
-          <div class="panel-h"><div class="t">Obligații de plată<span>Aprilie 2026</span></div></div>
+          <div class="panel-h"><div class="t">Obligații de plată<span id="plati-luna"></span></div></div>
           <table>
             <thead><tr><th>Obligație</th><th>Cont</th><th class="r">Sumă</th><th class="r">Termen</th><th></th></tr></thead>
-            <tbody>
-              <tr><td><b>TVA D301</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">taxare inversă</div></td><td class="num" style="font-size:.78rem">20.A.10.01.01</td><td class="r num neu">149,65</td><td class="r">25 mai</td><td class="r"><a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('D301 — TVA','149,65','20.A.10.01.01','CUI');return false;">Plătește</a></td></tr>
-              <tr><td><b>Impozit nerezidenți</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">D100 · 2%</div></td><td class="num" style="font-size:.78rem">20.A.05.01.04</td><td class="r num">0,00</td><td class="r">25 mai</td><td class="r"><span class="badge-st ok">suportat Bolt</span></td></tr>
-              <tr><td><b>Impozit + CAS + CASS</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">D212 · cont unic</div></td><td class="num" style="font-size:.78rem">55.04 (CNP)</td><td class="r num neu">—</td><td class="r">25 mai</td><td class="r"><a class="btn btn-ghost" style="padding:8px 14px" href="#" onclick="openPlata('D212 — Impozit + CAS + CASS','—','55.04','CNP');return false;">SPV</a></td></tr>
+            <tbody id="plati-tbody">
+              <tr><td colspan="5" class="hint" style="padding:14px">Se încarcă…</td></tr>
             </tbody>
           </table>
         </div>
@@ -619,6 +614,7 @@
   async function getTx(y,m){const k=`t${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/transactions/${y}/${m}`);if(!r.ok)throw new Error("tx "+r.status);const d=await r.json();cache[k]=d.transactions||[];return cache[k];}
   async function getParcurs(y,m){const k=`pc${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/parcurs/${y}/${m}`);if(!r.ok)throw new Error("parcurs "+r.status);cache[k]=await r.json();return cache[k];}
   async function getDocs(){if(cache.docs)return cache.docs;const r=await authFetch(`/api/v1/documents`);if(!r.ok)throw new Error("docs "+r.status);const d=await r.json();cache.docs=d.documents||[];return cache.docs;}
+  async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
 
   // ---- NAV ----
   const titles={
@@ -658,6 +654,8 @@
     if(page==="tva")        loadTVA();
     if(page==="registru")   loadRegistru();
     if(page==="documente")  loadDocumente();
+    if(page==="calendar")   loadObligatii("calendar");
+    if(page==="plati")      loadObligatii("plati");
   }
 
   // ---- CHART HELPERS ----
@@ -862,6 +860,52 @@
         }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Niciun document încărcat.</td></tr>';
       }
     }catch(e){console.error(e);}
+  }
+
+  // ======================= CALENDAR + PLĂȚI (obligații reale) =======================
+  const DOT={DEPASIT:"danger",CRITIC:"danger",AVERTISMENT:"warn",PROXIM:"ok",DEPARTE:"ok"};
+  function termenRo(iso){const p=String(iso).split("-");if(p.length!==3)return iso;return `${parseInt(p[2])} ${MSHORT[parseInt(p[1])]} ${p[0]}`;}
+  function zileRo(z){if(z<0)return `depășit cu ${Math.abs(z)} zile`;if(z===0)return "azi";if(z===1)return "mâine";return `în ${z} zile`;}
+  async function loadObligatii(which){
+    const key="obl_"+which;
+    if(loaded[key])return; loaded[key]=true;
+    try{
+      const d=await getObligatii(Y,M);
+      const obl=d.obligatii||[];
+      setTxt("cal-luna", `${MONTHS[M]} ${Y}`);
+      setTxt("plati-luna", `${MONTHS[M]} ${Y}`);
+
+      // --- CALENDAR (timeline) ---
+      const tl=document.getElementById("cal-timeline");
+      if(tl){
+        tl.innerHTML = obl.length ? obl.map(o=>{
+          const dot=DOT[o.status]||"ok";
+          const suma=o.suma_estimata!=null?` · ${RON(o.suma_estimata)} RON`:"";
+          return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
+        }).join("") : '<div class="hint" style="padding:10px">Nicio obligație fiscală pentru această lună. ✅</div>';
+      }
+
+      // --- PLĂȚI (tabel, doar cele cu sumă/IBAN de plată) ---
+      const tb=document.getElementById("plati-tbody");
+      if(tb){
+        const platibile=obl.filter(o=>o.iban || o.suma_estimata!=null || /D212/.test(o.cod));
+        tb.innerHTML = platibile.length ? platibile.map(o=>{
+          const cont=o.cod_buget||"vezi SPV";
+          const suma=o.suma_estimata!=null?RON(o.suma_estimata):"—";
+          const sumaJs=o.suma_estimata!=null?RON(o.suma_estimata):"—";
+          const identif=(o.cod_buget||"").includes("55.04")||/D212/.test(o.cod)?"CNP":"CUI";
+          const termen=termenRo(o.termen);
+          const btn = o.suma_estimata!=null && o.suma_estimata>0
+            ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
+            : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">ghiseul.ro</a>`;
+          return `<tr><td><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" style="font-size:.78rem">${cont}</td><td class="r num neu">${suma}</td><td class="r">${termen}</td><td class="r">${btn}</td></tr>`;
+        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru această lună.</td></tr>';
+      }
+    }catch(e){
+      console.error(e);
+      const tl=document.getElementById("cal-timeline");
+      if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Eroare la încărcarea obligațiilor.</div>';
+    }
   }
 
   // ---- MODAL PLATA ----
