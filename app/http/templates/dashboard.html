@@ -199,6 +199,22 @@
   }
   .hamb{display:none}
   @media(max-width:860px){.hamb{display:grid}}
+  /* ===== MODAL PLATA ===== */
+  .modal-ov{position:fixed;inset:0;background:rgba(4,7,13,.74);backdrop-filter:blur(4px);z-index:120;display:none;align-items:center;justify-content:center;padding:20px}
+  .modal-ov.show{display:flex;animation:mfade .25s ease}
+  @keyframes mfade{from{opacity:0}to{opacity:1}}
+  .modal{background:linear-gradient(180deg,var(--night-2),var(--night));border:1px solid var(--border-2);border-radius:20px;max-width:400px;width:100%;box-shadow:0 30px 80px -20px rgba(0,0,0,.7);animation:mrise .3s cubic-bezier(.2,.8,.2,1)}
+  @keyframes mrise{from{transform:translateY(18px);opacity:.6}to{transform:none;opacity:1}}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border)}
+  .modal-t{font-family:var(--display);font-weight:600;font-size:1.05rem}
+  .modal-t b{color:var(--gold)}
+  .modal-x{background:var(--night-3);border:1px solid var(--border-2);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:.9rem}
+  .modal-b{padding:18px 20px}
+  .pm-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px dashed var(--border)}
+  .pm-row span{color:var(--muted);font-size:.85rem}
+  .pm-row b{font-variant-numeric:tabular-nums;font-weight:700}
+  .pm-row b.big{font-family:var(--display);font-size:1.3rem;color:var(--gold)}
+  .pm-note{font-size:.76rem;color:var(--muted-2);line-height:1.5;margin:14px 0;background:var(--night-3);border:1px solid var(--border);border-radius:11px;padding:11px 13px}
 </style>
 </head>
 <body>
@@ -476,9 +492,9 @@
           <table>
             <thead><tr><th>Obligație</th><th>Cont</th><th class="r">Sumă</th><th class="r">Termen</th><th></th></tr></thead>
             <tbody>
-              <tr><td><b>TVA D301</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">taxare inversă</div></td><td class="num" style="font-size:.78rem">20.A.10.01.01</td><td class="r num neu">149,65</td><td class="r">25 mai</td><td class="r"><a class="btn btn-primary" style="padding:8px 14px" href="#">Plătește</a></td></tr>
+              <tr><td><b>TVA D301</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">taxare inversă</div></td><td class="num" style="font-size:.78rem">20.A.10.01.01</td><td class="r num neu">149,65</td><td class="r">25 mai</td><td class="r"><a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('D301 — TVA','149,65','20.A.10.01.01','CUI');return false;">Plătește</a></td></tr>
               <tr><td><b>Impozit nerezidenți</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">D100 · 2%</div></td><td class="num" style="font-size:.78rem">20.A.05.01.04</td><td class="r num">0,00</td><td class="r">25 mai</td><td class="r"><span class="badge-st ok">suportat Bolt</span></td></tr>
-              <tr><td><b>Impozit + CAS + CASS</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">D212 · cont unic</div></td><td class="num" style="font-size:.78rem">55.04 (CNP)</td><td class="r num neu">—</td><td class="r">25 mai</td><td class="r"><a class="btn btn-ghost" style="padding:8px 14px" href="#">SPV</a></td></tr>
+              <tr><td><b>Impozit + CAS + CASS</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">D212 · cont unic</div></td><td class="num" style="font-size:.78rem">55.04 (CNP)</td><td class="r num neu">—</td><td class="r">25 mai</td><td class="r"><a class="btn btn-ghost" style="padding:8px 14px" href="#" onclick="openPlata('D212 — Impozit + CAS + CASS','—','55.04','CNP');return false;">SPV</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -838,6 +854,17 @@
     }catch(e){console.error(e);}
   }
 
+  // ---- MODAL PLATA ----
+  function openPlata(tip, suma, cont, identif){
+    setTxt("pm-tip", tip);
+    setTxt("pm-suma", suma==="—" ? "vezi în SPV" : (suma+" RON"));
+    setTxt("pm-cont", cont || "—");
+    setTxt("pm-identif", identif==="CUI" ? "pe CUI (firmă)" : "pe CNP (persoană)");
+    document.getElementById("plata-modal").classList.add("show");
+  }
+  function closePlata(){ document.getElementById("plata-modal").classList.remove("show"); }
+  window.openPlata=openPlata; window.closePlata=closePlata;
+
   // ---- INIT ----
   (async()=>{
     await waitForInitData();
@@ -855,5 +882,24 @@
     nav("overview");
   })();
 </script>
+
+<!-- ===== MODAL PLATA ===== -->
+<div class="modal-ov" id="plata-modal" onclick="if(event.target===this)closePlata()">
+  <div class="modal">
+    <div class="modal-h">
+      <div class="modal-t">Plată <b id="pm-tip">D301</b></div>
+      <button class="modal-x" onclick="closePlata()">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="pm-row"><span>Sumă de plată</span><b class="big" id="pm-suma">—</b></div>
+      <div class="pm-row"><span>Cont buget</span><b id="pm-cont">—</b></div>
+      <div class="pm-row"><span>Identificare</span><b id="pm-identif">—</b></div>
+      <div class="pm-note">Pe <b style="color:var(--emerald-br)">ghiseul.ro</b> plătești cu cardul. ANAF afișează singur obligațiile pe CNP — verifică suma acolo. Pentru TVA (pe CUI) confirmă în SPV. Contai nu plătește automat, ca să nu existe risc de cont greșit.</div>
+      <a class="btn btn-primary" href="https://www.ghiseul.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20" stroke-linecap="round"/></svg>Plătește pe ghiseul.ro</a>
+      <a class="btn btn-ghost" href="https://www.anaf.ro/InregPersFizice/" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin-top:9px">Vezi obligațiile în SPV ANAF</a>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
