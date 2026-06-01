@@ -272,7 +272,7 @@ def genereaza(
             ghid_telegram=ghid_tg, ghid_plain=ghid_pl,
             xml=xml, nume_fisier_xml=f"D301_{an}_{luna:02d}.xml",
             are_plata=True, suma_plata=tva,
-            namespace_de_confirmat=True,
+            namespace_de_confirmat=False,  # v1 confirmat in DUKIntegrator (01.06.2026)
             avertismente=avert,
         )
 
