@@ -95,6 +95,13 @@ def _attr(name: str, value) -> str:
     return f'{name}="{escape(str(value), {chr(34): "&quot;"})}"'
 
 
+def _attr_opt(name: str, value) -> str:
+    """Atribut optional: omis complet daca valoarea e goala (ANAF respinge atribute vide)."""
+    if value is None or str(value).strip() == "":
+        return ""
+    return _attr(name, value)
+
+
 def calcul_impozit_nerezident(baza_comision_lei: float) -> float:
     """Impozit nerezident = 2% × baza comision, rotunjit la intreg (lei)."""
     return round(baza_comision_lei * COTA_NEREZIDENT_EE, 0)
