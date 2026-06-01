@@ -520,6 +520,89 @@ def obligatii_fiscale(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
 
 
+@flask_app.route("/api/v1/declaratie/<tip>/<int:year>/<int:month>")
+def genereaza_declaratie(tip: str, year: int, month: int):
+    """
+    Genereaza o declaratie ANAF (D390/D301/D100) pentru luna data.
+
+    Query params optionale:
+      - format=ghid (default) -> JSON cu ghid de completare + meta
+      - format=xml            -> descarca fisierul XML
+
+    Baza intracom (comision Bolt) vine din TVA colectat (vat_out/0.21),
+    la fel ca la /obligatii. Datele firmei (CUI, cod special, banca, IBAN)
+    vin din profilul user-ului.
+    """
+    tip = (tip or "").upper().strip()
+    if tip not in ("D390", "D301", "D100"):
+        return jsonify({"error": "tip necunoscut",
+                        "message": "Foloseste D390, D301 sau D100."}), 400
+    if not (1 <= month <= 12 and 2020 <= year <= 2099):
+        return jsonify({"error": "invalid period"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    fmt = (request.args.get("format") or "ghid").lower()
+
+    from app.integrations.anaf import declaratii_service as decl
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+        vat_out = float(totals.get("vat_out_total") or 0.0)
+        baza_intracom = round(vat_out / 0.21, 2) if vat_out > 0 else 0.0
+    except Exception as e:
+        logger.error(f"API declaratie profil error {tip} {year}/{month} user={user_id}: {e}")
+        session.close()
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    if baza_intracom <= 0:
+        return jsonify({
+            "error": "fara_baza",
+            "message": (
+                f"Nu exista factura Bolt (comision) in {month:02d}/{year}, "
+                f"deci {tip} nu se depune pentru aceasta luna."
+            ),
+        }), 400
+
+    try:
+        firma = decl.date_firma_din_profil(profile)
+        rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma)
+    except Exception as e:
+        logger.error(f"API declaratie gen error {tip} {year}/{month} user={user_id}: {e}")
+        return jsonify({"error": "internal error", "message": str(e)}), 500
+
+    if fmt == "xml":
+        return Response(
+            rez.xml,
+            mimetype="application/xml; charset=utf-8",
+            headers={"Content-Disposition":
+                     f"attachment; filename={rez.nume_fisier_xml}"},
+        )
+
+    # default: JSON cu ghid + meta
+    return jsonify({
+        "tip": rez.tip,
+        "year": rez.an,
+        "month": rez.luna,
+        "ghid": rez.ghid_telegram,
+        "ghid_plain": rez.ghid_plain,
+        "are_plata": rez.are_plata,
+        "suma_plata": rez.suma_plata,
+        "namespace_de_confirmat": rez.namespace_de_confirmat,
+        "avertismente": rez.avertismente,
+        "xml_url": f"/api/v1/declaratie/{tip}/{year}/{month}?format=xml",
+        "nume_fisier_xml": rez.nume_fisier_xml,
+    })
+
+
 @flask_app.route("/api/v1/setari", methods=["GET"])
 def setari_get():
     """Citeste setarile editabile de user (date bancare pentru declaratii)."""
