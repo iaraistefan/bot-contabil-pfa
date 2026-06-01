@@ -465,10 +465,19 @@
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Generare declarații<span>format oficial ANAF</span></div></div>
-          <div class="hint" style="margin-bottom:14px">Contai pregătește fișierul XML validat → tu semnezi cu eToken și încarci în SPV. (în lucru — pasul ANAF)</div>
+          <div class="hint" style="margin-bottom:14px">Contai îți pregătește declarația completată pe luna selectată. Primești ghidul cu valorile de pus în formular + fișierul XML. Tu validezi, semnezi cu eToken și încarci în SPV.</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301</a>
-            <a class="btn btn-ghost" href="#">Generează D390</a>
+            <button class="btn btn-primary" onclick="genDecl('D301')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301</button>
+            <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390</button>
+            <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100</button>
+          </div>
+          <div id="decl-rezultat" style="margin-top:18px;display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+              <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:600;font-size:1rem"></div>
+              <a class="btn btn-primary" id="decl-xml" style="padding:8px 14px" href="#" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă XML</a>
+            </div>
+            <div id="decl-avert"></div>
+            <pre id="decl-ghid" style="background:var(--night-2);border:1px solid var(--line-2);border-radius:12px;padding:16px;font-family:var(--body);font-size:.82rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--cream);margin-top:4px;max-height:none;overflow:visible"></pre>
           </div>
         </div>
       </section>
@@ -927,6 +936,57 @@
       if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Eroare la încărcarea obligațiilor.</div>';
     }
   }
+
+  // ---- generare declaratii (D301/D390/D100) ----
+  async function genDecl(tip){
+    const box=document.getElementById("decl-rezultat");
+    const ghid=document.getElementById("decl-ghid");
+    const titlu=document.getElementById("decl-titlu");
+    const avert=document.getElementById("decl-avert");
+    const xmlBtn=document.getElementById("decl-xml");
+    box.style.display="block";
+    titlu.textContent=`${tip} — se generează…`;
+    avert.innerHTML=""; ghid.textContent="";
+    try{
+      const r=await authFetch(`/api/v1/declaratie/${tip}/${Y}/${M}`);
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){
+        titlu.textContent=`${tip} — ${MONTHS[M]} ${Y}`;
+        ghid.textContent = d.message || "Nu s-a putut genera declarația pentru această lună.";
+        xmlBtn.style.display="none";
+        return;
+      }
+      titlu.textContent=`${tip} — ${MONTHS[M]} ${Y}`+(d.are_plata?` · de plată ${RON(d.suma_plata)} RON`:"");
+      ghid.textContent=d.ghid_plain||d.ghid||"";
+      // buton XML — descarcare prin authFetch (header init_data necesar)
+      xmlBtn.style.display="inline-flex";
+      xmlBtn.onclick=async(ev)=>{
+        ev.preventDefault();
+        try{
+          const rx=await authFetch(d.xml_url);
+          if(!rx.ok){alert("Nu s-a putut descărca XML-ul.");return;}
+          const blob=await rx.blob();
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement("a");
+          a.href=url; a.download=d.nume_fisier_xml||`${tip}.xml`;
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a); URL.revokeObjectURL(url);
+        }catch(e){alert("Eroare la descărcare.");}
+        return false;
+      };
+      // avertismente
+      const warns=[];
+      if(d.namespace_de_confirmat) warns.push("XML-ul pentru "+tip+" e gata, dar formatul nu e încă confirmat 100% — folosește deocamdată ghidul de completare (sigur).");
+      (d.avertismente||[]).forEach(a=>warns.push(a));
+      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:10px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
+    }catch(e){
+      console.error(e);
+      titlu.textContent=`${tip} — eroare`;
+      ghid.textContent="Eroare de rețea. Încearcă din nou.";
+      xmlBtn.style.display="none";
+    }
+  }
+  window.genDecl=genDecl;
 
   // ======================= SETARI (banca + IBAN) =======================
   async function loadSetari(){
