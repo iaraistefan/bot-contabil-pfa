@@ -470,6 +470,7 @@
             <button class="btn btn-primary" onclick="genDecl('D301')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301</button>
             <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390</button>
             <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100</button>
+            <button class="btn btn-ghost" onclick="genD212()">🧮 Declarația Unică (anual)</button>
           </div>
           <div id="decl-rezultat" style="margin-top:18px;display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -987,6 +988,37 @@
     }
   }
   window.genDecl=genDecl;
+
+  // ---- D212 Declaratia Unica (anual) ----
+  async function genD212(){
+    const box=document.getElementById("decl-rezultat");
+    const ghid=document.getElementById("decl-ghid");
+    const titlu=document.getElementById("decl-titlu");
+    const avert=document.getElementById("decl-avert");
+    const xmlBtn=document.getElementById("decl-xml");
+    box.style.display="block";
+    xmlBtn.style.display="none";  // D212 nu are XML aici (e calcul anual)
+    titlu.textContent=`Declarația Unică ${Y} — se calculează…`;
+    avert.innerHTML=""; ghid.textContent="";
+    try{
+      const r=await authFetch(`/api/v1/declaratie-unica/${Y}`);
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){
+        titlu.textContent=`Declarația Unică ${Y}`;
+        ghid.textContent=d.message||"Nu s-a putut calcula Declarația Unică.";
+        return;
+      }
+      titlu.textContent=`Declarația Unică ${Y} · de plată ${RON(d.total_plata)} lei`;
+      ghid.textContent=d.ghid_plain||d.ghid||"";
+      const warns=(d.avertismente||[]);
+      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:10px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
+    }catch(e){
+      console.error(e);
+      titlu.textContent="Declarația Unică — eroare";
+      ghid.textContent="Eroare de rețea. Încearcă din nou.";
+    }
+  }
+  window.genD212=genD212;
 
   // ======================= SETARI (banca + IBAN) =======================
   async function loadSetari(){
