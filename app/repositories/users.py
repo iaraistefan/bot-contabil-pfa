@@ -71,6 +71,8 @@ def update_profile(
     data_inceput_activitate: Optional[date] = None,
     email: Optional[str] = None,
     telefon: Optional[str] = None,
+    banca: Optional[str] = None,
+    iban: Optional[str] = None,
 ) -> User:
     """
     Actualizeaza campurile de profil ale user-ului.
@@ -111,6 +113,14 @@ def update_profile(
         user.email = email.strip().lower() if email else None
     if telefon is not None:
         user.telefon = telefon.strip() if telefon else None
+    if banca is not None:
+        user.banca = banca.strip()[:120] if banca else None
+    if iban is not None:
+        # IBAN: pastram doar litere si cifre, uppercase, fara spatii
+        iban_clean = "".join(
+            c for c in str(iban).upper() if c.isalnum()
+        )
+        user.iban = iban_clean[:34] if iban_clean else None
 
     session.flush()
     return user
@@ -233,6 +243,8 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "onboarding_step": user.onboarding_step,
         "email": user.email,
         "telefon": user.telefon,
+        "banca": user.banca,
+        "iban": user.iban,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
