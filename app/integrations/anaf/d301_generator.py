@@ -50,7 +50,7 @@ import re
 # ============================================================
 
 # ⚠️ DE CONFIRMAT EMPIRIC — pune aici versiunea reala a namespace-ului D301
-D301_NS_VERSION = "v5"
+D301_NS_VERSION = "v1"  # CONFIRMAT empiric cu DUKIntegrator (01.06.2026)
 D301_NAMESPACE = f"mfp:anaf:dgti:d301:declaratie:{D301_NS_VERSION}"
 D301_XSD = "D301.xsd"
 
