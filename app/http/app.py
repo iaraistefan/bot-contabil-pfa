@@ -520,6 +520,76 @@ def obligatii_fiscale(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
 
 
+@flask_app.route("/api/v1/setari", methods=["GET"])
+def setari_get():
+    """Citeste setarile editabile de user (date bancare pentru declaratii)."""
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        return jsonify({
+            "banca": profile.get("banca") or "",
+            "iban": profile.get("iban") or "",
+            "firma_nume": profile.get("firma_nume") or "",
+            "firma_cui": profile.get("firma_cui") or "",
+            "cod_special_tva": profile.get("cod_special_tva") or "",
+        })
+    except Exception as e:
+        logger.error(f"API setari GET error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
+@flask_app.route("/api/v1/setari", methods=["POST"])
+def setari_post():
+    """Salveaza setarile editabile de user (banca + IBAN)."""
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    body = request.get_json(silent=True) or {}
+    banca = body.get("banca")
+    iban = body.get("iban")
+
+    # validare minimala IBAN (RO + 22 caractere alfanumerice = 24 total)
+    if iban:
+        iban_clean = "".join(c for c in str(iban).upper() if c.isalnum())
+        if iban_clean and not (iban_clean.startswith("RO") and len(iban_clean) == 24):
+            return jsonify({
+                "error": "invalid_iban",
+                "message": "IBAN-ul pare invalid. Un IBAN romanesc are forma "
+                           "RO + 22 caractere (24 in total).",
+            }), 400
+
+    session = get_session()
+    try:
+        user = users_repo.get_by_id(session, user_id)
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+        users_repo.update_profile(
+            session, user,
+            banca=(banca if banca is not None else None),
+            iban=(iban if iban is not None else None),
+        )
+        session.commit()
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        return jsonify({
+            "ok": True,
+            "banca": profile.get("banca") or "",
+            "iban": profile.get("iban") or "",
+        })
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API setari POST error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
 @flask_app.route("/api/v1/documents")
 def documents_recent():
     user_id, err = _require_user()
