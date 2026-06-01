@@ -61,6 +61,10 @@ class User(Base):
     email = Column(String(150), nullable=True)
     telefon = Column(String(30), nullable=True)
 
+    # === Date bancare (pentru D301 - banca + IBAN obligatorii in formular) ===
+    banca = Column(String(120), nullable=True)
+    iban = Column(String(34), nullable=True)
+
     # === Pas 10.1 - Proactive alerts config ===
     proactive_alerts_enabled = Column(Boolean, nullable=False, default=True)
     proactive_alerts_hour = Column(Integer, nullable=False, default=8)
