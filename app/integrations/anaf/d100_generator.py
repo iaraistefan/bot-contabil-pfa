@@ -41,7 +41,7 @@ import re
 # ============================================================
 
 # ⚠️ DE CONFIRMAT EMPIRIC
-D100_NS_VERSION = "v1"  # confirmat din schema ANAF (de revalidat in DUKIntegrator)
+D100_NS_VERSION = "v2"  # CONFIRMAT empiric cu DUKIntegrator (01.06.2026)
 D100_NAMESPACE = f"mfp:anaf:dgti:d100:declaratie:{D100_NS_VERSION}"
 D100_XSD = "D100.xsd"
 
