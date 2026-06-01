@@ -31,7 +31,8 @@ from app.integrations.exports.registru import (
 from app.integrations import bolt_sync  # Bolt API - venituri automate (/bolt)
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
-from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301
+from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301 (PDF vechi)
+from app.integrations.anaf import declaratii_service as decl_nou  # noile generatoare (XML + ghid)
 from app.migrations import run_migrations
 from app.migrare_coduri import ensure_coduri_fiscale_columns
 import io as _io
@@ -1184,7 +1185,17 @@ async def execute_raport(query, context, user_id, year, month):
 
 
 async def execute_fisa_d301(query, context, user_id, year, month):
-    """Faza 1.3: genereaza fisa de completare D301 pentru o luna."""
+    """Genereaza fisa D301 (ghid completare + XML) cu noul serviciu unificat."""
+    await _trimite_declaratie_noua(query, context, user_id, year, month, "D301")
+
+
+async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
+    """
+    Generator unificat pentru D301/D390/D100 (acelasi 'creier' ca dashboard-ul).
+
+    Trimite ghidul de completare ca mesaj + fisierul XML ca document atasat.
+    """
+    chat_id = query.message.chat_id
     session = get_session()
     try:
         totals = tax_engine.compute_period(
@@ -1193,139 +1204,73 @@ async def execute_fisa_d301(query, context, user_id, year, month):
         tva = totals.get("vat_out_total", 0) or 0
         if tva <= 0:
             await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="ℹ️ Nu exista TVA D301 (reverse charge) pentru aceasta luna.",
+                chat_id=chat_id,
+                text=f"ℹ️ Nu exista factura Bolt (comision) in {month:02d}/{year}, "
+                     f"deci {tip} nu se depune pentru aceasta luna.",
             )
             return
+        baza = round(tva / 0.21, 2)
         profile = users_repo.get_profile_dict(session, user_id) or {}
-        adresa = ", ".join(
-            x for x in [profile.get("localitate"), profile.get("judet")] if x
-        ) or None
-        profil = {
-            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D301"),
-            "firma_nume": profile.get("firma_nume"),
-            "adresa": adresa,
-        }
-        d = declaratii_spv.construieste_fisa_d301_din_tva(year, month, tva)
-        pdf_bytes = declaratii_spv.genereaza_pdf_d301(d, profil)
-        fname = declaratii_spv.nume_fisier_d301_pdf(year, month)
+    except Exception as e:
+        logger.error(f"_trimite_declaratie_noua compute error {tip}: {e}")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Eroare la calculul {tip}.")
+        return
+    finally:
+        session.close()
+
+    try:
+        firma = decl_nou.date_firma_din_profil(profile)
+        rez = decl_nou.genereaza(tip, year, month, baza, firma=firma)
+    except Exception as e:
+        logger.error(f"_trimite_declaratie_noua gen error {tip}: {e}")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Eroare la generarea {tip}.")
+        return
+
+    # 1. Ghidul de completare (mesaj text)
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id, text=rez.ghid_telegram, parse_mode="Markdown",
+        )
+    except Exception:
+        # fallback fara markdown daca ceva din continut strica parsarea
+        await context.bot.send_message(chat_id=chat_id, text=rez.ghid_plain)
+
+    # 2. Avertismente (daca exista)
+    warns = []
+    if rez.namespace_de_confirmat:
+        warns.append(
+            f"⚠️ XML-ul pentru {tip} e gata, dar formatul nu e inca confirmat "
+            f"100%. Foloseste deocamdata ghidul de completare (sigur)."
+        )
+    for a in (rez.avertismente or []):
+        warns.append(f"ℹ️ {a}")
+    if warns:
+        await context.bot.send_message(chat_id=chat_id, text="\n\n".join(warns))
+
+    # 3. Fisierul XML (document atasat)
+    try:
         await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=_io.BytesIO(pdf_bytes),
-            filename=fname,
+            chat_id=chat_id,
+            document=_io.BytesIO(rez.xml.encode("utf-8")),
+            filename=rez.nume_fisier_xml,
             caption=(
-                f"📋 *Fisa D301 — {month:02d}/{year}*\n"
-                f"De plata: *{round(tva)} lei*\n\n"
-                f"Deschide PDF-ul, transcrie valorile in formularul inteligent "
-                f"D301 (ANAF), apoi VALIDARE + semnare + depunere SPV."
+                f"📄 *{tip} — {month:02d}/{year}* (XML pentru DUKIntegrator)"
+                + (f"\nDe plata: *{rez.suma_plata:.2f} lei*" if rez.are_plata else "")
             ),
             parse_mode="Markdown",
         )
     except Exception as e:
-        logger.error(f"execute_fisa_d301 error: {e}")
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="❌ Eroare la generarea fisei D301.",
-        )
-    finally:
-        session.close()
+        logger.error(f"_trimite_declaratie_noua xml error {tip}: {e}")
 
 
 async def execute_fisa_d390(query, context, user_id, year, month):
-    """Faza 1: genereaza fisa D390 (VIES) pentru achizitii servicii intracom."""
-    session = get_session()
-    try:
-        totals = tax_engine.compute_period(
-            session, user_id=user_id, year=year, month=month
-        )
-        tva = totals.get("vat_out_total", 0) or 0
-        if tva <= 0:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="ℹ️ Nu exista achizitii intracom de servicii pentru aceasta luna.",
-            )
-            return
-        profile = users_repo.get_profile_dict(session, user_id) or {}
-        adresa = ", ".join(
-            x for x in [profile.get("localitate"), profile.get("judet")] if x
-        ) or None
-        profil = {
-            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D390"),
-            "firma_nume": profile.get("firma_nume"),
-            "adresa": adresa,
-        }
-        d = declaratii_spv.construieste_fisa_d390_din_tva(year, month, tva)
-        pdf_bytes = declaratii_spv.genereaza_pdf_d390(d, profil)
-        fname = declaratii_spv.nume_fisier_d390_pdf(year, month)
-        await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=_io.BytesIO(pdf_bytes),
-            filename=fname,
-            caption=(
-                f"🇪🇺 *Fisa D390 (VIES) — {month:02d}/{year}*\n"
-                f"Cod operatiune: *S* (achizitii servicii intracom)\n"
-                f"Baza: *{round(d['baza'])} lei*\n\n"
-                f"Se depune impreuna cu D301, pe codul special TVA. "
-                f"Verifica pe factura Bolt codul partenerului si suma."
-            ),
-            parse_mode="Markdown",
-        )
-    except Exception as e:
-        logger.error(f"execute_fisa_d390 error: {e}")
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="❌ Eroare la generarea fisei D390.",
-        )
-    finally:
-        session.close()
+    """Genereaza fisa D390 (VIES) cu noul serviciu unificat."""
+    await _trimite_declaratie_noua(query, context, user_id, year, month, "D390")
 
 
 async def execute_fisa_d100(query, context, user_id, year, month):
-    """Faza 1: genereaza fisa D100 (impozit nerezident - comision Bolt)."""
-    session = get_session()
-    try:
-        totals = tax_engine.compute_period(
-            session, user_id=user_id, year=year, month=month
-        )
-        tva = totals.get("vat_out_total", 0) or 0
-        if tva <= 0:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="ℹ️ Nu exista comision intracom de declarat pentru aceasta luna.",
-            )
-            return
-        profile = users_repo.get_profile_dict(session, user_id) or {}
-        profil = {
-            "firma_cui": users_repo.cod_pentru_declaratie(profile, "D100"),
-            "firma_nume": profile.get("firma_nume"),
-        }
-        # Cota 2% (cu certificat rezidenta Bolt RO-Estonia)
-        d = declaratii_spv.construieste_fisa_d100_din_tva(
-            year, month, tva, cota_impozit_pct=2
-        )
-        pdf_bytes = declaratii_spv.genereaza_pdf_d100(d, profil)
-        fname = declaratii_spv.nume_fisier_d100_pdf(year, month)
-        await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=_io.BytesIO(pdf_bytes),
-            filename=fname,
-            caption=(
-                f"🌍 *Fisa D100 (nerezident) — {month:02d}/{year}*\n"
-                f"Impozit comision Bolt: *{round(d['impozit'])} lei* "
-                f"({d['cota_impozit_pct']:g}% din {round(d['baza'])} lei)\n"
-                f"Pozitia *634*, termen {d['termen']}.\n\n"
-                f"Necesita certificat rezidenta Bolt (cota 2%). Anual: D207."
-            ),
-            parse_mode="Markdown",
-        )
-    except Exception as e:
-        logger.error(f"execute_fisa_d100 error: {e}")
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="❌ Eroare la generarea fisei D100.",
-        )
-    finally:
-        session.close()
+    """Genereaza fisa D100 (impozit nerezident) cu noul serviciu unificat."""
+    await _trimite_declaratie_noua(query, context, user_id, year, month, "D100")
 
 
 async def execute_registru(query, context, user_id, year, month=None):
