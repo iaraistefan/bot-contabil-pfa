@@ -251,6 +251,108 @@ def operator_bolt(baza_lei: int) -> OperatorIntracom:
 
 
 # ============================================================
+#       GHID DE COMPLETARE (Drumul A — copiezi in formular)
+# ============================================================
+
+# nume luni pentru afisare
+_LUNI = {
+    1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
+    5: "Mai", 6: "Iunie", 7: "Iulie", 8: "August",
+    9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie",
+}
+
+_TIP_NUME = {
+    "L": "Livrare intracom. bunuri",
+    "T": "Livrare op. triunghiulara",
+    "A": "Achizitie intracom. bunuri",
+    "P": "Prestare intracom. servicii",
+    "S": "Achizitie intracom. servicii",
+    "R": "Livrare regim special agricultori",
+}
+
+
+def genereaza_ghid_d390(
+    an: int,
+    luna: int,
+    identitate: IdentitateDeclarant,
+    operatori: List[OperatorIntracom],
+    d_rec: int = 0,
+    plain: bool = False,
+) -> str:
+    """
+    Genereaza un GHID DE COMPLETARE D390 — valorile exacte de pus in
+    formularul PDF ANAF, casuta cu casuta.
+
+    Pentru Drumul A: utilizatorul deschide formularul gol, copiaza aceste
+    valori, da Validare, semneaza, depune.
+
+    Args:
+        plain: daca True, fara emoji/markdown (pentru loguri / text simplu).
+               Daca False, format placut pentru Telegram/dashboard.
+    """
+    cui = _curata_cui(identitate.cui)
+    den = _curata_text(identitate.denumire)
+    adresa = _curata_text(identitate.adresa)
+    luna_nume = _LUNI.get(luna, str(luna))
+
+    # totaluri pe tip + suma de control (ca in XML)
+    baze = {"L": 0, "T": 0, "A": 0, "P": 0, "S": 0, "R": 0}
+    for op in operatori:
+        baze[op.tip] += int(round(op.baza))
+    total_baza = sum(baze.values())
+    nr_opi = len(operatori)
+    suma_control = nr_opi + sum(baze.values())
+
+    b = (lambda s: s) if plain else (lambda s: f"*{s}*")
+    h = "" if plain else "📋 "
+    sep = "──────────────────────────"
+
+    L = []
+    L.append(f"{h}{b(f'D390 — {luna_nume} {an}')}")
+    L.append(f"_{'Declaratie initiala' if d_rec == 0 else 'Declaratie RECTIFICATIVA'}_" if not plain
+             else ("Declaratie initiala" if d_rec == 0 else "Declaratie RECTIFICATIVA"))
+    L.append(sep)
+    L.append(f"{'' if plain else '🗓️ '}Perioada de raportare")
+    L.append(f"   Anul: {b(an)}    Luna: {b(f'{luna:02d}')}")
+    L.append("")
+    L.append(f"{'' if plain else '🧾 '}{b('I. Date de identificare')}")
+    L.append(f"   Cod fiscal (dupa RO): {b(cui)}")
+    L.append(f"   Denumire: {den}")
+    L.append(f"   Domiciliu fiscal: {adresa}")
+    if identitate.telefon:
+        L.append(f"   Telefon: {_curata_text(identitate.telefon)}")
+    if identitate.email:
+        L.append(f"   E-mail: {identitate.email.strip()}")
+    L.append("")
+    L.append(f"{'' if plain else '📊 '}{b('II. Rezumat (se completeaza automat in formular)')}")
+    L.append(f"   Nr. total operatori: {b(nr_opi)}")
+    L.append(f"   Suma de control: {b(suma_control)}")
+    L.append("")
+    L.append(f"{'' if plain else '📝 '}{b('III. Lista operatiuni')} — completeaza randurile:")
+    for i, op in enumerate(operatori, 1):
+        tipnum = _TIP_NUME.get(op.tip, op.tip)
+        L.append(f"   {b(f'Rand {i}')}")
+        L.append(f"      TIP: {b(op.tip)}  ({tipnum})")
+        L.append(f"      TARA: {b(op.tara.upper())}")
+        L.append(f"      COD OPERATOR: {b(op.cod_operator)}")
+        L.append(f"      DENUMIRE: {op.denumire}")
+        L.append(f"      BAZA IMPOZABILA: {b(int(round(op.baza)))}")
+    L.append("")
+    L.append(f"{'' if plain else '✍️ '}Declarant")
+    L.append(f"   Nume: {b(_curata_text(identitate.nume_declarant))}   "
+             f"Prenume: {b(_curata_text(identitate.prenume_declarant))}")
+    L.append(f"   Functia: {b(_curata_text(identitate.functie_declarant))}")
+    L.append(sep)
+    if not plain:
+        L.append("_Dupa completare: apasa VALIDARE, semneaza cu eToken, "
+                 "incarca in SPV. D390 e doar declarativa — fara plata._")
+    else:
+        L.append("Dupa completare: Validare -> semnatura eToken -> depunere SPV. "
+                 "D390 nu se plateste.")
+    return "\n".join(L)
+
+
+# ============================================================
 #                    TEST / DEMO
 # ============================================================
 
@@ -270,11 +372,17 @@ if __name__ == "__main__":
 
     operatori = [operator_bolt(baza_lei=657)]
 
-    xml = genereaza_d390(
-        an=2026,
-        luna=1,
-        identitate=identitate,
-        operatori=operatori,
-        d_rec=0,
-    )
+    print("=" * 60)
+    print("DRUMUL B — XML (pentru DUKIntegrator):")
+    print("=" * 60)
+    xml = genereaza_d390(an=2026, luna=1, identitate=identitate,
+                         operatori=operatori, d_rec=0)
     print(xml)
+
+    print()
+    print("=" * 60)
+    print("DRUMUL A — GHID DE COMPLETARE (pentru dashboard/Telegram):")
+    print("=" * 60)
+    ghid = genereaza_ghid_d390(an=2026, luna=1, identitate=identitate,
+                               operatori=operatori, d_rec=0, plain=True)
+    print(ghid)
