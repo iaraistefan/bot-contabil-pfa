@@ -285,9 +285,9 @@ def genereaza_d301(
     ] if a)
     lines.append(f"<declaratie301 {root_attrs}>")
 
-    for f in facturi:
-        sec_attrs = " ".join([
-            _attr("tip_operatie", TIP_OP_SERVICII_INTRACOM),
+    def _rand(f, tip_op):
+        attrs = " ".join([
+            _attr("tip_operatie", tip_op),
             _attr("nr_doc", _curata_text(f.nr_doc)),
             _attr("data_doc", f.data_doc.strftime("%d.%m.%Y")),
             _attr("val_valuta", f"{f.val_valuta:.2f}"),
@@ -296,7 +296,17 @@ def genereaza_d301(
             _attr("baza", f.baza_lei()),
             _attr("tva", f"{f.tva_lei():.2f}"),
         ])
-        lines.append(f"  <sectiune {sec_attrs}/>")
+        return f"  <sectiune {attrs}/>"
+
+    # Pentru achizitii de servicii intracom (Bolt), operatiunea apartine
+    # sectiunii S4.1 (tip 5), care e subset al S4 (tip 4). Regulile ANAF:
+    #   baza4 = sum(baza) pt. tip_operatie=4  (S4 = S4.1 + S4.2)
+    #   baza5 = sum(baza) pt. tip_operatie=5  (S4.1)
+    # Cum S4.2 = 0 la noi, fiecare factura trebuie sa apara in AMBELE:
+    # un rand tip 4 (intra in S4) si un rand tip 5 (intra in S4.1).
+    for f in facturi:
+        lines.append(_rand(f, 4))   # S4
+        lines.append(_rand(f, TIP_OP_SERVICII_INTRACOM))  # S4.1 (=5)
 
     lines.append("</declaratie301>")
     return "\n".join(lines)
