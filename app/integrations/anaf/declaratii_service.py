@@ -30,11 +30,13 @@ try:
     from . import d390_generator as d390
     from . import d301_generator as d301
     from . import d100_generator as d100
+    from . import d212_calc as d212
 except ImportError:
     # fallback pentru rulare locala / teste (fisiere in acelasi folder)
     import d390_generator as d390
     import d301_generator as d301
     import d100_generator as d100
+    import d212_calc as d212
 
 
 # ============================================================
@@ -309,6 +311,61 @@ def genereaza(
 
 
 TIPURI_SUPORTATE = ("D390", "D301", "D100")
+
+
+# ============================================================
+#       D212 — Declaratia Unica anuala (calcul, nu generator XML)
+# ============================================================
+
+@dataclass
+class RezultatD212Service:
+    """Rezultat D212 pentru dashboard/Telegram (calcul + ghid)."""
+    an: int
+    venit_brut: float
+    cheltuieli: float
+    venit_net: float
+    cas: float
+    cass: float
+    impozit: float
+    total_plata: float
+    bonificatie: float
+    total_cu_bonificatie: float
+    ghid_telegram: str
+    ghid_plain: str
+    avertismente: List[str] = field(default_factory=list)
+
+
+def genereaza_d212(
+    an: int,
+    venit_brut_anual: float,
+    cheltuieli_anuale: float,
+    salariu_minim: int = 4050,
+) -> RezultatD212Service:
+    """
+    Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
+
+    Args:
+        an: anul de raportare (ex. 2025)
+        venit_brut_anual: total incasari pe an (din motorul fiscal, 12 luni)
+        cheltuieli_anuale: total cheltuieli deductibile pe an
+        salariu_minim: salariul minim de referinta (default 4050)
+    """
+    r = d212.calculeaza_d212(
+        venit_brut=venit_brut_anual,
+        cheltuieli_deductibile=cheltuieli_anuale,
+        an=an,
+        salariu_minim=salariu_minim,
+    )
+    return RezultatD212Service(
+        an=r.an,
+        venit_brut=r.venit_brut, cheltuieli=r.cheltuieli, venit_net=r.venit_net,
+        cas=r.cas, cass=r.cass, impozit=r.impozit,
+        total_plata=r.total_plata, bonificatie=r.bonificatie,
+        total_cu_bonificatie=r.total_cu_bonificatie,
+        ghid_telegram=d212.genereaza_ghid_d212(r, plain=False),
+        ghid_plain=d212.genereaza_ghid_d212(r, plain=True),
+        avertismente=r.avertismente,
+    )
 
 
 # ============================================================
