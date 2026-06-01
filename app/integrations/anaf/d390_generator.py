@@ -109,6 +109,16 @@ def _attr(name: str, value) -> str:
     return f'{name}="{escape(str(value), {chr(34): "&quot;"})}"'
 
 
+def _attr_opt(name: str, value) -> str:
+    """
+    Atribut optional: daca valoarea e goala, NU scrie atributul deloc.
+    ANAF respinge atributele prezente dar vide (telefon="", mail="", etc).
+    """
+    if value is None or str(value).strip() == "":
+        return ""
+    return _attr(name, value)
+
+
 # ============================================================
 #                    GENERATOR D390
 # ============================================================
@@ -180,7 +190,7 @@ def genereaza_d390(
     lines.append('<?xml version="1.0" encoding="UTF-8"?>')
 
     # atributele radacinii
-    root_attrs = " ".join([
+    root_attrs = " ".join(a for a in [
         _attr("xmlns", D390_NAMESPACE),
         _attr("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance"),
         _attr("xsi:schemaLocation", f"{D390_NAMESPACE} {D390_XSD}"),
@@ -193,11 +203,11 @@ def genereaza_d390(
         _attr("cui", cui),
         _attr("den", den),
         _attr("adresa", adresa),
-        _attr("telefon", telefon),
-        _attr("fax", fax),
-        _attr("mail", mail),
+        _attr_opt("telefon", telefon),
+        _attr_opt("fax", fax),
+        _attr_opt("mail", mail),
         _attr("totalPlata_A", total_plata_a),
-    ])
+    ] if a)
     lines.append(f"<declaratie390 {root_attrs}>")
 
     # rezumat
