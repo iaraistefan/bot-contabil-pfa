@@ -177,6 +177,12 @@
   .btn svg{width:16px;height:16px;stroke-width:2}
 
   .hint{font-size:.78rem;color:var(--muted);line-height:1.55}
+
+  /* setari inputs */
+  .set-lbl{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:6px}
+  .set-inp{width:100%;background:var(--night-2);border:1px solid var(--line-2);border-radius:11px;padding:12px 14px;color:var(--cream);font-family:var(--body);font-size:.9rem;outline:none;transition:border-color .16s}
+  .set-inp:focus{border-color:var(--emerald)}
+  .set-inp::placeholder{color:var(--muted-2)}
   .alert{background:var(--gold-dim);border:1px solid rgba(230,181,102,.3);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start}
   .alert svg{width:18px;height:18px;color:var(--gold);flex:none;margin-top:1px;stroke-width:2}
   .alert .t{font-size:.84rem;font-weight:700;color:var(--gold);margin-bottom:3px}
@@ -547,12 +553,25 @@
           <div class="panel">
             <div class="panel-h"><div class="t">Profil firmă</div></div>
             <div class="rows">
-              <div class="row"><div class="info"><div class="m">Denumire</div><div class="t">Iarai Stefan PFA</div></div></div>
-              <div class="row"><div class="info"><div class="m">CUI</div><div class="t num">53067338</div></div></div>
+              <div class="row"><div class="info"><div class="m">Denumire</div><div class="t" id="set-denumire">—</div></div></div>
+              <div class="row"><div class="info"><div class="m">CUI</div><div class="t num" id="set-cui">—</div></div></div>
+              <div class="row"><div class="info"><div class="m">Cod special TVA (art. 317)</div><div class="t num" id="set-cod-special">—</div></div></div>
               <div class="row"><div class="info"><div class="m">Formă juridică</div><div class="t">PFA · sistem real</div></div></div>
               <div class="row"><div class="info"><div class="m">TVA</div><div class="t">Neplătitor · cod special art. 317</div></div></div>
-              <div class="row"><div class="info"><div class="m">CAEN</div><div class="t">4932 · Transport taxi</div></div></div>
-              <div class="row"><div class="info"><div class="m">Județ</div><div class="t">Bistrița-Năsăud</div></div></div>
+              <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
+            </div>
+            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Date bancare</div>
+              <div class="hint" style="margin-bottom:14px">Folosite la generarea declarației D301 (banca și IBAN sunt obligatorii în formular).</div>
+              <label class="set-lbl">Banca</label>
+              <input class="set-inp" id="set-banca" type="text" placeholder="ex. Banca Transilvania" autocomplete="off">
+              <label class="set-lbl" style="margin-top:12px">IBAN</label>
+              <input class="set-inp" id="set-iban" type="text" placeholder="RO00 XXXX 0000 0000 0000 0000" autocomplete="off" spellcheck="false">
+              <div id="set-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
+              <button class="btn btn-primary" id="set-save" style="margin-top:6px" onclick="salveazaSetari()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Salvează
+              </button>
             </div>
           </div>
           <div class="panel">
@@ -656,6 +675,7 @@
     if(page==="documente")  loadDocumente();
     if(page==="calendar")   loadObligatii("calendar");
     if(page==="plati")      loadObligatii("plati");
+    if(page==="setari")     loadSetari();
   }
 
   // ---- CHART HELPERS ----
@@ -907,6 +927,53 @@
       if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Eroare la încărcarea obligațiilor.</div>';
     }
   }
+
+  // ======================= SETARI (banca + IBAN) =======================
+  async function loadSetari(){
+    if(loaded.setari)return; loaded.setari=true;
+    try{
+      const r=await authFetch("/api/v1/setari");
+      if(!r.ok)throw new Error("setari "+r.status);
+      const s=await r.json();
+      setTxt("set-denumire", s.firma_nume||"—");
+      setTxt("set-cui", s.firma_cui||"—");
+      setTxt("set-cod-special", s.cod_special_tva||"—");
+      const banca=document.getElementById("set-banca");
+      const iban=document.getElementById("set-iban");
+      if(banca) banca.value = s.banca||"";
+      if(iban) iban.value = s.iban||"";
+    }catch(e){console.error(e);}
+  }
+  async function salveazaSetari(){
+    const btn=document.getElementById("set-save");
+    const msg=document.getElementById("set-msg");
+    const banca=(document.getElementById("set-banca")||{}).value||"";
+    const iban=(document.getElementById("set-iban")||{}).value||"";
+    msg.style.color="var(--muted)"; msg.textContent="Se salvează…";
+    if(btn) btn.style.opacity=".6";
+    try{
+      const r=await authFetch("/api/v1/setari",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({banca,iban}),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){
+        msg.style.color="var(--emerald-br)";
+        msg.textContent="✓ Salvat. Datele vor apărea în declarația D301.";
+        const ib=document.getElementById("set-iban"); if(ib) ib.value=d.iban||iban;
+      }else{
+        msg.style.color="var(--red)";
+        msg.textContent = d.message || "Eroare la salvare. Verifică IBAN-ul.";
+      }
+    }catch(e){
+      msg.style.color="var(--red)";
+      msg.textContent="Eroare de rețea. Încearcă din nou.";
+    }finally{
+      if(btn) btn.style.opacity="1";
+    }
+  }
+  window.salveazaSetari=salveazaSetari;
 
   // ---- MODAL PLATA ----
   function openPlata(tip, suma, cont, identif){
