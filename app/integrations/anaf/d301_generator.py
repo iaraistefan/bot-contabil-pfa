@@ -128,6 +128,13 @@ def _attr(name: str, value) -> str:
     return f'{name}="{escape(str(value), {chr(34): "&quot;"})}"'
 
 
+def _attr_opt(name: str, value) -> str:
+    """Atribut optional: omis complet daca valoarea e goala (ANAF respinge atribute vide)."""
+    if value is None or str(value).strip() == "":
+        return ""
+    return _attr(name, value)
+
+
 def calcul_nr_evid(an: int, luna: int, mijl_transp: int = 0) -> str:
     """
     Calculeaza numarul de evidenta a platii (C(23)), conform structurii oficiale.
@@ -250,7 +257,7 @@ def genereaza_d301(
     functie = _curata_text(identitate.functie_declarant)
 
     lines = ['<?xml version="1.0" encoding="UTF-8"?>']
-    root_attrs = " ".join([
+    root_attrs = " ".join(a for a in [
         _attr("xmlns", D301_NAMESPACE),
         _attr("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance"),
         _attr("xsi:schemaLocation", f"{D301_NAMESPACE} {D301_XSD}"),
@@ -262,8 +269,8 @@ def genereaza_d301(
         _attr("cif", cif),
         _attr("denumire", den),
         _attr("adresa", adresa),
-        _attr("banca", banca),
-        _attr("cont", cont),
+        _attr_opt("banca", banca),
+        _attr_opt("cont", cont),
         _attr("pers_inreg", identitate.pers_inreg),
         _attr("nr_evid", nr_evid),
         _attr("baza1", baza[1]), _attr("tva1", f"{tva[1]:.2f}"),
@@ -275,7 +282,7 @@ def genereaza_d301(
         _attr("nume_declarant", nume),
         _attr("prenume_declarant", prenume),
         _attr("functia_declarant", functie),
-    ])
+    ] if a)
     lines.append(f"<declaratie301 {root_attrs}>")
 
     for f in facturi:
