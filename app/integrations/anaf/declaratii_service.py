@@ -85,6 +85,65 @@ def date_firma_stefan() -> DateFirma:
     )
 
 
+def _split_nume_prenume(denumire: str, nume: str, prenume: str):
+    """
+    Determina nume + prenume declarant.
+    Daca profilul nu le are explicit, le deduce din denumirea PFA
+    (ex. "IARAI STEFAN PERSOANA FIZICA AUTORIZATA" -> IARAI / STEFAN).
+    """
+    if nume and prenume:
+        return nume, prenume
+    den = (denumire or "").upper()
+    # taie sufixele de forma juridica
+    for suf in ("PERSOANA FIZICA AUTORIZATA", "PFA", "INTREPRINDERE INDIVIDUALA",
+                "II", "INTREPRINDERE FAMILIALA", "IF"):
+        den = den.replace(suf, "")
+    parts = [p for p in den.split() if p]
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    if len(parts) == 1:
+        return parts[0], parts[0]
+    return (nume or "TITULAR"), (prenume or "")
+
+
+def date_firma_din_profil(profile: dict) -> DateFirma:
+    """
+    Construieste DateFirma din profilul real al user-ului (get_profile_dict).
+
+    Asta face serviciul multi-tenant: fiecare user isi are propriile date
+    (CUI, cod special, banca, IBAN). Cu fallback-uri sigure unde lipseste ceva.
+
+    Args:
+        profile: dict de la users_repo.get_profile_dict
+    """
+    profile = profile or {}
+    denumire = profile.get("firma_nume") or "PFA"
+    nume = profile.get("nume_declarant") or ""
+    prenume = profile.get("prenume_declarant") or ""
+    nume, prenume = _split_nume_prenume(denumire, nume, prenume)
+
+    # adresa din judet + localitate daca nu exista camp dedicat
+    adresa = profile.get("adresa") or ""
+    if not adresa:
+        loc = profile.get("localitate") or ""
+        jud = profile.get("judet") or ""
+        adresa = " ".join(p for p in [jud, loc] if p) or "[completeaza adresa]"
+
+    return DateFirma(
+        cui_pfa=profile.get("firma_cui") or "",
+        cod_special_tva=profile.get("cod_special_tva") or profile.get("firma_cui") or "",
+        denumire=denumire,
+        adresa=adresa,
+        nume_declarant=nume,
+        prenume_declarant=prenume,
+        functie_declarant="TITULAR",
+        telefon=profile.get("telefon") or "",
+        email=profile.get("email") or "",
+        banca=profile.get("banca") or "",
+        cont=profile.get("iban") or "",
+    )
+
+
 # ============================================================
 #                REZULTAT UNIFORM
 # ============================================================
