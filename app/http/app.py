@@ -520,6 +520,65 @@ def obligatii_fiscale(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
 
 
+@flask_app.route("/api/v1/declaratie-unica/<int:year>")
+def declaratie_unica_d212(year: int):
+    """
+    Declaratia Unica (D212) — calcul anual: impozit + CAS + CASS.
+
+    Aduna venitul brut si cheltuielile deductibile din toate cele 12 luni
+    (din motorul fiscal) si calculeaza obligatiile anuale. Orientativ.
+    """
+    if not (2020 <= year <= 2099):
+        return jsonify({"error": "invalid year"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.integrations.anaf import declaratii_service as decl
+
+    session = get_session()
+    try:
+        venit_brut = 0.0
+        cheltuieli = 0.0
+        for m in range(1, 13):
+            try:
+                t = tax_engine.compute_period(
+                    session, user_id=user_id, year=year, month=m
+                )
+                venit_brut += float(t.get("income_total") or 0.0)
+                cheltuieli += float(t.get("expense_deductible_total") or 0.0)
+            except Exception:
+                continue
+    except Exception as e:
+        logger.error(f"API D212 agregare error {year} user={user_id}: {e}")
+        session.close()
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    try:
+        r = decl.genereaza_d212(year, round(venit_brut, 2), round(cheltuieli, 2))
+        return jsonify({
+            "an": r.an,
+            "venit_brut": r.venit_brut,
+            "cheltuieli": r.cheltuieli,
+            "venit_net": r.venit_net,
+            "cas": r.cas,
+            "cass": r.cass,
+            "impozit": r.impozit,
+            "total_plata": r.total_plata,
+            "bonificatie": r.bonificatie,
+            "total_cu_bonificatie": r.total_cu_bonificatie,
+            "ghid": r.ghid_telegram,
+            "ghid_plain": r.ghid_plain,
+            "avertismente": r.avertismente,
+        })
+    except Exception as e:
+        logger.error(f"API D212 calc error {year} user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+
+
 @flask_app.route("/api/v1/declaratie/<tip>/<int:year>/<int:month>")
 def genereaza_declaratie(tip: str, year: int, month: int):
     """
