@@ -51,6 +51,8 @@ COTA_NEREZIDENT_EE = 0.02  # 2%
 # Codul de creanta (pozitia din nomenclatorul ANAF) pentru impozit nerezidenti
 COD_CREANTA_NEREZIDENTI = "634"
 DENUMIRE_CREANTA = "Impozit pe veniturile obtinute din Romania de nerezidenti - persoane juridice nerezidente"
+# Cod bugetar pentru obligatia 634 (completat cu X pana la 10 caractere)
+COD_BUGETAR_634 = "20A011700"  # se completeaza cu X la 10 (vezi structura ANAF)
 
 _LUNI = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
@@ -107,6 +109,46 @@ def calcul_impozit_nerezident(baza_comision_lei: float) -> float:
     return round(baza_comision_lei * COTA_NEREZIDENT_EE, 0)
 
 
+def calcul_scadenta(an: int, luna: int) -> str:
+    """Scadenta D100 = 25 a lunii urmatoare perioadei de raportare (ZZ.LL.AAAA)."""
+    luna_urm = luna + 1
+    an_urm = an
+    if luna_urm > 12:
+        luna_urm = 1
+        an_urm = an + 1
+    return f"25.{luna_urm:02d}.{an_urm}"
+
+
+def calcul_nr_evid_d100(an: int, luna: int, cod_oblig: str) -> str:
+    """
+    Numarul de evidenta a platii (23 cifre) pentru D100.
+    Structura ANAF:
+      Poz.1-2  : 10
+      Poz.3-5  : cod obligatie (3 cifre)
+      Poz.6-7  : 01
+      Poz.8-11 : LLAA (sfarsit perioada raportare)
+      Poz.12-17: ZZLLAA (scadenta platii)
+      Poz.18   : 0
+      Poz.19   : 0
+      Poz.20-21: 00
+      Poz.22-23: suma de control = ultimele 2 cifre din suma primelor 21 cifre
+    """
+    cod = str(cod_oblig).zfill(3)[-3:]
+    ll = f"{luna:02d}"
+    aa = f"{an % 100:02d}"
+    # scadenta = 25 a lunii urmatoare
+    luna_urm = luna + 1
+    an_urm = an
+    if luna_urm > 12:
+        luna_urm = 1
+        an_urm = an + 1
+    scad = f"25{luna_urm:02d}{an_urm % 100:02d}"  # ZZLLAA
+    primele21 = f"10{cod}01{ll}{aa}{scad}0000"  # 2+3+2+2+2+6+1+1+2 = 21
+    suma = sum(int(c) for c in primele21)
+    control = f"{suma % 100:02d}"
+    return primele21 + control
+
+
 # ============================================================
 #                    GENERATOR XML D100 (Drumul B)
 # ============================================================
@@ -137,6 +179,8 @@ def genereaza_d100(
     cui = _curata_cui(identitate.cui)
     suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei))
     suma_de_plata = 0 if suportat_de_bolt else suma_datorata
+    suma_ded = 0
+    suma_rest = 0
 
     den = _curata_text(identitate.denumire)
     adresa = _curata_text(identitate.adresa)
@@ -144,33 +188,42 @@ def genereaza_d100(
     prenume = _curata_text(identitate.prenume_declarant)
     functie = _curata_text(identitate.functie_declarant)
 
+    # totalPlata_A = suma(suma_dat + suma_ded + suma_plata + suma_rest)
+    total_plata_a = suma_datorata + suma_ded + suma_de_plata + suma_rest
+
+    cod_bugetar = (COD_BUGETAR_634 + "XXXXXXXXXX")[:10]
+    scadenta = calcul_scadenta(an, luna)
+    nr_evid = calcul_nr_evid_d100(an, luna, COD_CREANTA_NEREZIDENTI)
+
     lines = ['<?xml version="1.0" encoding="UTF-8"?>']
-    root_attrs = " ".join([
+    root_attrs = " ".join(a for a in [
         _attr("xmlns", D100_NAMESPACE),
         _attr("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance"),
         _attr("xsi:schemaLocation", f"{D100_NAMESPACE} {D100_XSD}"),
         _attr("luna", f"{luna:02d}"),
         _attr("an", an),
-        _attr("d_rec", d_rec),
-        _attr("cui", cui),
-        _attr("den", den),
-        _attr("adresa", adresa),
+        _attr("d_anulare", d_rec),  # 0 = declaratie normala
         _attr("nume_declar", nume),
         _attr("prenume_declar", prenume),
         _attr("functie_declar", functie),
-        _attr("totalPlata_A", suma_de_plata),
-    ])
+        _attr("cui", cui),
+        _attr("den", den),
+        _attr("adresa", adresa),
+        _attr("totalPlata_A", total_plata_a),
+    ] if a)
     lines.append(f"<declaratie100 {root_attrs}>")
 
-    creanta_attrs = " ".join([
-        _attr("nr_rand", 1),
-        _attr("atribut_id", COD_CREANTA_NEREZIDENTI),
-        _attr("denumire_creanta", DENUMIRE_CREANTA),
-        _attr("suma_datorata", suma_datorata),
-        _attr("suma_deductibila", 0),
-        _attr("suma_de_plata", suma_de_plata),
+    oblig_attrs = " ".join([
+        _attr("cod_oblig", COD_CREANTA_NEREZIDENTI),
+        _attr("cod_bugetar", cod_bugetar),
+        _attr("scadenta", scadenta),
+        _attr("nr_evid", nr_evid),
+        _attr("suma_dat", suma_datorata),
+        _attr("suma_ded", suma_ded),
+        _attr("suma_plata", suma_de_plata),
+        _attr("suma_rest", suma_rest),
     ])
-    lines.append(f"  <creanta {creanta_attrs}/>")
+    lines.append(f"  <obligatie {oblig_attrs}/>")
     lines.append("</declaratie100>")
     return "\n".join(lines)
 
