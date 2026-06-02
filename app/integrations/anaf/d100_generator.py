@@ -51,8 +51,8 @@ COTA_NEREZIDENT_EE = 0.02  # 2%
 # Codul de creanta (pozitia din nomenclatorul ANAF) pentru impozit nerezidenti
 COD_CREANTA_NEREZIDENTI = "634"
 DENUMIRE_CREANTA = "Impozit pe veniturile obtinute din Romania de nerezidenti - persoane juridice nerezidente"
-# Cod bugetar pentru obligatia 634 (completat cu X pana la 10 caractere)
-COD_BUGETAR_634 = "20A011700"  # se completeaza cu X la 10 (vezi structura ANAF)
+# Cod bugetar pentru obligatia 634 — CONFIRMAT cu DUKIntegrator (cont unic)
+COD_BUGETAR_634 = "20470101"
 
 _LUNI = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
@@ -178,9 +178,9 @@ def genereaza_d100(
 
     cui = _curata_cui(identitate.cui)
     suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei))
-    suma_de_plata = 0 if suportat_de_bolt else suma_datorata
-    suma_ded = 0
-    suma_rest = 0
+    # Regula ANAF R17-20.1 (model 1): suma_plata = suma_dat - suma_redu.
+    # Fara reducere, suma_plata = suma_dat. suma_ded si suma_rest NU se completeaza.
+    suma_de_plata = suma_datorata
 
     den = _curata_text(identitate.denumire)
     adresa = _curata_text(identitate.adresa)
@@ -188,10 +188,10 @@ def genereaza_d100(
     prenume = _curata_text(identitate.prenume_declarant)
     functie = _curata_text(identitate.functie_declarant)
 
-    # totalPlata_A = suma(suma_dat + suma_ded + suma_plata + suma_rest)
-    total_plata_a = suma_datorata + suma_ded + suma_de_plata + suma_rest
+    # totalPlata_A = suma(suma_dat + suma_plata) [suma_ded/rest necompletate]
+    total_plata_a = suma_datorata + suma_de_plata
 
-    cod_bugetar = (COD_BUGETAR_634 + "XXXXXXXXXX")[:10]
+    cod_bugetar = COD_BUGETAR_634
     scadenta = calcul_scadenta(an, luna)
     nr_evid = calcul_nr_evid_d100(an, luna, COD_CREANTA_NEREZIDENTI)
 
@@ -213,15 +213,14 @@ def genereaza_d100(
     ] if a)
     lines.append(f"<declaratie100 {root_attrs}>")
 
+    # suma_ded si suma_rest NU se completeaza pentru modelul 1 (regula R17-20.1)
     oblig_attrs = " ".join([
         _attr("cod_oblig", COD_CREANTA_NEREZIDENTI),
         _attr("cod_bugetar", cod_bugetar),
         _attr("scadenta", scadenta),
         _attr("nr_evid", nr_evid),
         _attr("suma_dat", suma_datorata),
-        _attr("suma_ded", suma_ded),
         _attr("suma_plata", suma_de_plata),
-        _attr("suma_rest", suma_rest),
     ])
     lines.append(f"  <obligatie {oblig_attrs}/>")
     lines.append("</declaratie100>")
