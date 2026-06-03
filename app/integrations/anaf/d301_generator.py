@@ -44,6 +44,8 @@ from xml.sax.saxutils import escape
 import unicodedata
 import re
 
+from app.domain.tax_rules import cota_tva
+
 
 # ============================================================
 #                    CONSTANTE
@@ -54,10 +56,7 @@ D301_NS_VERSION = "v1"  # CONFIRMAT empiric cu DUKIntegrator (01.06.2026)
 D301_NAMESPACE = f"mfp:anaf:dgti:d301:declaratie:{D301_NS_VERSION}"
 D301_XSD = "D301.xsd"
 
-# Cote TVA Romania, dupa data exigibilitatii/facturii
-COTA_TVA_PANA_31_07_2025 = 0.19
-COTA_TVA_DUPA_01_08_2025 = 0.21
-DATA_SCHIMBARE_COTA = date(2025, 8, 1)
+# Cota TVA (19%/21%, dupa data facturii) — sursa unica: tax_rules.cota_tva.
 
 # tip_operatie pentru achizitii servicii intracom (beneficiar plateste TVA)
 TIP_OP_SERVICII_INTRACOM = 5
@@ -81,10 +80,8 @@ class FacturaIntracom:
         return int(round(self.val_valuta * self.curs_valutar, 0))
 
     def cota(self) -> float:
-        """Cota TVA dupa data facturii (19% sau 21%)."""
-        if self.data_doc >= DATA_SCHIMBARE_COTA:
-            return COTA_TVA_DUPA_01_08_2025
-        return COTA_TVA_PANA_31_07_2025
+        """Cota TVA dupa data facturii (19%/21%) — sursa unica tax_rules.cota_tva."""
+        return cota_tva(self.data_doc)
 
     def tva_lei(self) -> float:
         """TVA = baza * cota, rotunjit la 2 zecimale."""

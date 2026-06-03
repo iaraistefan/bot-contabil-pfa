@@ -170,7 +170,7 @@ REGULI ANALIZA:
    - DOAR pentru furnizori straini cu VAT ID non-RO (vezi REGULA #6).
    - Cauta data pe factura.
    - Comision = Total Factura.
-   - TVA Datorat = Comision * 0.21 (Taxare Inversa).
+   - TVA Datorat = Comision * cota TVA standard in vigoare (Taxare Inversa).
 
 2. BON FISCAL / CHITANTA / FACTURA ROMANEASCA / CHELTUIALA:
    - Cauta data documentului sau din text.

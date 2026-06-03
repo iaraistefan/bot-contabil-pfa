@@ -12,14 +12,18 @@ comisionului, fara drept de deducere (fiind neplatitor) - deci TVA datorata
 = TVA de plata.
 """
 
+from datetime import date
+
+from app.domain.tax_rules import cota_tva, VAT_STANDARD_PCT
+
 LUNI = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
     5: "Mai", 6: "Iunie", 7: "Iulie", 8: "August",
     9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie",
 }
 
-# Cota TVA aplicabila incepand cu 1 august 2025 (Legea 141/2025)
-COTA_TVA_CURENTA = 0.21
+# Cota TVA standard curenta (fractie) — sursa unica: tax_rules.VAT_STANDARD_PCT.
+COTA_TVA_CURENTA = VAT_STANDARD_PCT / 100.0
 
 
 def construieste_fisa_d301(an: int, luna: int, baza_servicii_intra: float,
@@ -46,10 +50,8 @@ def construieste_fisa_d301(an: int, luna: int, baza_servicii_intra: float,
 
 
 def cota_tva_pentru(an: int, luna: int) -> float:
-    """Cota TVA aplicabila: 21% de la 1 august 2025, 19% inainte."""
-    if an > 2025 or (an == 2025 and luna >= 8):
-        return 0.21
-    return 0.19
+    """Cota TVA a perioadei — delegata la sursa unica tax_rules.cota_tva."""
+    return cota_tva(date(an, luna, 1))
 
 
 def construieste_fisa_d301_din_tva(an: int, luna: int, tva_de_plata: float) -> dict:
