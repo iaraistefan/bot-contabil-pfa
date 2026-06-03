@@ -166,8 +166,9 @@ def genereaza_d100(
 
     Args:
         baza_comision_lei: baza (comisionul Bolt) pe care se aplica 2%
-        suportat_de_bolt: daca True, suma_de_plata = 0 (Bolt a retinut deja),
-                          dar suma_datorata ramane calculata informativ
+        suportat_de_bolt: DEPRECATED — fara efect. Cu certificat de rezidenta,
+                          impozitul 2% se plateste de PFA din buzunar; deci
+                          suma_de_plata = suma_datorata intotdeauna.
 
     ⚠️ Verifica D100_NS_VERSION inainte de productie.
     """
@@ -244,7 +245,9 @@ def genereaza_ghid_d100(
     cui = _curata_cui(identitate.cui)
     luna_nume = _LUNI.get(luna, str(luna))
     suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei))
-    suma_de_plata = 0 if suportat_de_bolt else suma_datorata
+    # suportat_de_bolt e DEPRECATED si nu mai are efect: cu certificat de
+    # rezidenta, impozitul 2% se plateste de PFA -> suma_de_plata = suma_datorata.
+    suma_de_plata = suma_datorata
 
     b = (lambda s: s) if plain else (lambda s: f"*{s}*")
     h = "" if plain else "📋 "
@@ -269,15 +272,11 @@ def genereaza_ghid_d100(
     L.append(f"   Suma datorata: {b(suma_datorata)} lei")
     L.append(f"   {b(f'SUMA DE PLATA: {suma_de_plata} lei')}")
     L.append("")
-    if suportat_de_bolt or suma_de_plata == 0:
-        warn = ("ATENTIE: din 2023 Bolt suporta singur cei 2%. "
-                "Verifica in SPV daca mai ai de depus/platit D100. "
-                "Suma de plata poate fi 0.")
-        L.append(warn if plain else f"⚠️ _{warn}_")
-    else:
-        warn = ("VERIFICA in SPV daca Bolt nu a retinut deja cei 2% "
-                "(din 2023 ii suporta de obicei).")
-        L.append(warn if plain else f"⚠️ _{warn}_")
+    warn = ("D100 e OBLIGATORIU lunar pentru comisionul Bolt "
+            "(impozit nerezident 2%, cu certificat de rezidenta fiscala). "
+            "Se depune pana pe 25 a lunii urmatoare. Impozitul se plateste "
+            "din buzunar, suplimentar fata de comisionul Bolt.")
+    L.append(warn if plain else f"⚠️ _{warn}_")
     L.append("")
     L.append(f"{'' if plain else '✍️ '}Declarant: {_curata_text(identitate.nume_declarant)} "
              f"{_curata_text(identitate.prenume_declarant)} — "

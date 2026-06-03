@@ -184,7 +184,7 @@ def genereaza(
     d_rec: int = 0,
     factura_nr: Optional[str] = None,
     factura_data: Optional[date] = None,
-    suportat_de_bolt: bool = True,
+    suportat_de_bolt: bool = False,  # DEPRECATED — fara efect (vezi mai jos)
 ) -> RezultatDeclaratie:
     """
     Genereaza o declaratie ANAF pe luna data, pe baza comisionului Bolt.
@@ -196,7 +196,9 @@ def genereaza(
         firma: datele firmei (default = date_firma_stefan())
         d_rec: 0 = initiala, 1 = rectificativa
         factura_nr, factura_data: pt D301 (default: nr generic + ultima zi)
-        suportat_de_bolt: pt D100 (default True -> suma de plata 0)
+        suportat_de_bolt: DEPRECATED — fara efect. Cu certificat de rezidenta,
+                          impozitul nerezident 2% se plateste de PFA din buzunar;
+                          suma de plata D100 = suma datorata intotdeauna.
 
     Returns:
         RezultatDeclaratie cu ghid + XML + eventuala suma de plata.
@@ -295,15 +297,19 @@ def genereaza(
                                            d_rec=d_rec,
                                            suportat_de_bolt=suportat_de_bolt,
                                            plain=True)
-        suma = 0.0 if suportat_de_bolt else float(d100.calcul_impozit_nerezident(baza))
+        # Mereu suma reala: cu certificat de rezidenta, PFA plateste impozitul 2%
+        # din buzunar (suportat_de_bolt e DEPRECATED si ignorat intentionat).
+        suma = float(d100.calcul_impozit_nerezident(baza))
         return RezultatDeclaratie(
             tip="D100", an=an, luna=luna,
             ghid_telegram=ghid_tg, ghid_plain=ghid_pl,
             xml=xml, nume_fisier_xml=f"D100_{an}_{luna:02d}.xml",
             are_plata=(suma > 0), suma_plata=suma,
             namespace_de_confirmat=True,
-            avertismente=["Din 2023 Bolt suporta de obicei cei 2%. "
-                          "Verifica in SPV daca mai depui D100."],
+            avertismente=["D100 e obligatoriu lunar pentru comisionul Bolt "
+                          "(impozit nerezident 2% cu certificat de rezidenta). "
+                          "Se depune pana pe 25 a lunii urmatoare. Impozitul se "
+                          "plateste din buzunar, suplimentar fata de comisionul Bolt."],
         )
 
     raise ValueError(f"Tip declaratie necunoscut: {tip}. "
