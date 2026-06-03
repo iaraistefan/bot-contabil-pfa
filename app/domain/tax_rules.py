@@ -8,7 +8,8 @@ PRINCIPII:
 - Documentat cu referințe la codul fiscal / ANAF unde e relevant.
 
 CONTEXT LEGAL (2026):
-- Cota TVA standard: 21% (modificată prin OUG nr. 115/2023, aplicabilă din 01.01.2024).
+- Cota TVA standard: 21% în vigoare din 01.08.2025; 19% până la 31.07.2025.
+  Sursa unică de adevăr pentru cotă în funcție de dată: cota_tva(data).
 - Comisioane Bolt/Uber: servicii intracomunitare → taxare inversă (art. 307 alin. 2 Cod Fiscal).
   Beneficiarul (șoferul PFA) aplică TVA → VAT_OUT în D301, VAT_IN dacă e plătitor TVA.
 - Cheltuieli auto: 50% deductibile pentru vehicule folosite mixt (art. 25 alin. 3 lit. l Cod Fiscal).
@@ -17,13 +18,35 @@ CONTEXT LEGAL (2026):
   Informativ — nu generăm tranzacție separată acum, va fi la D390.
 """
 
+from datetime import date
 from typing import Optional
 
 # --- Constante fiscale 2026 ---
-VAT_STANDARD_PCT = 21          # Cota TVA standard (%)
-VAT_REVERSE_CHARGE_PCT = 21    # Taxare inversă — aceeași cotă
+VAT_STANDARD_PCT = 21          # Cota TVA standard curentă (%) — din 01.08.2025
+VAT_STANDARD_PCT_PRE_2025_08 = 19  # Cota TVA standard până la 31.07.2025 (%)
+VAT_REVERSE_CHARGE_PCT = 21    # Taxare inversă — aceeași cotă ca standard
 FUEL_DEDUCTIBLE_PCT = 50       # Deductibilitate auto mixtă (%)
 WITHHOLDING_TAX_PCT = 2        # Impozit nerezidenți (informativ)
+
+# Pragul de la care se aplică 21% (înainte: 19%). OUG aplicabilă din 01.08.2025.
+PRAG_TVA_21 = date(2025, 8, 1)
+
+
+def cota_tva(data: date) -> float:
+    """
+    Cota TVA standard ca fracție (0.19 sau 0.21), în funcție de data facturii.
+
+    Sursă unică de adevăr — folosește-o în loc de orice 0.21 hardcodat.
+    - data >= 01.08.2025  → 0.21 (21%)
+    - data <  01.08.2025  → 0.19 (19%)
+
+    >>> cota_tva(date(2025, 7, 31))
+    0.19
+    >>> cota_tva(date(2025, 8, 1))
+    0.21
+    """
+    return VAT_STANDARD_PCT / 100.0 if data >= PRAG_TVA_21 \
+        else VAT_STANDARD_PCT_PRE_2025_08 / 100.0
 
 # Prefixe de VAT ID ale țărilor UE (fără România).
 # Serviciile facturate de entități cu aceste prefixe = servicii intracomunitare.
@@ -37,7 +60,8 @@ EU_VAT_PREFIXES = {
 
 def apply_reverse_charge(
     amount_net: float,
-    vat_pct: int = VAT_REVERSE_CHARGE_PCT,
+    vat_pct: Optional[int] = None,
+    data: Optional[date] = None,
 ) -> float:
     """
     Calculează TVA-ul de aplicat prin taxare inversă pe o sumă netă.
@@ -45,18 +69,31 @@ def apply_reverse_charge(
     Utilizare: comisioane Bolt/Uber (servicii intracomunitare).
     PFA-ul e obligat să declare și să plătească acest TVA la ANAF (D301).
 
+    Cota se determină astfel (în această ordine de prioritate):
+      1. vat_pct dat explicit  → override direct (compatibilitate).
+      2. data dată             → cotă derivată prin cota_tva(data).
+      3. niciunul              → cota standard curentă (VAT_REVERSE_CHARGE_PCT).
+
     Args:
         amount_net: Suma fără TVA (ex: 346.81 RON).
-        vat_pct: Cota TVA (default 21%).
+        vat_pct: Override explicit al cotei (%). Default None.
+        data: Data facturii — derivă cota corectă pe dată (19% / 21%).
 
     Returns:
         Suma TVA (ex: 72.83 RON).
 
     >>> apply_reverse_charge(346.81)
     72.83
+    >>> apply_reverse_charge(346.81, data=date(2025, 7, 31))
+    65.89
     """
-    vat = round(amount_net * vat_pct / 100, 2)
-    return vat
+    if vat_pct is not None:
+        cota = vat_pct / 100.0
+    elif data is not None:
+        cota = cota_tva(data)
+    else:
+        cota = VAT_REVERSE_CHARGE_PCT / 100.0
+    return round(amount_net * cota, 2)
 
 
 def fuel_deductible_share(

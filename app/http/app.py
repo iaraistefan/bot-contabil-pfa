@@ -438,7 +438,7 @@ def obligatii_fiscale(year: int, month: int):
 
     Foloseste fiscal_calendar.get_obligations_for_user cu profilul real al
     user-ului. Baza intracomunitara (comision Bolt) vine din TVA colectat
-    (vat_out_total / 0.21), deci nu mai sapam separat in facturi.
+    (vat_out_total / cota_tva a perioadei), deci nu mai sapam separat in facturi.
     """
     if not (1 <= month <= 12 and 2020 <= year <= 2099):
         return jsonify({"error": "invalid period"}), 400
@@ -476,7 +476,8 @@ def obligatii_fiscale(year: int, month: int):
             session, user_id=user_id, year=year, month=month
         )
         vat_out = float(totals.get("vat_out_total") or 0.0)
-        intracom_base = round(vat_out / 0.21, 2) if vat_out > 0 else 0.0
+        cota = float(totals.get("cota_tva") or 0.21)  # cota perioadei (sursă unică)
+        intracom_base = round(vat_out / cota, 2) if vat_out > 0 else 0.0
         has_intracom = vat_out > 0
     except Exception as e:
         logger.error(f"API obligatii profil error {year}/{month} user={user_id}: {e}")
@@ -588,7 +589,7 @@ def genereaza_declaratie(tip: str, year: int, month: int):
       - format=ghid (default) -> JSON cu ghid de completare + meta
       - format=xml            -> descarca fisierul XML
 
-    Baza intracom (comision Bolt) vine din TVA colectat (vat_out/0.21),
+    Baza intracom (comision Bolt) vine din TVA colectat (vat_out/cota perioadei),
     la fel ca la /obligatii. Datele firmei (CUI, cod special, banca, IBAN)
     vin din profilul user-ului.
     """
@@ -614,7 +615,8 @@ def genereaza_declaratie(tip: str, year: int, month: int):
             session, user_id=user_id, year=year, month=month
         )
         vat_out = float(totals.get("vat_out_total") or 0.0)
-        baza_intracom = round(vat_out / 0.21, 2) if vat_out > 0 else 0.0
+        cota = float(totals.get("cota_tva") or 0.21)  # cota perioadei (sursă unică)
+        baza_intracom = round(vat_out / cota, 2) if vat_out > 0 else 0.0
     except Exception as e:
         logger.error(f"API declaratie profil error {tip} {year}/{month} user={user_id}: {e}")
         session.close()

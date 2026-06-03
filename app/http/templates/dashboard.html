@@ -759,7 +759,7 @@
     if(loaded.venituri)return; loaded.venituri=true;
     try{
       const p=await getPeriod(Y,M);
-      // brut/comision din breakdown sau period; comision = TVA_OUT/0.21 dacă există
+      // brut/comision din breakdown sau period; comision = TVA_OUT/cota dacă există
       const comision = p.expense_breakdown ? (p.expense_breakdown.find(x=>/comision/i.test(x.label))?.amount_brut||0) : 0;
       const brut = Number(p.income_total||0);
       setTxt("ven-brut", RON(brut));
@@ -849,7 +849,8 @@
     if(loaded.tva)return; loaded.tva=true;
     try{
       const p=await getPeriod(Y,M);
-      const baza = p.vat_out_total>0 ? p.vat_out_total/0.21 : 0;
+      const cota = p.cota_tva || 0.21;  // cota perioadei, din backend (sursă unică)
+      const baza = p.vat_out_total>0 ? p.vat_out_total/cota : 0;
       setTxt("tva-d301", RON(p.vat_out_total));
       setTxt("tva-baza", RON(baza));
     }catch(e){console.error(e);}

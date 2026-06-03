@@ -11,6 +11,7 @@ ACTIVITY-AWARE + PROFILE-AWARE (Pas 8.4a):
 
 import logging
 from collections import defaultdict
+from datetime import date
 from typing import Dict, Any, List, Type, Optional
 
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from app.domain.fiscal_profile import (
     from_user_id as fiscal_profile_from_user_id,
 )
 from app.domain.tax_calculator import compute_full_estimate, TaxEstimate
+from app.domain.tax_rules import cota_tva
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +177,9 @@ def compute_period(
         "vat_out_total": round(vat_out, 2),
         "vat_in_total": round(vat_in, 2),
         "vat_net": vat_net,
+        # Cota TVA a perioadei (sursă unică de adevăr; folosită la inversarea
+        # bază = vat_out / cota_tva, pe backend și în dashboard).
+        "cota_tva": cota_tva(date(year, month, 1)),
         "profit_estimated": profit_estimated,
         "tx_count": len(txs),
         "fiscal_estimate": fiscal_estimate.to_dict() if fiscal_estimate else None,
@@ -295,7 +300,7 @@ def format_report_message(totals: Dict[str, Any]) -> str:
     if has_vat:
         lines += [
             "🏛️ *TVA (taxare inversă D301)*",
-            f"  Bază facturi: `{t['vat_out_total'] / 0.21:.2f} RON`",
+            f"  Bază facturi: `{t['vat_out_total'] / t['cota_tva']:.2f} RON`",
             f"  TVA colectat (D301): `{t['vat_out_total']:.2f} RON`",
             f"  TVA deductibil: `{t['vat_in_total']:.2f} RON`",
             f"  *Net TVA de plătit: {t['vat_net']:.2f} RON*",

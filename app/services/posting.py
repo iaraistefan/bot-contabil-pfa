@@ -517,8 +517,9 @@ def _post_factura_comision(
             f"fallback to REVERSE_CHARGE"
         )
 
-    # Calcul TVA — același pentru toate scenariile (21% la momentul actual)
-    vat_amount = tax_rules.apply_reverse_charge(comision)
+    # Calcul TVA — cota pe data facturii (19%/21%, sursă unică: tax_rules.cota_tva).
+    # Dacă data lipsește, apply_reverse_charge cade pe cota standard curentă.
+    vat_amount = tax_rules.apply_reverse_charge(comision, data=occurred_on)
 
     # ── 1. VAT_OUT (TVA colectat — datorat) ──
     tx_vat_out = tx_repo.create(

@@ -28,12 +28,26 @@ Callback namespace: "confirm"
 """
 
 import logging
+from datetime import date, datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from app.ai.schemas import ExtractionItem
+from app.domain.tax_rules import cota_tva
 
 logger = logging.getLogger(__name__)
+
+
+def _data_item(item: dict) -> date:
+    """Data facturii din item (format DD.MM.YYYY) ca `date`; fallback la azi."""
+    raw = item.get("data")
+    if raw:
+        try:
+            return datetime.strptime(raw, "%d.%m.%Y").date()
+        except (ValueError, TypeError):
+            pass
+    return date.today()
+
 
 _PENDING_KEY = "confirm_pending"
 _EDIT_KEY = "confirm_edit"
@@ -446,7 +460,8 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return True
         item[field] = getattr(validated, field)
         if item.get("tip") == "FACTURA_COMISION" and field == "comision":
-            item["tva"] = round(item["comision"] * 0.21, 2)
+            # Cotă TVA pe data facturii (19%/21%); fallback la azi dacă lipsește.
+            item["tva"] = round(item["comision"] * cota_tva(_data_item(item)), 2)
             item["brut"] = item["comision"]
         if item.get("tip") == "CHELTUIALA" and field == "brut":
             item["net"] = item["brut"]
