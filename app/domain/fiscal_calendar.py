@@ -38,6 +38,7 @@ from app.integrations.anaf_iban_db import (
     IbanCont,
     get_iban_for_obligation,
 )
+from app.domain.contributii import PARAMETRI_CONTRIBUTII, salariu_minim as _salariu_minim_an
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +47,11 @@ logger = logging.getLogger(__name__)
 #                    CONSTANTE
 # ============================================================
 
-# Aliniate cu app/domain/fiscal_profile.py
-SALARIU_MINIM_BRUT_2026 = 4050  # RON
-COTA_IMPOZIT_PFA = 10           # %
-COTA_CAS = 25                   # %
-COTA_CASS = 10                  # %
+# CAS/CASS + salariu minim — sursa unica: app.domain.contributii.
+SALARIU_MINIM_BRUT_2026 = _salariu_minim_an(2026)        # 4050 RON
+COTA_IMPOZIT_PFA = 10                                     # %
+COTA_CAS = PARAMETRI_CONTRIBUTII[2026]["cota_cas"]        # 25 %
+COTA_CASS = PARAMETRI_CONTRIBUTII[2026]["cota_cass"]      # 10 %
 COTA_IMPOZIT_PROFIT_SRL = 16    # %
 COTA_TVA_STANDARD = 21          # %
 COTA_RETINERE_NEREZIDENT_EE = 2 # %  CDI România-Estonia
@@ -867,7 +868,7 @@ ANNUAL_DEADLINES = [
             f"Plafonul maxim 2026: 60 salarii minime = "
             f"{60 * SALARIU_MINIM_BRUT_2026} RON. "
             f"Suma maximă CASS: "
-            f"{round(60 * SALARIU_MINIM_BRUT_2026 * 0.10, 2)} RON/an."
+            f"{round(60 * SALARIU_MINIM_BRUT_2026 * COTA_CASS / 100, 2)} RON/an."
         ),
         "where": "Prin D212",
         "urgency": "medium",

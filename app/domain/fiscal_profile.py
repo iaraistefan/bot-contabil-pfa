@@ -32,6 +32,8 @@ from enum import Enum
 from typing import List, Optional, Dict, Any
 import logging
 
+from app.domain.contributii import PARAMETRI_CONTRIBUTII, salariu_minim as _salariu_minim_an
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,8 +41,9 @@ logger = logging.getLogger(__name__)
 #                    CONSTANTE FISCALE 2026
 # ============================================================
 
-# Salariu minim brut 2026 (folosit pentru plafoane CAS/CASS)
-SALARIU_MINIM_BRUT_2026 = 4050.0
+# Salariu minim brut 2026 pentru plafoane CAS/CASS — derivat din sursa unica
+# app.domain.contributii (NU duplicat aici). Valoarea de la 1 ianuarie = 4050.
+SALARIU_MINIM_BRUT_2026 = float(_salariu_minim_an(2026))
 
 # Plafon TVA general (cifra afaceri RON)
 VAT_THRESHOLD_RON = 300_000.0
@@ -52,11 +55,13 @@ VAT_THRESHOLD_EU_GENERAL_EUR = 100_000.0   # vechi
 # Plafon SRL Microîntreprindere (cifra afaceri EUR)
 SRL_MICRO_THRESHOLD_EUR = 500_000.0
 
-# Plafoane CAS/CASS pentru PFA (multipli ai salar minim brut)
-CAS_THRESHOLD_MULTIPLIER = 12   # 12 × 4050 = 48.600 RON/an
-CASS_THRESHOLD_MULTIPLIER = 6   # 6 × 4050 = 24.300 RON/an
-CAS_MAX_BASE_MULTIPLIER = 24    # 24 × 4050 = 97.200 RON/an (plafon maxim CAS)
-CASS_MAX_BASE_MULTIPLIER = 60   # 60 × 4050 = 243.000 RON/an (plafon maxim CASS)
+# Plafoane CAS/CASS pentru PFA (multipli ai salar minim brut) — sursa unica:
+# app.domain.contributii.PARAMETRI_CONTRIBUTII.
+_P = PARAMETRI_CONTRIBUTII[2026]
+CAS_THRESHOLD_MULTIPLIER = _P["cas_jos"]    # 12 → 48.600 RON/an
+CASS_THRESHOLD_MULTIPLIER = _P["cass_jos"]  # 6  → 24.300 RON/an
+CAS_MAX_BASE_MULTIPLIER = _P["cas_sus"]     # 24 → 97.200 RON/an (plafon maxim CAS)
+CASS_MAX_BASE_MULTIPLIER = _P["cass_sus"]   # 60 → 243.000 RON/an (plafon maxim CASS)
 
 # Cote impozit
 IMPOZIT_VENIT_PFA_PCT = 10
@@ -64,9 +69,9 @@ IMPOZIT_PROFIT_SRL_PCT = 16
 IMPOZIT_MICRO_1_PCT = 1   # micro cu salariat
 IMPOZIT_MICRO_3_PCT = 3   # micro fără salariat
 
-# Cote contribuții
-CAS_PCT = 25
-CASS_PCT = 10
+# Cote contribuții — sursa unica: app.domain.contributii.
+CAS_PCT = _P["cota_cas"]    # 25
+CASS_PCT = _P["cota_cass"]  # 10
 
 
 # ============================================================

@@ -35,6 +35,8 @@ Surse: HG 1506/2024 (salariu minim), OUG 156/2024, OUG 8/2026.
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.domain import contributii
+
 
 # ============================================================
 #         CONSTANTE 2025/2026 (D212 depusa in 2026)
@@ -43,15 +45,9 @@ from typing import List, Optional
 SALARIU_MINIM_2025 = 4050  # HG 1506/2024 — valabil tot 2025
 
 COTA_IMPOZIT = 0.10
-COTA_CAS = 0.25
-COTA_CASS = 0.10
 COTA_BONIFICATIE = 0.03
 
-# Praguri exprimate in nr. de salarii minime
-CAS_PRAG_MIN_SAL = 12   # sub 12 salarii: fara CAS
-CAS_PRAG_MAX_SAL = 24   # peste 24 salarii: baza plafonata la 24
-CASS_PRAG_MIN_SAL = 6   # baza CASS minima
-CASS_PRAG_MAX_SAL = 60  # baza CASS maxima
+# CAS/CASS (cote + praguri) NU se mai definesc aici — sursa unica: app.domain.contributii.
 
 
 # ============================================================
@@ -111,60 +107,22 @@ def calculeaza_d212(
     cheltuieli = max(0.0, float(cheltuieli_deductibile))
     venit_net = round(venit_brut - cheltuieli, 2)
 
-    prag_6 = CASS_PRAG_MIN_SAL * salariu_minim   # 24.300
-    prag_12 = CAS_PRAG_MIN_SAL * salariu_minim   # 48.600
-    prag_24 = CAS_PRAG_MAX_SAL * salariu_minim   # 97.200
-    prag_60 = CASS_PRAG_MAX_SAL * salariu_minim  # 243.000
-
     avert = [
         "Calcul ORIENTATIV. Verifica cu un contabil inainte de depunere — "
         "regulile D212 au exceptii si se schimba des.",
     ]
 
-    # --- CAS (pensie 25%) ---
-    if venit_net < prag_12:
-        cas_baza = 0.0
-        cas = 0.0
-        cas_expl = (
-            f"Venit net {venit_net:.0f} lei < {CAS_PRAG_MIN_SAL} salarii "
-            f"({prag_12:.0f} lei) -> CAS neobligatoriu (0 lei). "
-            f"Poti opta voluntar sa platesti."
-        )
-    elif venit_net < prag_24:
-        cas_baza = float(prag_12)
-        cas = round(cas_baza * COTA_CAS, 2)
-        cas_expl = (
-            f"Venit net intre {CAS_PRAG_MIN_SAL} si {CAS_PRAG_MAX_SAL} salarii "
-            f"-> baza {cas_baza:.0f} lei × 25% = {cas:.0f} lei."
-        )
-    else:
-        cas_baza = float(prag_24)
-        cas = round(cas_baza * COTA_CAS, 2)
-        cas_expl = (
-            f"Venit net >= {CAS_PRAG_MAX_SAL} salarii ({prag_24:.0f} lei) "
-            f"-> baza plafonata {cas_baza:.0f} lei × 25% = {cas:.0f} lei."
-        )
+    # --- CAS (pensie 25%) + CASS (sanatate 10%) — sursa unica: contributii ---
+    # salariu_minim pasat explicit pentru a pastra exact comportamentul anterior.
+    cas_r = contributii.calcul_cas(venit_net, an, salariu_minim=salariu_minim)
+    cas = cas_r["valoare"]
+    cas_baza = cas_r["baza"]
+    cas_expl = cas_r["nota"]
 
-    # --- CASS (sanatate 10%) ---
-    if venit_net <= 0:
-        cass_baza = 0.0
-        cass = 0.0
-        cass_expl = "Venit net <= 0 -> fara CASS."
-    else:
-        cass_baza = min(max(venit_net, prag_6), prag_60)
-        cass = round(cass_baza * COTA_CASS, 2)
-        if venit_net < prag_6:
-            cass_expl = (
-                f"Venit net {venit_net:.0f} < {CASS_PRAG_MIN_SAL} salarii "
-                f"-> baza minima {prag_6:.0f} lei × 10% = {cass:.0f} lei."
-            )
-        elif venit_net > prag_60:
-            cass_expl = (
-                f"Venit net peste plafon -> baza maxima {prag_60:.0f} lei "
-                f"× 10% = {cass:.0f} lei."
-            )
-        else:
-            cass_expl = f"Baza {cass_baza:.0f} lei × 10% = {cass:.0f} lei."
+    cass_r = contributii.calcul_cass(venit_net, an, salariu_minim=salariu_minim)
+    cass = cass_r["valoare"]
+    cass_baza = cass_r["baza"]
+    cass_expl = cass_r["nota"]
 
     # --- Impozit (10% pe venit net - CAS - CASS) ---
     venit_impozabil = max(0.0, round(venit_net - cas - cass, 2))

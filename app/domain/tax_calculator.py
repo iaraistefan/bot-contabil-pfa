@@ -34,8 +34,13 @@ from app.domain.fiscal_profile import (
     CAS_PCT,
     CASS_PCT,
 )
+from app.domain import contributii
 
 logger = logging.getLogger(__name__)
+
+# Anul de referinta pentru parametrii CAS/CASS. SMB se paseaza explicit ca
+# override, deci anul selecteaza doar cotele/multiplicatorii (identici 2025/2026).
+_AN_REFERINTA = 2026
 
 
 # ============================================================
@@ -242,34 +247,23 @@ def compute_cas(
             explanation="CAS nu se aplică pentru forma juridică SRL",
         )
 
+    # Suma vine din sursa unica (reguli corecte: escaladare baza 12×→24× dupa
+    # venit). Gating-ul pe forma juridica ramane mai sus. base_choice_multiplier
+    # permite alegerea unei baze mai mari (pensie mai mare).
+    baza_aleasa = base_choice_multiplier * salariu_minim if base_choice_multiplier else None
+    r = contributii.calcul_cas(
+        venit_net_anual, _AN_REFERINTA,
+        salariu_minim=int(salariu_minim),
+        baza_aleasa=baza_aleasa,
+    )
     threshold = profile.cas_threshold_ron or (CAS_THRESHOLD_MULTIPLIER * salariu_minim)
-
-    if venit_net_anual < threshold:
-        return ContributionResult(
-            applicable=False,
-            threshold_ron=threshold,
-            explanation=(
-                f"CAS NU se aplică — venit net anual ({venit_net_anual:.2f} RON) "
-                f"sub plafonul de {threshold:.2f} RON ({CAS_THRESHOLD_MULTIPLIER}× salar minim)"
-            ),
-        )
-
-    # Aplicabil — calculează baza
-    # Baza aleasă: între 12× și 24× salar minim (default = 12× = minim)
-    multiplier = max(CAS_THRESHOLD_MULTIPLIER, min(base_choice_multiplier, CAS_MAX_BASE_MULTIPLIER))
-    base = multiplier * salariu_minim
-    amount = round(base * CAS_PCT / 100, 2)
-
     return ContributionResult(
-        amount=amount,
-        rate_pct=CAS_PCT,
-        base=base,
+        amount=r["valoare"],
+        rate_pct=r["cota_pct"],
+        base=r["baza"],
         threshold_ron=threshold,
-        applicable=True,
-        explanation=(
-            f"CAS {CAS_PCT}% × {multiplier}× salariu minim "
-            f"({base:.2f} RON) = {amount:.2f} RON anual"
-        ),
+        applicable=r["aplicabil"],
+        explanation=r["nota"],
     )
 
 
@@ -306,38 +300,20 @@ def compute_cass(
             explanation="CASS nu se aplică pentru forma juridică SRL",
         )
 
-    threshold = profile.cass_threshold_ron or (CASS_THRESHOLD_MULTIPLIER * salariu_minim)
-    max_base = CASS_MAX_BASE_MULTIPLIER * salariu_minim
-
-    if venit_net_anual < threshold:
-        return ContributionResult(
-            applicable=False,
-            threshold_ron=threshold,
-            explanation=(
-                f"CASS NU se aplică — venit net anual ({venit_net_anual:.2f} RON) "
-                f"sub plafonul de {threshold:.2f} RON ({CASS_THRESHOLD_MULTIPLIER}× salar minim)"
-            ),
-        )
-
-    # Aplicabil — baza = min(venit_net, plafon maxim)
-    base = min(venit_net_anual, max_base)
-    amount = round(base * CASS_PCT / 100, 2)
-
-    base_note = (
-        f"plafonat la {CASS_MAX_BASE_MULTIPLIER}× salar minim"
-        if venit_net_anual >= max_base
-        else "venit net real"
+    # Suma vine din sursa unica. CORECTIE fata de versiunea veche: sub plafonul de
+    # 6× SMB, CASS NU mai e 0 — se datoreaza minimul pe 6× SMB (regula legala).
+    r = contributii.calcul_cass(
+        venit_net_anual, _AN_REFERINTA,
+        salariu_minim=int(salariu_minim),
     )
-
+    threshold = profile.cass_threshold_ron or (CASS_THRESHOLD_MULTIPLIER * salariu_minim)
     return ContributionResult(
-        amount=amount,
-        rate_pct=CASS_PCT,
-        base=base,
+        amount=r["valoare"],
+        rate_pct=r["cota_pct"],
+        base=r["baza"],
         threshold_ron=threshold,
-        applicable=True,
-        explanation=(
-            f"CASS {CASS_PCT}% × {base:.2f} RON ({base_note}) = {amount:.2f} RON anual"
-        ),
+        applicable=r["aplicabil"],
+        explanation=r["nota"],
     )
 
 

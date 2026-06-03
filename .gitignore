@@ -2,3 +2,6 @@ credentials.json
 __pycache__
 .env
 storage/
+
+# Artefact de verificare echivalenta D212 (nu intra in repo)
+.d212_baseline.json

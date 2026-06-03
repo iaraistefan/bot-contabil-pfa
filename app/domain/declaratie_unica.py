@@ -10,7 +10,14 @@ pana la 25 mai 2026.
 ATENTIE: valorile fiscale (salariu minim, plafoane, cote) se actualizeaza
 anual. Parametrii pentru fiecare an sunt centralizati in PARAMETRI_FISCALI,
 ca sa poata fi actualizati usor.
+
+CAS/CASS NU se mai calculeaza aici — sursa unica: app.domain.contributii.
+Acest modul pastreaza doar impozitul + orchestrarea (calcul_declaratie_unica)
+si formatarea Telegram. Estimarea e DOAR pentru afisare (flux /declaratie_unica),
+NU produce declaratie depozabila.
 """
+
+from app.domain import contributii
 
 # ============================================================
 #                    PARAMETRI FISCALI PE AN
@@ -31,10 +38,10 @@ PARAMETRI_FISCALI = {
         "cass_prag_jos": 6,    # sub acest prag se datoreaza minim la 6 SMB
         "cass_prag_sus": 60,   # peste acest prag CASS se plafoneaza la 60 SMB
     },
-    # 2026 este orientativ; salariul minim a fost majorat la 4.325 lei si
-    # plafoanele se pot schimba. De reconfirmat la implementarea pentru 2026.
+    # 2026: plafoanele PFA folosesc salariul minim de la 1 IANUARIE = 4050
+    # (NU 4325 — acela e minimul salariati din iulie). Vezi app.domain.contributii.
     2026: {
-        "salariu_minim": 4325,
+        "salariu_minim": 4050,
         "cota_impozit": 0.10,
         "cota_cas": 0.25,
         "cota_cass": 0.10,
@@ -55,81 +62,15 @@ def _params(an: int) -> dict:
 
 def calcul_cass(venit_net: float, an: int = 2025,
                 asigurat_salariat: bool = False) -> dict:
-    """
-    Contributia de asigurari sociale de sanatate (CASS), cota 10%.
-
-    Reguli pentru sistem real:
-      - venit net <= 0           -> nu se datoreaza (poate opta separat)
-      - 0 < venit net < 6 SMB    -> se datoreaza la baza de 6 SMB
-                                    (exceptie: asigurat ca salariat -> pe venit real)
-      - 6 SMB <= venit <= 60 SMB -> 10% din venitul net real
-      - venit net > 60 SMB       -> plafonat la 60 SMB
-    """
-    p = _params(an)
-    sm = p["salariu_minim"]
-    prag_jos = p["cass_prag_jos"] * sm
-    prag_sus = p["cass_prag_sus"] * sm
-
-    if venit_net <= 0:
-        baza = 0.0
-        nota = "Venit net zero sau pierdere - CASS nu se datoreaza."
-    elif venit_net < prag_jos:
-        if asigurat_salariat:
-            baza = 0.0
-            nota = "Sub 6 salarii minime, dar asigurat prin alta sursa (salariu/pensie) - CASS nu se datoreaza."
-        else:
-            baza = prag_jos
-            nota = f"Sub 6 salarii minime - CASS la baza minima de {prag_jos:.0f} lei (6 SMB)."
-    elif venit_net <= prag_sus:
-        baza = venit_net
-        nota = "CASS 10% din venitul net realizat."
-    else:
-        baza = prag_sus
-        nota = f"Peste 60 salarii minime - CASS plafonat la {prag_sus:.0f} lei (60 SMB)."
-
-    valoare = round(baza * p["cota_cass"], 0)
-    return {"valoare": valoare, "baza": baza, "nota": nota}
+    """CASS (10%) — delegat la sursa unica app.domain.contributii."""
+    return contributii.calcul_cass(venit_net, an, asigurat_salariat=asigurat_salariat)
 
 
 def calcul_cas(venit_net: float, an: int = 2025,
                baza_aleasa: float = None, pensionar: bool = False) -> dict:
-    """
-    Contributia de asigurari sociale (CAS - pensie), cota 25%.
-
-    Reguli pentru sistem real:
-      - pensionar                  -> scutit
-      - venit net < 12 SMB         -> optional (implicit 0)
-      - 12 SMB <= venit < 24 SMB   -> baza minima 12 SMB
-      - venit net >= 24 SMB        -> baza minima 24 SMB
-    Contribuabilul poate alege o baza mai mare (baza_aleasa) - pensie mai mare.
-    Implicit folosim baza minima aplicabila (contributie minima).
-    """
-    p = _params(an)
-    sm = p["salariu_minim"]
-    prag_jos = p["cas_prag_jos"] * sm
-    prag_sus = p["cas_prag_sus"] * sm
-
-    if pensionar:
-        return {"valoare": 0.0, "baza": 0.0,
-                "nota": "Pensionar - scutit de CAS."}
-
-    if venit_net < prag_jos:
-        baza_minima = 0.0
-        nota = "Sub 12 salarii minime - CAS optional (implicit nu se datoreaza)."
-    elif venit_net < prag_sus:
-        baza_minima = prag_jos
-        nota = f"Intre 12 si 24 salarii minime - baza CAS minima {prag_jos:.0f} lei (12 SMB)."
-    else:
-        baza_minima = prag_sus
-        nota = f"Peste 24 salarii minime - baza CAS minima {prag_sus:.0f} lei (24 SMB)."
-
-    baza = baza_minima
-    if baza_aleasa is not None and baza_aleasa > baza_minima:
-        baza = baza_aleasa
-        nota += f" Baza aleasa: {baza_aleasa:.0f} lei."
-
-    valoare = round(baza * p["cota_cas"], 0)
-    return {"valoare": valoare, "baza": baza, "nota": nota}
+    """CAS (25%) — delegat la sursa unica app.domain.contributii."""
+    return contributii.calcul_cas(venit_net, an,
+                                  baza_aleasa=baza_aleasa, pensionar=pensionar)
 
 
 def calcul_declaratie_unica(venit_brut: float, cheltuieli_deductibile: float,
