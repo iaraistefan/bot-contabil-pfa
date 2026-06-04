@@ -2,7 +2,7 @@
 
 > Document de stare + handoff. Citește-l la începutul fiecărei sesiuni noi de
 > dezvoltare (Claude Code nu păstrează memoria între sesiuni).
-> Ultima actualizare: 2026-06-03.
+> Ultima actualizare: 2026-06-04.
 
 ---
 
@@ -59,6 +59,9 @@ sursă: `app/integrations/anaf/declaratii_service.py`. Validate în DUKIntegrato
 
 ## PROBLEME CRITICE (Faza 0)
 
+STATUS: ✅ FAZA 0 ÎNCHISĂ COMPLET (2026-06-04). Toate cele 3 probleme critice
+rezolvate. 46 teste automate (15 TVA + 31 contribuții). Următor: Faza 1.
+
 ### ✅ #1 — D100 obligatoriu lunar (REZOLVAT, commit a8e66c5)
 Avertismentul greșit „Bolt suportă 2% → plată 0" eliminat. Acum
 `suma_de_plata = suma_datorata` mereu; param `suportat_de_bolt` DEPRECATED fără
@@ -72,14 +75,11 @@ garantată. 15 teste în `tests/test_cota_tva.py`, toate verzi. `d301_generator`
 delegat fără a atinge structura XML (echivalență numerică verificată).
 Lăsat intenționat: enunțul informativ din `prompts.py:33` („COTA TVA STANDARD: 21%").
 
-### ⬜ #3 — CAS/CASS divergență (NEÎNCEPUT — următorul pas)
-Există 2+ motoare de calcul CAS/CASS care pot diverge:
-- `app/domain/tax_calculator.py` — funcții pure CAS/CASS
-- `app/services/tax_engine.py` — estimare CAS/CASS PFA cu plafoane 2026
-- `app/integrations/anaf/d212_calc.py` — calcul pentru Declarația Unică
-**Obiectiv:** o singură sursă de adevăr pentru CAS/CASS, ca pentru TVA.
-**Abordare recomandată:** plan → teste → consolidare → review → commit.
-Atenție la plafoanele 2026 (verifică valorile cu legislația curentă).
+### ✅ #3 — CAS/CASS sursă unică (REZOLVAT, commit 6b0910e)
+Consolidat 5 locuri în app/domain/contributii.py (modul pur, params per an,
+SMB 2026=4050 — valoarea de la 1 ian pentru plafoane PFA). Reparate 2 bug-uri
+în tax_calculator: CASS sub 6 SMB (era 0, acum minim real) și escaladare CAS
+la 24×. D212 real bit-identic (diff 0). 31 teste noi.
 
 ---
 
@@ -124,3 +124,5 @@ versiuni pydantic/pydantic_settings). Pre-existent, nu blochează testele pure
 - `a8e66c5` fix(d100): impozit nerezident Bolt obligatoriu lunar, plata reala
 - `e258778` fix(tva): centralizeaza cota TVA intr-o sursa unica pe data
 - `68abf4d` refactor(tva): consolideaza cele 3 locuri ramase la sursa unica cota_tva
+- `9929722` docs: adauga PROGRES.md
+- `6b0910e` refactor(contributii): sursa unica CAS/CASS, repara bug-uri estimare
