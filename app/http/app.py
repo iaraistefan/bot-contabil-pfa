@@ -28,6 +28,7 @@ from db import get_session
 from app.repositories import transactions as tx_repo
 from app.repositories import users as users_repo
 from app.services import tax_engine
+from app.domain import labels_ro
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
@@ -299,6 +300,8 @@ def transactions_list(year: int, month: int):
         txs = tx_repo.list_for_period(
             session, user_id=user_id, year=year, month=month
         )
+        # Activitatea o data per request (nu per tranzactie) — pentru etichete RO.
+        activity = tax_engine._get_user_activity(session, user_id)
         data = [{
             "id": tx.id,
             "tx_type": tx.tx_type,
@@ -315,6 +318,12 @@ def transactions_list(year: int, month: int):
             "period_year": tx.period_year,
             "period_month": tx.period_month,
             "document_id": tx.document_id,
+            # Etichete RO (sursa unica: app.domain.labels_ro). Campurile brute de
+            # mai sus RAMAN — frontend-ul le foloseste la icon/culoare.
+            "category_ro": labels_ro.category_label(tx.category, activity),
+            "tx_type_ro": labels_ro.tx_type_label(tx.tx_type),
+            "payment_ro": labels_ro.payment_label(tx.payment_method),
+            "vat_treatment_ro": labels_ro.vat_treatment_label(tx.vat_treatment),
         } for tx in txs]
         return jsonify({
             "year": year, "month": month,
