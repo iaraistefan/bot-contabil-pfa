@@ -750,7 +750,7 @@
       const col=inc?"green":(t.tx_type==="VAT_OUT"?"gold":"red");
       const sign=inc?"+":"−";
       const cls=inc?"pos":"neg";
-      return `<div class="row"><div class="ic ${col}">${ICO[t.tx_type]||ICO.EXPENSE}</div><div class="info"><div class="t">${t.category||"—"}</div><div class="m">${dmy(t.occurred_on)} · ${t.counterparty||"—"}</div></div><div class="amt ${cls} num">${sign}${RON(t.amount_brut)}</div></div>`;
+      return `<div class="row"><div class="ic ${col}">${ICO[t.tx_type]||ICO.EXPENSE}</div><div class="info"><div class="t">${t.category_ro||t.category||"—"}</div><div class="m">${dmy(t.occurred_on)} · ${t.counterparty||"—"}</div></div><div class="amt ${cls} num">${sign}${RON(t.amount_brut)}</div></div>`;
     }).join("");
   }
 
@@ -868,7 +868,7 @@
         const val=Number(t.amount_brut||0);
         if(isInc){inc+=val;sold+=val;}else{plati+=val;sold-=val;}
         n++;
-        return `<tr><td>${n}</td><td>${dmy(t.occurred_on)}</td><td>${t.category||"—"}</td><td>${t.counterparty||"—"}</td><td class="r num pos">${isInc?RON(val):"—"}</td><td class="r num neg">${isInc?"—":RON(val)}</td><td class="r num">${RON(sold)}</td></tr>`;
+        return `<tr><td>${n}</td><td>${dmy(t.occurred_on)}</td><td>${t.category_ro||t.category||"—"}</td><td>${t.counterparty||"—"}</td><td class="r num pos">${isInc?RON(val):"—"}</td><td class="r num neg">${isInc?"—":RON(val)}</td><td class="r num">${RON(sold)}</td></tr>`;
       });
       const tb=document.getElementById("reg-tbody");
       if(tb)tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="7" class="hint" style="padding:14px">Nicio înregistrare.</td></tr>';
