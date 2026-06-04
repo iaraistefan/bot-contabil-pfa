@@ -476,6 +476,11 @@ def _is_aplicabil(
     if obligatie.cod == "D301" and not has_cod_special_tva:
         return False, "Cod special TVA neînregistrat — depune D700 întâi"
 
+    # D700 (înregistrare cod special, UNICA) apare DOAR dacă NU ești deja
+    # înregistrat. Cu cod special deja obținut, nu mai e o obligație.
+    if obligatie.cod == "D700" and has_cod_special_tva:
+        return False, "Cod special TVA deja înregistrat — D700 nu mai e necesar"
+
     return True, None
 
 
