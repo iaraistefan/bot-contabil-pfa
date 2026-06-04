@@ -119,6 +119,36 @@
   .kpi .val.g{color:var(--emerald-br)} .kpi .val.gold{color:var(--gold)} .kpi .val.r{color:var(--red)}
   .kpi .sub{font-size:.72rem;color:var(--muted-2);margin-top:6px}
 
+  /* ============ HERO "CAT PLATESC SI CAND" ============ */
+  .hero-pay{background:linear-gradient(135deg,var(--night-2),var(--night));border:1px solid var(--line-2);border-radius:20px;padding:22px 24px;margin-bottom:16px}
+  .hero-pay .hp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .hero-pay .hp-title{font-family:var(--display);font-weight:700;font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .hero-pay .hp-period{font-size:.74rem;color:var(--muted-2)}
+  .hero-pay .hp-main{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .hero-pay .hp-total{font-family:var(--display);font-weight:800;font-size:2.4rem;line-height:1;letter-spacing:-.02em;color:var(--gold)}
+  .hero-pay .hp-total .cur{font-size:1.05rem;color:var(--muted);font-weight:600;margin-left:3px}
+  .hero-pay .hp-total-lab{font-size:.7rem;color:var(--muted);margin-top:7px;text-transform:uppercase;letter-spacing:.06em}
+  .hero-pay .hp-deadline{text-align:right}
+  .hero-pay .hp-deadline .d-lab{font-size:.84rem;color:var(--cream)}
+  .hero-pay .hp-deadline .d-when{color:var(--muted);font-size:.78rem;margin-top:3px}
+  .hero-pay .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle;flex:none}
+  .hero-pay .dot.ok{background:var(--emerald)} .hero-pay .dot.warn{background:var(--gold)} .hero-pay .dot.danger{background:var(--red)}
+  .hero-pay .hp-badge{font-size:.7rem;font-weight:700;padding:4px 11px;border-radius:20px;background:var(--red-dim);color:var(--red);border:1px solid rgba(242,104,92,.35)}
+  .hero-pay .hp-break{margin-top:16px;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:6px 14px}
+  .hero-pay .hp-line{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:.84rem;padding:8px 0;border-bottom:1px solid var(--line)}
+  .hero-pay .hp-line:last-child{border-bottom:none}
+  .hero-pay .hp-line .l{display:flex;align-items:center;color:var(--cream)}
+  .hero-pay .hp-line .r{color:var(--muted);font-size:.78rem;white-space:nowrap}
+  .hero-pay .hp-line .r b{color:var(--cream);font-weight:600}
+  .hero-pay .hp-decl{margin-top:13px;font-size:.8rem;color:var(--muted);line-height:1.5}
+  .hero-pay .hp-decl b{color:var(--blue);font-weight:600}
+  .hero-pay .hp-note{margin-top:13px;font-size:.8rem;color:var(--red);display:flex;gap:7px;align-items:flex-start;line-height:1.5}
+  .hero-pay.is-overdue{border-color:rgba(242,104,92,.45)}
+  .hero-pay.is-overdue .hp-total{color:var(--red)}
+  .hero-pay.is-clean .hp-total{color:var(--emerald-br)}
+  .hero-pay .hp-empty{display:flex;align-items:center;gap:13px;color:var(--emerald-br);font-family:var(--display);font-weight:600;font-size:.98rem}
+  .hero-pay .hp-empty .sub{display:block;font-family:var(--body);font-weight:400;font-size:.8rem;color:var(--muted);margin-top:3px}
+
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
 
@@ -322,6 +352,7 @@
 
       <!-- ===== OVERVIEW ===== -->
       <section class="page active" id="page-overview">
+        <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
@@ -354,12 +385,8 @@
 
         <div class="grid g-2">
           <div class="panel">
-            <div class="panel-h"><div class="t">Termene apropiate</div><span class="demo-tag">CONFORM</span></div>
-            <div class="timeline">
-              <div class="tl-item"><div class="tl-dot warn"></div><div class="tl-date">25 mai 2026 · în 0 zile</div><div class="tl-title">D301 + D390 — TVA Aprilie</div><div class="tl-desc">Taxare inversă comision Bolt · 149,65 RON</div></div>
-              <div class="tl-item"><div class="tl-dot ok"></div><div class="tl-date">25 mai 2026</div><div class="tl-title">D212 — Declarația Unică 2025</div><div class="tl-desc">Impozit + CAS + CASS anual</div></div>
-              <div class="tl-item"><div class="tl-dot ok"></div><div class="tl-date">25 iunie 2026</div><div class="tl-title">D301 + D390 — TVA Mai</div><div class="tl-desc">Se generează automat la final de lună</div></div>
-            </div>
+            <div class="panel-h"><div class="t">Termene apropiate</div></div>
+            <div class="timeline" id="ov-deadlines"></div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Activitate recentă</div></div>
@@ -711,7 +738,70 @@
       // activitate recentă din tranzacții
       const tx=await getTx(Y,M);
       renderActivity(tx);
+      // obligații fiscale (cache-uit) → cardul "cât plătesc" + termene reale
+      try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);}catch(e){console.error(e);}
     }catch(e){console.error(e);}
+  }
+
+  // ---- "Cât plătesc și când?" + termene reale ----
+  function _splitObligatii(obl){
+    const plati=obl.filter(o=>o.suma_estimata!=null && o.suma_estimata>0);
+    const declar=obl.filter(o=>o.suma_estimata==null || o.suma_estimata===0);
+    const total=plati.reduce((s,o)=>s+Number(o.suma_estimata||0),0);
+    const overdue=plati.some(o=>o.zile_ramase<0);
+    let near=null; plati.forEach(o=>{if(near===null||o.zile_ramase<near.zile_ramase)near=o;});
+    return {plati,declar,total,overdue,near};
+  }
+  function renderPay(obl){
+    const box=document.getElementById("ov-pay");if(!box)return;
+    const {plati,declar,total,overdue,near}=_splitObligatii(obl);
+    box.className="hero-pay";
+    const head=`<div class="hp-head"><div class="hp-title">Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
+
+    // Stare 4 — gol complet
+    if(plati.length===0 && declar.length===0){
+      box.classList.add("is-clean");
+      box.innerHTML=head+`<div class="hp-empty"><span style="font-size:1.4rem">✓</span><div>Nimic de plătit luna aceasta<span class="sub">Nicio declarație de depus. Ești la zi.</span></div></div>`;
+      return;
+    }
+
+    // Stare 3 — doar declarative (0 de plată)
+    if(plati.length===0){
+      box.classList.add("is-clean");
+      const lst=declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("");
+      box.innerHTML=head
+        +`<div class="hp-main"><div><div class="hp-total">0 <span class="cur">RON</span></div><div class="hp-total-lab">total de plată</div></div><div class="hp-deadline"><div class="d-lab"><span class="dot ok"></span>nimic de plătit ✓</div></div></div>`
+        +`<div class="hp-decl" style="margin-top:15px">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
+        +`<div class="hp-break">${lst}</div>`;
+      return;
+    }
+
+    // Stare 1 (normal) / 2 (restanță)
+    if(overdue) box.classList.add("is-overdue");
+    const deadlineHtml = overdue
+      ? `<div class="hp-deadline"><span class="hp-badge">⚠ RESTANȚĂ</span><div class="d-when">${termenRo(near.termen)} · ${zileRo(near.zile_ramase)}</div></div>`
+      : `<div class="hp-deadline"><div class="d-lab"><span class="dot ${DOT[near.status]||'ok'}"></span>cel mai apropiat termen</div><div class="d-when">${termenRo(near.termen)} · ${zileRo(near.zile_ramase)}</div></div>`;
+    const platiSorted=[...plati].sort((a,b)=>a.zile_ramase-b.zile_ramase);
+    const lines=platiSorted.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r"><b>${RON(o.suma_estimata)} RON</b> · ${o.zile_ramase<0?zileRo(o.zile_ramase):termenRo(o.termen)}</div></div>`).join("");
+    const declLine = declar.length
+      ? `<div class="hp-decl">+ ${declar.length===1?"1 declarație de depus":declar.length+" declarații de depus"} (fără plată): ${declar.map(o=>`<b>${o.cod}</b> — ${o.nume} · ${termenRo(o.termen)}`).join(", ")}</div>`
+      : "";
+    const note = overdue
+      ? `<div class="hp-note">⚠ <span>Se acumulează penalități cât timp nu e plătit. Depune și plătește cât mai curând.</span></div>`
+      : "";
+    box.innerHTML=head
+      +`<div class="hp-main"><div><div class="hp-total">${RON(total)} <span class="cur">RON</span></div><div class="hp-total-lab">total de plată</div></div>${deadlineHtml}</div>`
+      +`<div class="hp-break">${lines}</div>`+declLine+note;
+  }
+  function renderDeadlines(obl){
+    const box=document.getElementById("ov-deadlines");if(!box)return;
+    if(!obl.length){box.innerHTML='<div class="hint" style="padding:10px">Nicio obligație fiscală pentru această lună. ✓</div>';return;}
+    const sorted=[...obl].sort((a,b)=>a.zile_ramase-b.zile_ramase);  // depășite primele
+    box.innerHTML=sorted.map(o=>{
+      const dot=DOT[o.status]||"ok";
+      const suma=(o.suma_estimata!=null&&o.suma_estimata>0)?` · ${RON(o.suma_estimata)} RON`:" · fără plată";
+      return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
+    }).join("");
   }
   async function drawEvolution(){
     const labels=[],data=[];
