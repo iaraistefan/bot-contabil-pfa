@@ -122,10 +122,21 @@ extindere):
   (venit pozitiv / pierdere / an gol → "estimare în curs"); echivalență diff-0 pe
   `/declaratie-unica`; `conftest.py` env dummy; 6 teste.
 
+### Bucata #3 — Finalizare (ÎNCHISĂ)
+- `0ef43ba`: badge "Calendar fiscal" real (nr. obligații urgente ≤7 zile, roșu la
+  restanță, ascuns la 0); brand "Contai" pe texte user-facing (welcome onboarding +
+  status); fix card D100 pe pagina TVA (din "posibil 0, suportat de Bolt" — model
+  greșit ce contrazicea Faza 0 — în "de depus" + sumă reală 2% × comision + text
+  corect). Nume afișat bot ("CONTABIL PFA" → "Contai") se schimbă manual din BotFather.
+
 Suita: **82/82** teste verzi.
 
-**TODO hygiene** (separat, neurgent): pin `pydantic` în `requirements.txt`
-(`>=2.7,<2.12`) ca să nu reapară drift-ul `Secret` pe alt mediu.
+**TODO hygiene** (separat, neurgent):
+1. Pin `pydantic` în `requirements.txt` (`>=2.7,<2.12`) ca să nu reapară drift-ul
+   `Secret` pe alt mediu.
+2. Centralizare cote pentru afișaj: D100 `baza*0.02` (dashboard) + duplicarea
+   `COTA_TVA_STANDARD` din `fiscal_calendar.py` → o sursă unică de cote inclusiv
+   pentru display (e doar afișaj, nu calcul real).
 
 ---
 
@@ -159,3 +170,4 @@ Testele care importă `config` (ex. `tax_engine`) rulează prin `tests/conftest.
 - `8fdacc5` feat(dashboard): card "Cat platesc si cand" + termene reale pe overview
 - `6d84c01` fix(calendar): D700 apare doar pentru neinregistrati (fals pozitiv)
 - `d9a3459` feat(dashboard): suma reala D212 pe card din sursa unica
+- `0ef43ba` feat(dashboard): badge calendar real + brand Contai + fix card D100 fiscal (bucata #3)
