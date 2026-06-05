@@ -2,7 +2,7 @@
 
 > Document de stare + handoff. Citește-l la începutul fiecărei sesiuni noi de
 > dezvoltare (Claude Code nu păstrează memoria între sesiuni).
-> Ultima actualizare: 2026-06-04.
+> Ultima actualizare: 2026-06-05.
 
 ---
 
@@ -105,6 +105,30 @@ extindere):
 
 ---
 
+## FAZA 1 — REDESIGN DASHBOARD (în curs)
+
+### Bucata #1 — Termeni pe românește (ÎNCHISĂ)
+- `50c8fa7`: backend `labels_ro.py` (sursă unică etichete RO), `/transactions`
+  trimite câmpurile `_ro`, 26 teste.
+- `766935d`: frontend afișează `category_ro` în activitate + registru, fallback sigur.
+
+### Bucata #2 — Cardul "Cât plătesc și când?" (ÎNCHISĂ)
+- `8fdacc5`: card-erou full-width sus pe overview + termene reale (eliminat demo
+  hardcodat); 4 stări (plată / restanță / declarative / gol).
+- `6d84c01`: fix D700 fals pozitiv (gardă `has_cod_special_tva` în `_is_aplicabil`),
+  4 teste.
+- `d9a3459`: suma reală D212 din helper partajat `compute_d212_anual` (tax_engine)
+  — card == declarație == declarația depusă; an = `termen.year − 1`; 3 cazuri
+  (venit pozitiv / pierdere / an gol → "estimare în curs"); echivalență diff-0 pe
+  `/declaratie-unica`; `conftest.py` env dummy; 6 teste.
+
+Suita: **82/82** teste verzi.
+
+**TODO hygiene** (separat, neurgent): pin `pydantic` în `requirements.txt`
+(`>=2.7,<2.12`) ca să nu reapară drift-ul `Secret` pe alt mediu.
+
+---
+
 ## WORKFLOW DE LUCRU
 
 - **Arhitect/strategie:** Claude din chat (are memoria proiectului) — scrie
@@ -116,9 +140,11 @@ extindere):
 - Pe zone de calcul de bani: ÎNTÂI plan + teste, abia apoi aplicare.
 
 ## NOTĂ DE MEDIU
-`import config` eșuează local cu `ImportError: Secret from pydantic` (drift de
-versiuni pydantic/pydantic_settings). Pre-existent, nu blochează testele pure
-(`tax_rules`). Eventual `pip install -U pydantic` dacă vrei să rulezi app-ul local.
+Drift pydantic/pydantic_settings (`ImportError: Secret from pydantic`) la importul
+lanțului `config`. **Rezolvat local** cu `pydantic 2.11.10` (`>=2.7` pt `Secret`,
+`<2.12` pt aiogram); `requirements.txt` NEATINS → prod (Render) neafectat.
+Testele care importă `config` (ex. `tax_engine`) rulează prin `tests/conftest.py`
+(env dummy). De pinat `pydantic` în `requirements.txt` la un commit de hygiene.
 
 ## COMMITURI CHEIE (sesiunea 2026-06-03)
 - `a8e66c5` fix(d100): impozit nerezident Bolt obligatoriu lunar, plata reala
@@ -126,3 +152,10 @@ versiuni pydantic/pydantic_settings). Pre-existent, nu blochează testele pure
 - `68abf4d` refactor(tva): consolideaza cele 3 locuri ramase la sursa unica cota_tva
 - `9929722` docs: adauga PROGRES.md
 - `6b0910e` refactor(contributii): sursa unica CAS/CASS, repara bug-uri estimare
+
+## COMMITURI CHEIE (sesiunea 2026-06-05 — Faza 1)
+- `50c8fa7` feat(labels): etichete RO pentru tranzactii (sursa unica labels_ro)
+- `766935d` feat(dashboard): afiseaza etichete RO categorii in activitate + registru
+- `8fdacc5` feat(dashboard): card "Cat platesc si cand" + termene reale pe overview
+- `6d84c01` fix(calendar): D700 apare doar pentru neinregistrati (fals pozitiv)
+- `d9a3459` feat(dashboard): suma reala D212 pe card din sursa unica
