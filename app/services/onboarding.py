@@ -290,8 +290,8 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
     welcome = (
-        "👋 *Bun venit la Bot Contabil!*\n\n"
-        "Sunt asistentul tău contabil automat. Te ajut să:\n"
+        "👋 *Bun venit la Contai!*\n\n"
+        "Sunt asistentul tău fiscal automat. Te ajut să:\n"
         "• Înregistrezi automat bonuri/facturi din poze 📸\n"
         "• Generezi Registrul de Încasări și Plăți 📂\n"
         "• Calculezi profitul, TVA, contribuțiile 💰\n"

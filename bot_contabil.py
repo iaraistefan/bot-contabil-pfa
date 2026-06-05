@@ -646,7 +646,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_status = "✅ Conectat" if db_ok else "❌ Eroare"
 
     msg = (
-        "🤖 *Status Bot Contabil*\n"
+        "🤖 *Status Contai*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         f"⚙️ Versiune: *v30* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat + Bolt API)\n"
         f"🗄️ Bază de date: {db_status}\n"
