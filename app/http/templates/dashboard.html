@@ -745,34 +745,38 @@
 
   // ---- "Cât plătesc și când?" + termene reale ----
   function _splitObligatii(obl){
-    const plati=obl.filter(o=>o.suma_estimata!=null && o.suma_estimata>0);
-    const declar=obl.filter(o=>o.suma_estimata==null || o.suma_estimata===0);
+    const estimari=obl.filter(o=>o.estimare_in_curs);
+    const plati=obl.filter(o=>!o.estimare_in_curs && o.suma_estimata!=null && o.suma_estimata>0);
+    const declar=obl.filter(o=>!o.estimare_in_curs && (o.suma_estimata==null || o.suma_estimata===0));
     const total=plati.reduce((s,o)=>s+Number(o.suma_estimata||0),0);
     const overdue=plati.some(o=>o.zile_ramase<0);
     let near=null; plati.forEach(o=>{if(near===null||o.zile_ramase<near.zile_ramase)near=o;});
-    return {plati,declar,total,overdue,near};
+    return {plati,declar,estimari,total,overdue,near};
   }
   function renderPay(obl){
     const box=document.getElementById("ov-pay");if(!box)return;
-    const {plati,declar,total,overdue,near}=_splitObligatii(obl);
+    const {plati,declar,estimari,total,overdue,near}=_splitObligatii(obl);
     box.className="hero-pay";
     const head=`<div class="hp-head"><div class="hp-title">Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
+    const estLine = estimari.map(o=>`<div class="hp-decl" style="color:var(--blue)">ⓘ <b>${o.cod}</b> — se calculează pe parcursul anului (încă fără venituri pe ${o.estimare_an||Y})</div>`).join("");
 
-    // Stare 4 — gol complet
-    if(plati.length===0 && declar.length===0){
+    // Stare 4 — gol complet (nimic de plătit, de depus sau de estimat)
+    if(plati.length===0 && declar.length===0 && estimari.length===0){
       box.classList.add("is-clean");
       box.innerHTML=head+`<div class="hp-empty"><span style="font-size:1.4rem">✓</span><div>Nimic de plătit luna aceasta<span class="sub">Nicio declarație de depus. Ești la zi.</span></div></div>`;
       return;
     }
 
-    // Stare 3 — doar declarative (0 de plată)
+    // Stare 3 — 0 de plată (doar declarative și/sau estimări)
     if(plati.length===0){
       box.classList.add("is-clean");
-      const lst=declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("");
+      const declBlock = declar.length
+        ? `<div class="hp-decl" style="margin-top:15px">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
+          +`<div class="hp-break">${declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("")}</div>`
+        : "";
       box.innerHTML=head
         +`<div class="hp-main"><div><div class="hp-total">0 <span class="cur">RON</span></div><div class="hp-total-lab">total de plată</div></div><div class="hp-deadline"><div class="d-lab"><span class="dot ok"></span>nimic de plătit ✓</div></div></div>`
-        +`<div class="hp-decl" style="margin-top:15px">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
-        +`<div class="hp-break">${lst}</div>`;
+        +declBlock+estLine;
       return;
     }
 
@@ -791,7 +795,7 @@
       : "";
     box.innerHTML=head
       +`<div class="hp-main"><div><div class="hp-total">${RON(total)} <span class="cur">RON</span></div><div class="hp-total-lab">total de plată</div></div>${deadlineHtml}</div>`
-      +`<div class="hp-break">${lines}</div>`+declLine+note;
+      +`<div class="hp-break">${lines}</div>`+declLine+estLine+note;
   }
   function renderDeadlines(obl){
     const box=document.getElementById("ov-deadlines");if(!box)return;
@@ -799,7 +803,7 @@
     const sorted=[...obl].sort((a,b)=>a.zile_ramase-b.zile_ramase);  // depășite primele
     box.innerHTML=sorted.map(o=>{
       const dot=DOT[o.status]||"ok";
-      const suma=(o.suma_estimata!=null&&o.suma_estimata>0)?` · ${RON(o.suma_estimata)} RON`:" · fără plată";
+      const suma=o.estimare_in_curs?" · estimare în curs":((o.suma_estimata!=null&&o.suma_estimata>0)?` · ${RON(o.suma_estimata)} RON`:" · fără plată");
       return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
     }).join("");
   }

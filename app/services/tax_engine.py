@@ -186,6 +186,34 @@ def compute_period(
     }
 
 
+def compute_d212_anual(session: Session, *, user_id: int, an: int):
+    """
+    Estimare D212 anuala (impozit + CAS + CASS) pe baza venitului REALIZAT
+    pana acum in anul `an` (suma lunilor cu date — lunile fara date dau 0).
+
+    SURSA UNICA pentru numarul D212: exact aceeasi cale ca declaratia reala
+    (Σ compute_period -> declaratii_service.genereaza_d212 -> d212_calc ->
+    contributii). Folosita atat de /api/v1/declaratie-unica cat si de cardul
+    "cat platesc" (/api/v1/obligatii), ca sa nu existe doua surse divergente.
+
+    Returns:
+        RezultatD212Service (total_plata, cas, cass, impozit, venit_brut, ...).
+    """
+    # import lazy pentru a evita orice ciclu de import la incarcarea modulului
+    from app.integrations.anaf import declaratii_service as _decl
+
+    venit_brut = 0.0
+    cheltuieli = 0.0
+    for m in range(1, 13):
+        try:
+            t = compute_period(session, user_id=user_id, year=an, month=m)
+            venit_brut += float(t.get("income_total") or 0.0)
+            cheltuieli += float(t.get("expense_deductible_total") or 0.0)
+        except Exception:
+            continue
+    return _decl.genereaza_d212(an, round(venit_brut, 2), round(cheltuieli, 2))
+
+
 def _format_fiscal_estimate_section(totals: Dict[str, Any]) -> List[str]:
     """Formatează secțiunea de estimare fiscală adaptată formei juridice."""
     fe = totals.get("fiscal_estimate")

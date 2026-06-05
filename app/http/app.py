@@ -518,7 +518,38 @@ def obligatii_fiscale(year: int, month: int):
             "iban": (o.iban_cont.iban if o.iban_cont else None),
             "cod_buget": (o.iban_cont.cod_buget if o.iban_cont else None),
             "bonus_info": o.definitie.bonus_info,
+            "estimare_in_curs": False,
+            "estimare_an": None,
         } for o in obligatii]
+
+        # Injecteaza suma reala D212 (impozit+CAS+CASS anual) din sursa unica
+        # (acelasi numar ca /api/v1/declaratie-unica si ca declaratia depusa).
+        # An venit = termen.year - 1 (D212 declara anul anterior termenului).
+        # venit_brut == 0 (an fara date) -> NU "0 lei" sec, ci "estimare in curs".
+        d212_idx = [i for i, o in enumerate(obligatii) if o.definitie.cod == "D212"]
+        if d212_idx:
+            d212_session = get_session()
+            try:
+                for i in d212_idx:
+                    an_venit = obligatii[i].termen.year - 1
+                    r = tax_engine.compute_d212_anual(
+                        d212_session, user_id=user_id, an=an_venit
+                    )
+                    if r.venit_brut > 0:
+                        data[i]["suma_estimata"] = r.total_plata
+                        data[i]["baza_calcul"] = r.venit_net
+                    else:
+                        data[i]["suma_estimata"] = None
+                        data[i]["estimare_in_curs"] = True
+                        data[i]["estimare_an"] = an_venit
+            except Exception as e:
+                logger.error(
+                    f"API obligatii D212 suma error {year}/{month} "
+                    f"user={user_id}: {e}"
+                )
+            finally:
+                d212_session.close()
+
         return jsonify({
             "year": year, "month": month,
             "intracom_base": intracom_base,
@@ -545,31 +576,18 @@ def declaratie_unica_d212(year: int):
     if err:
         return err
 
-    from app.integrations.anaf import declaratii_service as decl
-
     session = get_session()
     try:
-        venit_brut = 0.0
-        cheltuieli = 0.0
-        for m in range(1, 13):
-            try:
-                t = tax_engine.compute_period(
-                    session, user_id=user_id, year=year, month=m
-                )
-                venit_brut += float(t.get("income_total") or 0.0)
-                cheltuieli += float(t.get("expense_deductible_total") or 0.0)
-            except Exception:
-                continue
+        # Sursa unica: helper partajat (acelasi numar ca declaratia reala si
+        # ca suma D212 din cardul "cat platesc").
+        r = tax_engine.compute_d212_anual(session, user_id=user_id, an=year)
     except Exception as e:
-        logger.error(f"API D212 agregare error {year} user={user_id}: {e}")
-        session.close()
+        logger.error(f"API D212 error {year} user={user_id}: {e}")
         return jsonify({"error": "internal error"}), 500
     finally:
         session.close()
 
-    try:
-        r = decl.genereaza_d212(year, round(venit_brut, 2), round(cheltuieli, 2))
-        return jsonify({
+    return jsonify({
             "an": r.an,
             "venit_brut": r.venit_brut,
             "cheltuieli": r.cheltuieli,
@@ -584,9 +602,6 @@ def declaratie_unica_d212(year: int):
             "ghid_plain": r.ghid_plain,
             "avertismente": r.avertismente,
         })
-    except Exception as e:
-        logger.error(f"API D212 calc error {year} user={user_id}: {e}")
-        return jsonify({"error": "internal error"}), 500
 
 
 @flask_app.route("/api/v1/declaratie/<tip>/<int:year>/<int:month>")
