@@ -2,7 +2,7 @@
 
 > Document de stare + handoff. Citește-l la începutul fiecărei sesiuni noi de
 > dezvoltare (Claude Code nu păstrează memoria între sesiuni).
-> Ultima actualizare: 2026-06-07.
+> Ultima actualizare: 2026-06-08.
 
 ---
 
@@ -158,6 +158,32 @@ known la save); gruparea în pagina Documente e pe **data fiscală** (`data_doc`
 
 ---
 
+## FAZA 3 — FUNCȚII AVANSATE (în curs)
+Direcție: „cel mai complex tool" (concurăm cu Pick/SOLO).
+
+### Sumar lunar automat pe Telegram (ÎNCHIS)
+Job nou care, **ziua 2 la 09:00**, trimite fiecărui user cu activitate **bilanțul
+lunii ÎNCHEIATE** (`format_report_message`) + linia „💳 De plătit acum" (obligații
+cu sumă > 0, din `get_obligations_for_user`; perioada = luna încheiată → termenul
+cade în luna curentă). 5 pași:
+- `7efdf79` (PAS 1): tabel `summary_sent` (gardă anti-dublură, unicitate DB pe
+  user/an/lună) + migrația `010_monthly_summary` (idempotentă).
+- `1459028` (PAS 2+3): `luna_precedenta` (wrap ian→dec) + `run_monthly_summary`
+  (izolare per-user, gardă verificată înainte / scrisă DOAR după trimitere reușită,
+  skip lună goală, linie de plată robustă). `_send_telegram_message` → bool (aditiv).
+- `ca5292d` (PAS 4): înregistrare job în `start_scheduler` (day=2, hour=9,
+  `id="monthly_summary"`); cele 5 joburi existente neatinse.
+- `06495be` (PAS 5): comanda **`/sumar_test`** owner-only (preview DOAR owner-ului,
+  NU atinge `summary_sent`, repetabil) + `build_summary_for_user` = **sursă unică** a
+  mesajului (job + comandă produc EXACT același text).
+
+Suita: **116/116** teste verzi.
+
+⚙️ **De setat în Render:** `OWNER_TELEGRAM_ID` = telegram_id-ul lui Stefan (din
+@userinfobot). Nesetat → `/sumar_test` e inert pentru toți (fail-safe).
+
+---
+
 ## TODO HYGIENE (neurgent, transversal)
 - ✅ Pin `pydantic` (`>=2.7,<2.12`) — FĂCUT (Faza 2 PAS 3, `d9b6c6e`).
 - Centralizare cote pentru afișaj: D100 `baza*0.02` (dashboard) + duplicarea
@@ -207,3 +233,9 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `d9b6c6e` chore(deps): boto3 pentru R2 + pin pydantic (PAS 3)
 - `eeb7f10` feat(api): ruta download document autentificata, stream din R2 (PAS 4)
 - `d6a8eef` feat(dashboard): pagina Documente — arhiva pe luni + download din R2 (PAS 5)
+
+## COMMITURI CHEIE (sesiunea 2026-06-08 — Faza 3 sumar lunar)
+- `7efdf79` feat(db): tabel summary_sent pentru sumar lunar (PAS 1)
+- `1459028` feat(scheduler): sumar lunar automat pe Telegram (PAS 2+3)
+- `ca5292d` feat(scheduler): inregistreaza jobul sumar lunar (PAS 4)
+- `06495be` feat(bot): comanda /sumar_test owner-only + helper unic (PAS 5)
