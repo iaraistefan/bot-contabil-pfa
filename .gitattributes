@@ -1,0 +1,3 @@
+# Fixiere binare — fără conversie de linii (altfel autocrlf corupe PDF-ul la checkout)
+*.pdf binary
+tests/fixtures/** binary
