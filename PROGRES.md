@@ -225,6 +225,37 @@ Suita: **180/180** teste verzi.
 
 ---
 
+### Import extras bancar BT (PDF) — FELIA 1 ÎNCHISĂ
+Userul încarcă extrasul BT (PDF) → botul recunoaște tranzacțiile și le afișează.
+Felia 1 = doar parsing + preview (ZERO scriere registru / clasificare / match).
+Ceva ce Pick/SOLO nu fac. 2 pași:
+- `8f1405e` (PAS 1): parser determinist BT. `app/integrations/imports/bank_statement.py`
+  — format NEUTRU `BankTxn {data, suma, directie IN/OUT, descriere}` + `BankStatementError`
+  (granița curată: conducta vede doar `BankTxn`; bancă nouă = parser nou). `bt_parser.py`
+  — `parse_bt_pdf(bytes) -> list[BankTxn]`: extracție pe COORDONATE (suma clasificată după
+  banda x a coloanei Debit/Credit; zgomotul din descriere → ignorat) + grupare multi-linie
+  + stop la `RULAJ TOTAL CONT` + carry-forward dată. **AUTO-CHECKSUM**: sum(OUT)/sum(IN) vs
+  RULAJ TOTAL CONT; nepotrivire/lipsă → `BankStatementError` (NU date parțiale tăcut).
+  Determinist pe bani, fără AI. Fixture anonimizat (re-plasare la coordonate originale →
+  benzi x neschimbate; zero scurgeri) + utilitar generare. 15 teste golden (count 34,
+  OUT 769.77 / IN 1.019,45 = checksum, spot-check, negativ zgomot+solduri). `+pdfplumber`.
+- `92a9fad` (PAS 2): handler `handle_bank_statement_wrapper` pe `filters.Document.PDF`
+  (izolat, înainte de PHOTO → foto/text bit-identice). Gărzi: onboarding/PDF/mărime 10 MB/
+  ensure_user. Download → `register_source_file(kind="bank_statement")` → `parse_bt_pdf` →
+  preview (`_format_bank_preview`+`_fmt_ron`, format RO): count + încasări/plăți + „verificat
+  cu totalul extrasului" + primele tranzacții + disclaimer „doar afișare". Eroare → mesaj
+  clar, fără date parțiale. 4 teste preview.
+
+Suita: **199/199** teste verzi.
+
+**TODO viitor (felia 1 — extensie multi-bancă):** detecție automată bancă + registru
+parsere + profil bancă per user (acum doar BT; granița `BankTxn` e pregătită).
+**Felii următoare (import extras):** clasificare tranzacții (AI pe categorie) → postare în
+registru (via `post_document`) → anti-dublură vs sync Bolt → model persistent obligații +
+match plată ↔ obligație („marchez D212 ca achitat"; cere model nou — vezi recon).
+
+---
+
 ## TODO HYGIENE (neurgent, transversal)
 - ✅ Pin `pydantic` (`>=2.7,<2.12`) — FĂCUT (Faza 2 PAS 3, `d9b6c6e`).
 - Centralizare cote pentru afișaj: D100 `baza*0.02` (dashboard) + duplicarea
@@ -298,3 +329,7 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 
 ## COMMITURI CHEIE (Faza 3 — performanță)
 - `56fb4b9` perf(d212): cache cu fingerprint pentru compute_d212_anual (zero stale)
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 1)
+- `8f1405e` feat(import): parser determinist BT (PDF) cu auto-checksum (PAS 1)
+- `92a9fad` feat(import): handler extras BT + preview (PAS 2)
