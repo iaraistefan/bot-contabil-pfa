@@ -471,6 +471,17 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # Faza 3: Sumar lunar automat (luna încheiată) — Ziua 2, 09:00
+    scheduler.add_job(
+        func=lambda: run_monthly_summary(bot_token),
+        trigger=CronTrigger(
+            day=2, hour=9, minute=0, timezone=ROMANIA_TZ
+        ),
+        id="monthly_summary",
+        name="Monthly summary (bilant luna incheiata)",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "✅ Scheduler started:\n"
@@ -478,6 +489,7 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         "   • Luni 08:30 — dashboard compliance ⭐ NOU (Pas 10.3)\n"
         "   • Ziua 20, 09:00 — alerte termene fiscale (legacy)\n"
         "   • Ziua 1, 07:00 — monitorizare legislativă\n"
-        "   • Zilnic 08:00 — alerte proactive obligații (Pas 10.1)"
+        "   • Zilnic 08:00 — alerte proactive obligații (Pas 10.1)\n"
+        "   • Ziua 2, 09:00 — sumar lunar automat ⭐ NOU (Faza 3)"
     )
     return scheduler
