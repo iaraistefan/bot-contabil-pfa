@@ -340,6 +340,25 @@ def _build_summary_message(session, user_id, year, month, totals, today) -> str:
     return cap + body + plata
 
 
+def build_summary_for_user(session, user, year, month, today=None):
+    """
+    Construieste mesajul de sumar pentru `user` pe luna (year, month).
+    Intoarce None daca luna e goala (tx_count == 0).
+
+    SURSA UNICA a mesajului — folosita ATAT de jobul automat (run_monthly_summary)
+    CAT SI de comanda manuala /sumar_test, ca sa produca EXACT acelasi mesaj.
+    """
+    from app.services import tax_engine
+    if today is None:
+        today = datetime.now(ROMANIA_TZ).date()
+    totals = tax_engine.compute_period(
+        session, user_id=user.id, year=year, month=month
+    )
+    if totals.get("tx_count", 0) == 0:
+        return None
+    return _build_summary_message(session, user.id, year, month, totals, today)
+
+
 def run_monthly_summary(bot_token: str) -> None:
     """
     Sumar lunar automat (luna ÎNCHEIATĂ) — Ziua 2, 09:00.
@@ -350,7 +369,6 @@ def run_monthly_summary(bot_token: str) -> None:
     """
     from db import get_session
     from app.models import User, SummarySent
-    from app.services import tax_engine
 
     now = datetime.now(ROMANIA_TZ)
     year, month = luna_precedenta(now)
@@ -374,14 +392,12 @@ def run_monthly_summary(bot_token: str) -> None:
                     skipped += 1
                     continue
 
-                totals = tax_engine.compute_period(
-                    session, user_id=user.id, year=year, month=month
-                )
-                if totals.get("tx_count", 0) == 0:
+                # sursa unica a mesajului (aceeasi ca /sumar_test)
+                msg = build_summary_for_user(session, user, year, month, today)
+                if msg is None:
                     skipped += 1          # lună goală: nu trimitem, nu marcăm
                     continue
 
-                msg = _build_summary_message(session, user.id, year, month, totals, today)
                 ok = _send_telegram_message(bot_token, user.telegram_id, msg)
                 if ok:
                     # marcăm garda DOAR după trimitere reușită

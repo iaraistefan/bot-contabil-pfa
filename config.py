@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     env: str = "production"
     port: int = 8080                         # Render sets PORT at runtime
 
+    # --- Owner (pentru comenzi de test owner-only, ex. /sumar_test) ---
+    # telegram_id-ul owner-ului. Nesetat -> comenzile owner-only sunt inerte.
+    owner_telegram_id: Optional[int] = None
+
     # --- Google Sheets (optional — bot starts fine without them) ---
     google_credentials_json: Optional[str] = None
     sheet_id: Optional[str] = None

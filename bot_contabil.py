@@ -1407,6 +1407,50 @@ async def execute_reminder(query, context):
         await query.edit_message_text("❌ Eroare la trimitere reminder.")
 
 
+async def handle_sumar_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /sumar_test — preview OWNER-ONLY al sumarului lunar (luna incheiata).
+
+    Trimite DOAR owner-ului, NU atinge summary_sent (repetabil oricand, nu
+    interfereaza cu jobul automat). Gardat pe OWNER_TELEGRAM_ID: nesetat sau
+    alt user -> comanda inerta. Foloseste build_summary_for_user = EXACT
+    acelasi mesaj ca jobul automat.
+    """
+    owner_id = settings.owner_telegram_id
+    if not owner_id or update.effective_user.id != owner_id:
+        await update.message.reply_text("Comandă indisponibilă.")
+        return
+
+    year, month = sched_service.luna_precedenta(
+        datetime.now(sched_service.ROMANIA_TZ)
+    )
+    session = get_session()
+    try:
+        user = users_repo.get_by_telegram_id(
+            session, telegram_id=update.effective_user.id
+        )
+        if not user:
+            await update.message.reply_text(
+                "Nu te găsesc în baza de date. Folosește /start întâi."
+            )
+            return
+        msg = sched_service.build_summary_for_user(session, user, year, month)
+        if msg is None:
+            await update.message.reply_text(
+                f"📭 Nu ai tranzacții pe {LUNI_LONG.get(month, month)} {year} "
+                f"— nimic de sumarizat."
+            )
+            return
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id, text=msg, parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"sumar_test error: {e}")
+        await update.message.reply_text("❌ Eroare la generarea sumarului.")
+    finally:
+        session.close()
+
+
 async def execute_alerts_run(query, context, user_id):
     await query.edit_message_text(
         "🔄 Rulez monitorizarea fiscală...\n"
@@ -2392,6 +2436,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("coduri_fiscale", handle_coduri_fiscale))  # Faza 1
     app_bot.add_handler(CommandHandler("cod_tva", handle_set_cod_tva))  # Faza 1
     app_bot.add_handler(CommandHandler("cnp", handle_set_cnp))  # Faza 1
+    app_bot.add_handler(CommandHandler("sumar_test", handle_sumar_test))  # Faza 3 (owner-only)
 
     # Callback queries (router pentru toate butoanele inline)
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))

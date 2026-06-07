@@ -167,3 +167,31 @@ def test_plata_line_robust_la_eroare(monkeypatch):
 
     line = scheduler._format_plata_line(None, 1, 2026, 6, date(2026, 7, 2))
     assert line == ""                               # eroare → linia se omite, nu crapă
+
+
+# ────────────────────────────────────────────────────────────
+# build_summary_for_user — sursa unica (job + comanda)
+# ────────────────────────────────────────────────────────────
+
+class _U:
+    def __init__(self, uid): self.id = uid
+
+
+def test_build_summary_for_user_luna_goala_none(monkeypatch):
+    monkeypatch.setattr(tax_engine, "compute_period",
+                        lambda session, *, user_id, year, month: {"tx_count": 0})
+    assert scheduler.build_summary_for_user(None, _U(1), 2026, 6) is None
+
+
+def test_build_summary_for_user_mesaj_si_nu_scrie_garda(monkeypatch, tmp_path):
+    Session = _db(tmp_path, monkeypatch)
+    monkeypatch.setattr(tax_engine, "compute_period",
+                        lambda session, *, user_id, year, month: {"tx_count": 4})
+    monkeypatch.setattr(scheduler, "_build_summary_message", lambda *a, **k: "SUMAR")
+
+    s = Session()
+    out = scheduler.build_summary_for_user(s, _U(1), 2026, 6, date(2026, 7, 2))
+    assert out == "SUMAR"
+    # preview nu scrie niciodata garda
+    assert s.query(SummarySent).count() == 0
+    s.close()
