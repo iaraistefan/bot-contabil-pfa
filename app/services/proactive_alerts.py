@@ -250,6 +250,33 @@ def _get_intracom_base_for_month(
         return 0.0
 
 
+# Pre-check plafon: cel mai mic prag relevant = 0.8 × CAS 12 SMB (48.600) = 38.880.
+# Sub el, nici CAS (venit_net ≤ CA) nici TVA (240k) nu pot fi aproape → skip calculul scump.
+PLAFON_PRECHECK_RON = 38_880
+
+
+def _ytd_income_brut(session, user_id: int, year: int) -> float:
+    """
+    Cifra de afaceri brută realizată YTD = SUM(amount_brut) pe tranzacțiile INCOME
+    ale anului (locked=False, ca în compute_period). UN SINGUR SUM — pre-check
+    ieftin înainte de compute_d212_anual (12× compute_period). CA ≥ venit_net,
+    deci e plafon superior sigur pentru gate.
+    """
+    from sqlalchemy import func
+    from app.models import Transaction
+    total = (
+        session.query(func.coalesce(func.sum(Transaction.amount_brut), 0.0))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.period_year == year,
+            Transaction.tx_type == "INCOME",
+            Transaction.locked == False,
+        )
+        .scalar()
+    )
+    return float(total or 0.0)
+
+
 def _get_months_to_check(today: date) -> List[Tuple[int, int]]:
     """
     Returnează lunile pentru care verificăm obligații:
