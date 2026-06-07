@@ -80,6 +80,10 @@ class User(Base):
         "FiscalAlertSent", back_populates="user",
         cascade="all, delete-orphan",
     )
+    monthly_summaries_sent = relationship(
+        "SummarySent", back_populates="user",
+        cascade="all, delete-orphan",
+    )
     # Pas 14 - Foaie de parcurs
     trip_logs = relationship(
         "TripLog", back_populates="user",
@@ -299,6 +303,42 @@ class FiscalAlertSent(Base):
             f"<FiscalAlertSent user={self.user_id} "
             f"{self.obligation_code} {self.period_year}/{self.period_month:02d} "
             f"type={self.alert_type}>"
+        )
+
+
+# ============================================================
+# Faza 3 - SummarySent (sumar lunar automat - anti-dublura)
+# ============================================================
+
+class SummarySent(Base):
+    """
+    Tracking pentru sumarul lunar automat trimis pe Telegram (anti-dublura).
+    period_year/period_month = luna INCHEIATA pentru care s-a trimis sumarul.
+    Un singur sumar per user per luna (unicitate la nivel DB).
+    """
+    __tablename__ = "summary_sent"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
+    period_year = Column(Integer, nullable=False)
+    period_month = Column(Integer, nullable=False)
+    sent_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="monthly_summaries_sent")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "period_year", "period_month",
+            name="ix_summary_sent_unique",
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<SummarySent user={self.user_id} "
+            f"{self.period_year}/{self.period_month:02d}>"
         )
 
 

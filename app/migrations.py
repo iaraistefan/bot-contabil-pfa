@@ -264,6 +264,28 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "010_monthly_summary",
+        "description": (
+            "Faza 3: sumar lunar automat - tabelul summary_sent (anti-dublura) "
+            "cu unicitate pe (user_id, period_year, period_month)"
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS summary_sent (
+                id              SERIAL PRIMARY KEY,
+                user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                period_year     INTEGER NOT NULL,
+                period_month    INTEGER NOT NULL,
+                sent_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_summary_sent_unique
+                ON summary_sent (user_id, period_year, period_month)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
