@@ -224,11 +224,13 @@ Suita: **151/151** teste verzi.
   pentru display (doar afișaj, nu calcul real).
 - `datetime.utcnow()` (`bot_contabil.py:295`, din Faza 2 PAS 2) dă
   `DeprecationWarning` → de înlocuit cu `datetime.now(datetime.UTC)`.
-- **Performanță (reconfirmat):** cache per `(user, an)` pentru `compute_d212_anual`
-  (= 12× `compute_period`). Se cheamă: 2× per sumar (secțiunea fiscală `an=year` +
-  linia de plată `an=year−1`) ȘI zilnic în jobul de plafon (per user peste pre-check
-  38.880). Pre-check-ul protejează parțial, dar la scalare (mulți useri activi) e
-  necesar cache.
+- ✅ **Cache `compute_d212_anual` — FĂCUT** (`56fb4b9`). Cache in-memory validat prin
+  FINGERPRINT `(count, max_id, sum(amount_brut))` pe filtrul identic cu `compute_period`.
+  HIT doar dacă datele neschimbate → **zero stale** (orice add/delete/lock/edit-sumă mută
+  fingerprint-ul → recompute automat, fără hooks, fără TTL). Wrapper transparent peste
+  `_compute_d212_anual_uncached`; thread-safe (lock; bot+scheduler+Flask = thread-uri în
+  același proces). Per-proces (se pierde la restart Render = doar recompute, zero risc de
+  corectitudine). La HIT: 1 query ieftin în loc de 12× `compute_period`.
 
 ---
 
@@ -284,3 +286,6 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `865ac0f` feat(contributii): prag_cas_status pentru alerte aproape-de-plafon (PAS 1)
 - `12a8cb5` feat(plafon): pre-check ieftin _ytd_income_brut (PAS 2)
 - `26b131a` feat(plafon): alerte aproape-de-plafon TVA+CAS in jobul proactiv (PAS 3)
+
+## COMMITURI CHEIE (Faza 3 — performanță)
+- `56fb4b9` perf(d212): cache cu fingerprint pentru compute_d212_anual (zero stale)
