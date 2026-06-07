@@ -129,6 +129,49 @@ def test_send_esuat_nu_marcheaza(monkeypatch):
     assert logged == []                                # garda NU s-a marcat → reîncearcă
 
 
+def test_cas24_dublare(monkeypatch):
+    # venit_net peste 24 SMB (97.200): CAS 12 depășit + CAS 24 depășit (2 evenimente
+    # distincte, independente). TVA OK (venit_brut mic). prag_* reale (nemock-uite).
+    sent, logged = _setup(monkeypatch, ca=120_000, venit_brut=120_000, venit_net=120_000)
+    n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
+    assert n == 2                                        # CAS 12 + CAS 24
+    assert any("dublează" in m.lower() for c, m in sent)
+    assert any("PLAFON_CAS24" in str(a) and "prag_depasit" in str(a) for a in logged)
+    assert any("PLAFON_CAS" in str(a) and "PLAFON_CAS24" not in str(a) for a in logged)
+
+
+def test_cass60_plafonare(monkeypatch):
+    # venit_net peste 60 SMB (243.000): CASS plafonat (informativ). VAT payer →
+    # skip TVA, ca să izolăm. CAS 12 + CAS 24 + CASS 60 toate depășite.
+    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=250_000)
+    n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(is_vat_payer=True), _TODAY)
+    assert n == 3                                        # CAS 12 + CAS 24 + CASS 60
+    cass_msg = next(m for c, m in sent if "plafon" in m.lower() and "CASS" in m)
+    assert "nu mai crește" in cass_msg.lower()
+    assert "ℹ️" in cass_msg and "🔴" not in cass_msg     # ton informativ, nu alarmant
+    assert any("PLAFON_CASS60" in str(a) for a in logged)
+
+
+def test_toate_4_pragurile(monkeypatch):
+    # high earner: TVA depășit + CAS 12 + CAS 24 + CASS 60 → 4 alerte, coduri distincte.
+    sent, logged = _setup(monkeypatch, ca=310_000, venit_brut=310_000, venit_net=250_000)
+    n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
+    assert n == 4
+    coduri = {c for a in logged for c in
+              ("PLAFON_TVA", "PLAFON_CAS24", "PLAFON_CASS60") if c in str(a)}
+    assert coduri == {"PLAFON_TVA", "PLAFON_CAS24", "PLAFON_CASS60"}
+
+
+def test_praguri_noi_nu_afecteaza_cele_vechi(monkeypatch):
+    # venit sub pragurile noi (CAS24 80%=77.760, CASS60 80%=194.400): doar TVA+CAS12,
+    # noile praguri tac (OK) → comportament identic cu înainte.
+    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=50_000)
+    n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
+    assert n == 2                                        # TVA aproape + CAS 12 depășit
+    assert not any("PLAFON_CAS24" in str(a) for a in logged)
+    assert not any("PLAFON_CASS60" in str(a) for a in logged)
+
+
 def test_robust_compute_crapa(monkeypatch):
     monkeypatch.setattr(pa, "_ytd_income_brut", lambda s, u, y: 250_000)
     def _boom(*a, **k):

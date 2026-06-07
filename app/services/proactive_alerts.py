@@ -457,12 +457,16 @@ def _maybe_send_plafon(session, bot_token, user, year, code, st, message) -> int
 
 def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
     """
-    Alerte „aproape de plafon" (TVA 300k + CAS 12 SMB) pe realizat YTD.
+    Alerte „aproape de plafon" pe realizat YTD: TVA 300k + CAS 12 SMB
+    (obligatoriu) + CAS 24 SMB (baza se dublează) + CASS 60 SMB (plafonare).
 
     Pre-check ieftin: dacă CA YTD < PLAFON_PRECHECK_RON → skip (nu rulăm
-    compute_d212_anual). Anti-spam: o alertă / prag / treaptă (prag_80 /
-    prag_depasit) / an (period_month=0). Sursă unică: compute_d212_anual +
-    vat_threshold_status + prag_cas_status. Robust: eroare → 0.
+    compute_d212_anual). Gate-ul 38.880 (= 80% din cel mai MIC prag, CAS 12)
+    acoperă corect toate pragurile — cine e sub el e departe de oricare.
+    Anti-spam: o alertă / cod plafon / treaptă (prag_80 / prag_depasit) / an
+    (period_month=0); coduri independente (PLAFON_TVA/CAS/CAS24/CASS60). Sursă
+    unică: compute_d212_anual + vat_threshold_status + prag_*_status. Robust:
+    eroare → 0.
     """
     try:
         year = today.year
@@ -480,11 +484,23 @@ def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
                 session, bot_token, user, year, "PLAFON_TVA",
                 st, _tva_plafon_message(st, r.venit_brut),
             )
-        # CAS 12 SMB
+        # CAS 12 SMB — CAS devine obligatoriu
         st_cas = contributii.prag_cas_status(r.venit_net, year)
         sent += _maybe_send_plafon(
             session, bot_token, user, year, "PLAFON_CAS",
             st_cas, st_cas["message"],
+        )
+        # CAS 24 SMB — baza CAS se dublează (eveniment distinct de 12 SMB)
+        st_cas24 = contributii.prag_cas24_status(r.venit_net, year)
+        sent += _maybe_send_plafon(
+            session, bot_token, user, year, "PLAFON_CAS24",
+            st_cas24, st_cas24["message"],
+        )
+        # CASS 60 SMB — CASS se plafonează (informativ)
+        st_cass60 = contributii.prag_cass60_status(r.venit_net, year)
+        sent += _maybe_send_plafon(
+            session, bot_token, user, year, "PLAFON_CASS60",
+            st_cass60, st_cass60["message"],
         )
         return sent
     except Exception as e:

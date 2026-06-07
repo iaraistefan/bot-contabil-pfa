@@ -186,6 +186,32 @@ def calcul_cass(venit_net: float, an: int, *,
 #           PRAGURI — STATUS pentru alerte „aproape de plafon"
 # ============================================================
 
+def _prag_core(value: float, threshold: float) -> dict:
+    """
+    Partea NUMERICĂ comună a tuturor statusurilor de prag (CAS 12, CAS 24,
+    CASS 60): status + utilized_pct + remaining_ron + threshold_ron.
+
+    Mesajul NU se construiește aici — îl adaugă fiecare funcție publică, pentru
+    că semantica diferă (12 = CAS obligatoriu, 24 = baza se dublează „rău",
+    60 = CASS plafonat „bine"). Matematica e o singură dată (DRY); mesajele,
+    separate. status: OK (<80%) / APROAPE_PLAFON (≥80%) / DEPASIT_PLAFON (≥100%).
+    """
+    utilized_pct = (value / threshold * 100) if threshold else 0.0
+    remaining = max(0.0, round(threshold - value, 2))
+    if value >= threshold:
+        status = "DEPASIT_PLAFON"
+    elif utilized_pct >= 80:
+        status = "APROAPE_PLAFON"
+    else:
+        status = "OK"
+    return {
+        "status": status,
+        "threshold_ron": float(threshold),
+        "utilized_pct": utilized_pct,
+        "remaining_ron": remaining,
+    }
+
+
 def prag_cas_status(venit_net: float, an: int) -> dict:
     """
     Status față de pragul CAS de 12 SMB (peste care CAS devine OBLIGATORIU).
@@ -199,34 +225,105 @@ def prag_cas_status(venit_net: float, an: int) -> dict:
     sm = p["salariu_minim"]
     threshold = float(p["cas_jos"] * sm)                 # 12 × 4050 = 48.600
     cas_obligatoriu = round(threshold * p["cota_cas"] / 100, 2)  # 12.150 la 4050
-    utilized_pct = (venit_net / threshold * 100) if threshold else 0.0
-    remaining = max(0.0, round(threshold - venit_net, 2))
+    core = _prag_core(venit_net, threshold)
+    status = core["status"]
+    utilized_pct = core["utilized_pct"]
+    remaining = core["remaining_ron"]
 
-    if venit_net >= threshold:
-        status = "DEPASIT_PLAFON"
+    if status == "DEPASIT_PLAFON":
         message = (
             f"🔴 Ai depășit pragul de {threshold:.0f} RON "
             f"({p['cas_jos']} salarii minime). CAS devine obligatoriu "
             f"(~{cas_obligatoriu:.0f} lei/an)."
         )
-    elif utilized_pct >= 80:
-        status = "APROAPE_PLAFON"
+    elif status == "APROAPE_PLAFON":
         message = (
             f"🟡 Aproape de pragul CAS: {utilized_pct:.0f}% "
             f"({venit_net:.0f} / {threshold:.0f} RON). Mai ai ~{remaining:.0f} lei "
             f"până la {threshold:.0f} → CAS obligatoriu (~{cas_obligatoriu:.0f} lei/an)."
         )
     else:
-        status = "OK"
         message = (
             f"✅ Sub pragul CAS: {utilized_pct:.0f}% "
             f"({venit_net:.0f} / {threshold:.0f} RON)."
         )
 
-    return {
-        "status": status,
-        "threshold_ron": threshold,
-        "utilized_pct": utilized_pct,
-        "remaining_ron": remaining,
-        "message": message,
-    }
+    return {**core, "message": message}
+
+
+def prag_cas24_status(venit_net: float, an: int) -> dict:
+    """
+    Status față de pragul CAS de 24 SMB (peste care BAZA CAS se DUBLEAZĂ).
+
+    Sub 24 SMB baza CAS = 12 SMB; la/peste 24 SMB baza = 24 SMB → CAS ~dublu.
+    Eveniment fiscal DISTINCT de pragul de 12 SMB (în alerte sunt independente:
+    12 = CAS devine obligatoriu; 24 = baza se dublează). Ton „rău" (plătești mai
+    mult). Toate cifrele din sursa unică (PARAMETRI_CONTRIBUTII).
+    """
+    p = _params(an)
+    sm = p["salariu_minim"]
+    threshold = float(p["cas_sus"] * sm)                       # 24 × 4050 = 97.200
+    cas_jos_val = round(p["cas_jos"] * sm * p["cota_cas"] / 100, 2)   # ~12.150
+    cas_sus_val = round(threshold * p["cota_cas"] / 100, 2)          # ~24.300
+    core = _prag_core(venit_net, threshold)
+    status = core["status"]
+    utilized_pct = core["utilized_pct"]
+    remaining = core["remaining_ron"]
+
+    if status == "DEPASIT_PLAFON":
+        message = (
+            f"🔴 Ai depășit pragul de {threshold:.0f} RON "
+            f"({p['cas_sus']} salarii minime). Baza CAS se DUBLEAZĂ: "
+            f"CAS ~{cas_sus_val:.0f} lei/an (față de ~{cas_jos_val:.0f} la pragul minim)."
+        )
+    elif status == "APROAPE_PLAFON":
+        message = (
+            f"🟡 Aproape de pragul CAS de {p['cas_sus']} salarii minime: "
+            f"{utilized_pct:.0f}% ({venit_net:.0f} / {threshold:.0f} RON). Mai ai "
+            f"~{remaining:.0f} lei până când baza CAS se dublează (~{cas_sus_val:.0f} lei/an)."
+        )
+    else:
+        message = (
+            f"✅ Sub pragul CAS de {p['cas_sus']} salarii minime: {utilized_pct:.0f}% "
+            f"({venit_net:.0f} / {threshold:.0f} RON)."
+        )
+
+    return {**core, "message": message}
+
+
+def prag_cass60_status(venit_net: float, an: int) -> dict:
+    """
+    Status față de plafonul CASS de 60 SMB (peste care CASS se PLAFONEAZĂ).
+
+    La/peste 60 SMB, CASS nu mai crește proporțional — rămâne la 60 SMB × 10%.
+    Informație neutru-favorabilă: NU e o felicitare (CASS rămâne de plată
+    integral, ~24.300 lei/an), doar nu mai crește. Ton ℹ️. Toate cifrele din
+    sursa unică (PARAMETRI_CONTRIBUTII).
+    """
+    p = _params(an)
+    sm = p["salariu_minim"]
+    threshold = float(p["cass_sus"] * sm)                  # 60 × 4050 = 243.000
+    cass_max = round(threshold * p["cota_cass"] / 100, 2)  # ~24.300
+    core = _prag_core(venit_net, threshold)
+    status = core["status"]
+    utilized_pct = core["utilized_pct"]
+
+    if status == "DEPASIT_PLAFON":
+        message = (
+            f"ℹ️ Ai atins plafonul CASS ({p['cass_sus']} salarii minime, "
+            f"{threshold:.0f} RON). CASS-ul tău e plafonat la ~{cass_max:.0f} lei/an "
+            f"— peste acest venit NU mai crește (rămâne de plată integral)."
+        )
+    elif status == "APROAPE_PLAFON":
+        message = (
+            f"ℹ️ Aproape de plafonul CASS de {p['cass_sus']} salarii minime: "
+            f"{utilized_pct:.0f}% ({venit_net:.0f} / {threshold:.0f} RON). Peste "
+            f"{threshold:.0f} RON CASS se plafonează la ~{cass_max:.0f} lei/an (nu mai crește)."
+        )
+    else:
+        message = (
+            f"✅ Sub plafonul CASS de {p['cass_sus']} salarii minime: {utilized_pct:.0f}% "
+            f"({venit_net:.0f} / {threshold:.0f} RON)."
+        )
+
+    return {**core, "message": message}
