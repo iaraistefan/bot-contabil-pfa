@@ -7,6 +7,7 @@ skip lună goală, și robustețea liniei de plată.
 """
 
 from datetime import datetime, date
+from types import SimpleNamespace
 
 import db
 from app.services import scheduler, tax_engine
@@ -52,6 +53,7 @@ def test_orchestrare_completa(monkeypatch, tmp_path):
         return {"tx_count": tx.get(user_id, 0)}
 
     monkeypatch.setattr(tax_engine, "compute_period", fake_cp)
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", lambda *a, **k: None)
     monkeypatch.setattr(scheduler, "_build_summary_message", lambda *a, **k: "MSG")
     sends = []
     monkeypatch.setattr(scheduler, "_send_telegram_message",
@@ -85,6 +87,7 @@ def test_izolare_un_user_crapat_nu_blocheaza(monkeypatch, tmp_path):
         return {"tx_count": 3}
 
     monkeypatch.setattr(tax_engine, "compute_period", fake_cp)
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", lambda *a, **k: None)
     monkeypatch.setattr(scheduler, "_build_summary_message", lambda *a, **k: "MSG")
     sends = []
     monkeypatch.setattr(scheduler, "_send_telegram_message",
@@ -101,6 +104,7 @@ def test_send_esuat_nu_marcheaza_garda(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tax_engine, "compute_period",
                         lambda session, *, user_id, year, month: {"tx_count": 9})
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", lambda *a, **k: None)
     monkeypatch.setattr(scheduler, "_build_summary_message", lambda *a, **k: "MSG")
     # trimitere eșuată
     monkeypatch.setattr(scheduler, "_send_telegram_message",
@@ -187,6 +191,7 @@ def test_build_summary_for_user_mesaj_si_nu_scrie_garda(monkeypatch, tmp_path):
     Session = _db(tmp_path, monkeypatch)
     monkeypatch.setattr(tax_engine, "compute_period",
                         lambda session, *, user_id, year, month: {"tx_count": 4})
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", lambda *a, **k: None)
     monkeypatch.setattr(scheduler, "_build_summary_message", lambda *a, **k: "SUMAR")
 
     s = Session()
@@ -194,4 +199,31 @@ def test_build_summary_for_user_mesaj_si_nu_scrie_garda(monkeypatch, tmp_path):
     assert out == "SUMAR"
     # preview nu scrie niciodata garda
     assert s.query(SummarySent).count() == 0
+    s.close()
+
+
+def test_build_summary_for_user_foloseste_d212_ytd(monkeypatch, tmp_path):
+    # integrare: build real -> mesajul contine sectiunea anuala din compute_d212_anual
+    Session = _db(tmp_path, monkeypatch)
+    full_totals = {
+        "month_name": "Mai", "year": 2026,
+        "activity_icon": "🚗", "activity_name": "Ridesharing",
+        "income_breakdown": [], "income_total": 0.0,
+        "income_cash": 0.0, "income_bank": 0.0,
+        "expense_breakdown": [], "expense_deductible_total": 0.0,
+        "vat_out_total": 0.0, "vat_in_total": 0.0, "vat_net": 0.0,
+        "cota_tva": 0.21, "profit_estimated": 182.32, "tx_count": 3,
+        "fiscal_estimate": None,
+    }
+    monkeypatch.setattr(tax_engine, "compute_period",
+                        lambda session, *, user_id, year, month: full_totals)
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", lambda *a, **k:
+                        SimpleNamespace(venit_net=182.32, cas=0.0, cass=2430.0,
+                                        impozit=0.0, total_plata=2430.0))
+
+    s = Session()
+    out = scheduler.build_summary_for_user(s, _U(1), 2026, 5, date(2026, 6, 2))
+    assert "Estimare fiscală anuală (realizat ian–Mai 2026)" in out
+    assert "Venit net realizat ian–Mai" in out
+    assert "2430.00" in out
     s.close()

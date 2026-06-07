@@ -1146,7 +1146,9 @@ async def execute_raport(query, context, user_id, year, month):
         )
         tax_periods_repo.save_totals(session, tp, totals)
         session.commit()
-        msg = tax_engine.format_report_message(totals)
+        # estimare fiscala anuala pe realizat YTD (sursa unica, ca dashboard-ul)
+        d212 = tax_engine.compute_d212_anual(session, user_id=user_id, an=year)
+        msg = tax_engine.format_report_message(totals, d212=d212)
         # Faza 1.3: daca exista TVA D301 (reverse charge), oferim fisa D301
         tva_d301 = totals.get("vat_out_total", 0) or 0
         if tva_d301 > 0:

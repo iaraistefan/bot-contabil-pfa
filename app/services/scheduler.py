@@ -331,11 +331,12 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
         return ""
 
 
-def _build_summary_message(session, user_id, year, month, totals, today) -> str:
-    """Bilanțul lunii încheiate (format_report_message) + linia de plată."""
+def _build_summary_message(session, user_id, year, month, totals, today, d212=None) -> str:
+    """Bilanțul lunii încheiate (format_report_message) + linia de plată.
+    d212: estimarea anuală pe realizat YTD (CAS/CASS/impozit) — sursă unică."""
     from app.services.tax_engine import format_report_message, LUNI_RO
     cap = f"📅 *Bilanțul lunii {LUNI_RO.get(month, month)} {year}*\n\n"
-    body = format_report_message(totals)
+    body = format_report_message(totals, d212=d212)
     plata = _format_plata_line(session, user_id, year, month, today)
     return cap + body + plata
 
@@ -347,6 +348,8 @@ def build_summary_for_user(session, user, year, month, today=None):
 
     SURSA UNICA a mesajului — folosita ATAT de jobul automat (run_monthly_summary)
     CAT SI de comanda manuala /sumar_test, ca sa produca EXACT acelasi mesaj.
+    Sectiunea fiscala = estimare ANUALA pe realizat YTD (compute_d212_anual),
+    aceeasi sursa ca dashboard-ul.
     """
     from app.services import tax_engine
     if today is None:
@@ -356,7 +359,9 @@ def build_summary_for_user(session, user, year, month, today=None):
     )
     if totals.get("tx_count", 0) == 0:
         return None
-    return _build_summary_message(session, user.id, year, month, totals, today)
+    # estimarea fiscala anuala (realizat YTD) — calculata DUPA check-ul de luna goala
+    d212 = tax_engine.compute_d212_anual(session, user_id=user.id, an=year)
+    return _build_summary_message(session, user.id, year, month, totals, today, d212)
 
 
 def run_monthly_summary(bot_token: str) -> None:

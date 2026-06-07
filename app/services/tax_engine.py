@@ -273,8 +273,31 @@ def _format_fiscal_estimate_section(totals: Dict[str, Any]) -> List[str]:
     return lines
 
 
-def format_report_message(totals: Dict[str, Any]) -> str:
-    """Formatează raportul fiscal pentru Telegram (Markdown)."""
+def _format_d212_section(d212, month_name, year) -> List[str]:
+    """
+    Secțiune fiscală pe REALIZAT year-to-date (din compute_d212_anual).
+    Aceeași sursă ca dashboard-ul + declarația D212. Separată vizual de bilanțul
+    lunar de deasupra, ca să nu se confunde profitul lunar cu baza anuală CASS.
+    """
+    return [
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"📊 *Estimare fiscală anuală (realizat ian–{month_name} {year})*",
+        f"  Venit net realizat ian–{month_name}: `{d212.venit_net:.2f} RON`",
+        f"  💰 Impozit (10%): `{d212.impozit:.2f} RON`",
+        f"  🏥 CAS: `{d212.cas:.2f} RON`",
+        f"  ⚕️ CASS: `{d212.cass:.2f} RON`",
+        f"  _taxe ANUALE pe realizat; bilanțul de sus e pe luna {month_name}_",
+    ]
+
+
+def format_report_message(totals: Dict[str, Any], d212=None) -> str:
+    """
+    Formatează raportul fiscal pentru Telegram (Markdown).
+
+    d212: optional RezultatD212Service. Dacă e dat → secțiunea fiscală arată
+    estimarea ANUALĂ pe REALIZAT year-to-date (CAS/CASS/impozit din D212 —
+    aceeași sursă ca dashboard-ul). Dacă None → fallback la estimarea veche.
+    """
     t = totals
     has_vat = t["vat_out_total"] > 0
 
@@ -341,11 +364,17 @@ def format_report_message(totals: Dict[str, Any]) -> str:
         f"  _(venit brut − cheltuieli deductibile)_",
     ]
 
-    fiscal_lines = _format_fiscal_estimate_section(t)
-    if fiscal_lines:
+    if d212 is not None:
+        # estimare ANUALĂ pe realizat YTD (sursă unică, ca dashboard-ul)
         lines.append("")
-        lines.append("🧾 *ESTIMARE FISCALĂ*")
-        lines.extend(fiscal_lines)
+        lines.extend(_format_d212_section(d212, t["month_name"], t["year"]))
+    else:
+        # fallback: estimarea veche (proiecție 1 lună × 12) — backward-compat
+        fiscal_lines = _format_fiscal_estimate_section(t)
+        if fiscal_lines:
+            lines.append("")
+            lines.append("🧾 *ESTIMARE FISCALĂ*")
+            lines.extend(fiscal_lines)
 
     lines += [
         "",
