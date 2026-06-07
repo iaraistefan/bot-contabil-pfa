@@ -287,6 +287,38 @@ def run_weekly_dashboard(bot_token: str) -> None:
 #  JOB 6: SUMAR LUNAR AUTOMAT (Ziua 2, 09:00) — Faza 3
 # ============================================================
 
+def _d212_plata_lines(session, user_id, obl) -> list:
+    """
+    Linia D212 pentru „de plătit acum" — DOAR când termenul e aproape
+    (status ∈ {DEPASIT, CRITIC, AVERTISMENT, PROXIM} = ≤30 zile sau depășit),
+    ca să nu apară tot anul. Suma reală din compute_d212_anual(an = termen.year−1)
+    — aceeași sursă ca dashboard-ul. [] dacă nu e relevant / eroare.
+    """
+    try:
+        from app.services import tax_engine
+        NEAR = {"DEPASIT", "CRITIC", "AVERTISMENT", "PROXIM"}
+        d212 = next((o for o in obl if o.definitie.cod == "D212"), None)
+        if d212 is None:
+            return []
+        status = getattr(d212.status, "value", d212.status)
+        if status not in NEAR:
+            return []                       # DEPARTE (>30 zile) → nu aglomerăm
+        an_venit = d212.termen.year - 1      # D212 declară anul ANTERIOR termenului
+        r = tax_engine.compute_d212_anual(session, user_id=user_id, an=an_venit)
+        if not r or r.total_plata <= 0:
+            return []                       # an anterior fără venit → nimic de plătit
+        termen = d212.termen.strftime("%d.%m.%Y")
+        termen_txt = (f"⚠️ termen DEPĂȘIT {termen}" if status == "DEPASIT"
+                      else f"termen {termen}")
+        return [
+            f"  • D212 (Declarația Unică {an_venit}): "
+            f"*{r.total_plata:.2f} RON* — {termen_txt}"
+        ]
+    except Exception as e:
+        logger.error(f"_d212_plata_lines error user={user_id}: {e}")
+        return []
+
+
 def _format_plata_line(session, user_id: int, year: int, month: int, today) -> str:
     """
     Linia „de plătit acum" — obligațiile de PLATĂ (suma > 0) ale perioadei
@@ -317,7 +349,9 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             today=today,
         )
         plati = [o for o in obl if o.suma_estimata and o.suma_estimata > 0]
-        if not plati:
+        # D212 (anual) — linie separată, doar când termenul e aproape
+        d212_lines = _d212_plata_lines(session, user_id, obl)
+        if not plati and not d212_lines:
             return ""
         lines = ["", "💳 *De plătit acum:*"]
         for o in plati:
@@ -325,6 +359,7 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
                 f"  • {o.definitie.cod}: *{o.suma_estimata:.2f} RON* "
                 f"— termen {o.termen.strftime('%d.%m.%Y')}"
             )
+        lines.extend(d212_lines)
         return "\n".join(lines)
     except Exception as e:
         logger.error(f"_format_plata_line error user={user_id}: {e}")

@@ -127,8 +127,9 @@ class _Def:
 
 
 class _Obl:
-    def __init__(self, cod, suma, termen):
-        self.definitie = _Def(cod); self.suma_estimata = suma; self.termen = termen
+    def __init__(self, cod, suma, termen, status="PROXIM"):
+        self.definitie = _Def(cod); self.suma_estimata = suma
+        self.termen = termen; self.status = status
 
 
 def test_plata_line_doar_suma_pozitiva(monkeypatch):
@@ -171,6 +172,90 @@ def test_plata_line_robust_la_eroare(monkeypatch):
 
     line = scheduler._format_plata_line(None, 1, 2026, 6, date(2026, 7, 2))
     assert line == ""                               # eroare → linia se omite, nu crapă
+
+
+# ────────────────────────────────────────────────────────────
+# D212 în linia de plată (#2) — doar în fereastra termenului
+# ────────────────────────────────────────────────────────────
+
+def _setup_plata(monkeypatch, oblist, d212_total=None):
+    from app.services import proactive_alerts
+    from app.domain import fiscal_calendar
+    monkeypatch.setattr(proactive_alerts, "_build_user_context", lambda s, u: {
+        "forma_juridica": "PFA", "activity_code": "ridesharing",
+        "has_cod_special_tva": True, "is_vat_payer": False, "judet": "BN",
+    })
+    monkeypatch.setattr(proactive_alerts, "_get_intracom_base_for_month",
+                        lambda s, u, y, m: 712.65)
+    monkeypatch.setattr(fiscal_calendar, "get_obligations_for_user",
+                        lambda *a, **k: oblist)
+    if d212_total is not None:
+        monkeypatch.setattr(tax_engine, "compute_d212_anual",
+                            lambda *a, **k: SimpleNamespace(total_plata=d212_total))
+
+
+def test_d212_proxim_apare_cu_an_si_termen(monkeypatch):
+    obl = [_Obl("D301", 149.65, date(2026, 7, 25), "PROXIM"),
+           _Obl("D212", None, date(2026, 5, 25), "PROXIM")]
+    _setup_plata(monkeypatch, obl, d212_total=2828.45)
+    line = scheduler._format_plata_line(None, 1, 2026, 4, date(2026, 5, 2))
+    assert "D301" in line                              # D301 neafectat
+    assert "D212 (Declarația Unică 2025)" in line      # an = termen.year - 1
+    assert "2828.45" in line
+    assert "termen 25.05.2026" in line
+
+
+def test_d212_departe_nu_apare(monkeypatch):
+    obl = [_Obl("D301", 149.65, date(2026, 7, 25), "PROXIM"),
+           _Obl("D212", None, date(2027, 5, 25), "DEPARTE")]
+    _setup_plata(monkeypatch, obl, d212_total=2828.45)
+    line = scheduler._format_plata_line(None, 1, 2026, 6, date(2026, 7, 2))
+    assert "D212" not in line
+    assert "D301" in line
+
+
+def test_d212_total_zero_nu_apare(monkeypatch):
+    obl = [_Obl("D212", None, date(2026, 5, 25), "PROXIM")]
+    _setup_plata(monkeypatch, obl, d212_total=0.0)
+    line = scheduler._format_plata_line(None, 1, 2026, 4, date(2026, 5, 2))
+    assert line == ""                                  # nimic de plătit
+
+
+def test_d212_depasit_apare_ca_restanta(monkeypatch):
+    obl = [_Obl("D212", None, date(2026, 5, 25), "DEPASIT")]
+    _setup_plata(monkeypatch, obl, d212_total=2828.45)
+    line = scheduler._format_plata_line(None, 1, 2026, 5, date(2026, 6, 2))
+    assert "D212 (Declarația Unică 2025)" in line
+    assert "DEPĂȘIT" in line                           # marcaj restanță
+
+
+def test_d212_singur_fara_d301_tot_apare(monkeypatch):
+    obl = [_Obl("D212", None, date(2026, 5, 25), "PROXIM")]
+    _setup_plata(monkeypatch, obl, d212_total=2828.45)
+    line = scheduler._format_plata_line(None, 1, 2026, 4, date(2026, 5, 2))
+    assert "💳" in line and "D212" in line             # nu return "" prematur
+
+
+def test_d212_compute_crapa_robust(monkeypatch):
+    from app.services import proactive_alerts
+    from app.domain import fiscal_calendar
+    monkeypatch.setattr(proactive_alerts, "_build_user_context", lambda s, u: {
+        "forma_juridica": "PFA", "activity_code": "ridesharing",
+        "has_cod_special_tva": True, "is_vat_payer": False, "judet": "BN",
+    })
+    monkeypatch.setattr(proactive_alerts, "_get_intracom_base_for_month",
+                        lambda s, u, y, m: 712.65)
+    obl = [_Obl("D301", 149.65, date(2026, 7, 25), "PROXIM"),
+           _Obl("D212", None, date(2026, 5, 25), "PROXIM")]
+    monkeypatch.setattr(fiscal_calendar, "get_obligations_for_user",
+                        lambda *a, **k: obl)
+    def _boom(*a, **k):
+        raise RuntimeError("d212 down")
+    monkeypatch.setattr(tax_engine, "compute_d212_anual", _boom)
+
+    line = scheduler._format_plata_line(None, 1, 2026, 4, date(2026, 5, 2))
+    assert "D301" in line                              # restul liniei pleacă
+    assert "D212" not in line                          # D212 omis la eroare
 
 
 # ────────────────────────────────────────────────────────────
