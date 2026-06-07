@@ -177,7 +177,20 @@ cade în luna curentă). 5 pași:
   NU atinge `summary_sent`, repetabil) + `build_summary_for_user` = **sursă unică** a
   mesajului (job + comandă produc EXACT același text).
 
-Suita: **116/116** teste verzi.
+### Corecții cifre fiscale (sumar + /raport) — ÎNCHISE
+Verificarea pe telefon a scos 2 probleme (cifre fiscale = critic), ambele rezolvate
+prin **sursă unică `compute_d212_anual`** (aceeași ca dashboard-ul + declarația):
+- `18c0d3d` (#1): `/raport` + sumarul afișau CAS/CASS dintr-o proiecție 1-lună×12
+  (absurd: „CASS 2430 anual lângă profit lunar 182"). Acum secțiunea fiscală e pe
+  **realizat YTD** (`format_report_message(totals, d212=)` + `_format_d212_section`:
+  separator + „Venit net realizat ian–{lună}" + impozit/CAS/CASS + caveat). Cei 2
+  apelanți (`execute_raport`, `build_summary_for_user`) pasează `d212`. Bilanțul
+  lunar neatins. **Confirmat pe telefon: sumar == dashboard == D212.**
+- `4c72366` (#2): D212 apare acum în linia „💳 De plătit acum" — DOAR în fereastra
+  termenului (status ≤ PROXIM, ≤30 zile/overdue) → ~2 sumare/an. Suma reală din
+  `compute_d212_anual(an=termen.year−1)`; DEPASIT marcat ca restanță.
+
+Suita: **127/127** teste verzi.
 
 ⚙️ **De setat în Render:** `OWNER_TELEGRAM_ID` = telegram_id-ul lui Stefan (din
 @userinfobot). Nesetat → `/sumar_test` e inert pentru toți (fail-safe).
@@ -191,6 +204,9 @@ Suita: **116/116** teste verzi.
   pentru display (doar afișaj, nu calcul real).
 - `datetime.utcnow()` (`bot_contabil.py:295`, din Faza 2 PAS 2) dă
   `DeprecationWarning` → de înlocuit cu `datetime.now(datetime.UTC)`.
+- **Performanță:** cache per `(user, an)` pentru `compute_d212_anual` (acum =
+  12× `compute_period`; se poate chema de 2× per sumar — secțiunea fiscală pe
+  `an=year` + linia de plată pe `an=year−1`). Necesar la scalare (mulți useri).
 
 ---
 
@@ -239,3 +255,5 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `1459028` feat(scheduler): sumar lunar automat pe Telegram (PAS 2+3)
 - `ca5292d` feat(scheduler): inregistreaza jobul sumar lunar (PAS 4)
 - `06495be` feat(bot): comanda /sumar_test owner-only + helper unic (PAS 5)
+- `18c0d3d` fix(raport): estimare fiscala pe realizat YTD (nu proiectie 1 luna x12)
+- `4c72366` feat(sumar): D212 in linia "de platit acum", doar in fereastra termenului
