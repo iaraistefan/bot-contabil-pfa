@@ -289,7 +289,11 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
             session.commit()
             return result
         ext = "jpg" if kind == "photo" else "bin"
-        path = storage.save_bytes(file_bytes, sha, ext=ext)
+        # Arhivare R2 (dacă e configurat): cheie user_<id>/<an>/<lună>/<sha>.<ext>
+        # pe data upload-ului. R2 dezactivat -> fallback disk (neschimbat).
+        path = storage.save_bytes(
+            file_bytes, sha, ext=ext, user_id=user_id, dt=datetime.utcnow()
+        )
         new_sf = source_files_repo.create(
             session, user_id=user_id, kind=kind, sha256=sha,
             telegram_file_id=telegram_file_id, mime=mime,
