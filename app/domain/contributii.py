@@ -180,3 +180,53 @@ def calcul_cass(venit_net: float, an: int, *,
     valoare = round(baza * cota / 100, 2)
     return {"valoare": valoare, "baza": baza, "cota_pct": cota,
             "aplicabil": True, "nota": nota}
+
+
+# ============================================================
+#           PRAGURI — STATUS pentru alerte „aproape de plafon"
+# ============================================================
+
+def prag_cas_status(venit_net: float, an: int) -> dict:
+    """
+    Status față de pragul CAS de 12 SMB (peste care CAS devine OBLIGATORIU).
+    Aceeași formă ca FiscalProfile.vat_threshold_status (consecvent), + remaining.
+
+    threshold = 12 SMB; status: OK (<80%) / APROAPE_PLAFON (≥80%) /
+    DEPASIT_PLAFON (≥100%). remaining_ron = cât a mai rămas până la prag.
+    Toate cifrele din sursa unică (PARAMETRI_CONTRIBUTII).
+    """
+    p = _params(an)
+    sm = p["salariu_minim"]
+    threshold = float(p["cas_jos"] * sm)                 # 12 × 4050 = 48.600
+    cas_obligatoriu = round(threshold * p["cota_cas"] / 100, 2)  # 12.150 la 4050
+    utilized_pct = (venit_net / threshold * 100) if threshold else 0.0
+    remaining = max(0.0, round(threshold - venit_net, 2))
+
+    if venit_net >= threshold:
+        status = "DEPASIT_PLAFON"
+        message = (
+            f"🔴 Ai depășit pragul de {threshold:.0f} RON "
+            f"({p['cas_jos']} salarii minime). CAS devine obligatoriu "
+            f"(~{cas_obligatoriu:.0f} lei/an)."
+        )
+    elif utilized_pct >= 80:
+        status = "APROAPE_PLAFON"
+        message = (
+            f"🟡 Aproape de pragul CAS: {utilized_pct:.0f}% "
+            f"({venit_net:.0f} / {threshold:.0f} RON). Mai ai ~{remaining:.0f} lei "
+            f"până la {threshold:.0f} → CAS obligatoriu (~{cas_obligatoriu:.0f} lei/an)."
+        )
+    else:
+        status = "OK"
+        message = (
+            f"✅ Sub pragul CAS: {utilized_pct:.0f}% "
+            f"({venit_net:.0f} / {threshold:.0f} RON)."
+        )
+
+    return {
+        "status": status,
+        "threshold_ron": threshold,
+        "utilized_pct": utilized_pct,
+        "remaining_ron": remaining,
+        "message": message,
+    }
