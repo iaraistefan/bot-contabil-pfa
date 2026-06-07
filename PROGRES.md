@@ -2,7 +2,7 @@
 
 > Document de stare + handoff. Citește-l la începutul fiecărei sesiuni noi de
 > dezvoltare (Claude Code nu păstrează memoria între sesiuni).
-> Ultima actualizare: 2026-06-05.
+> Ultima actualizare: 2026-06-07.
 
 ---
 
@@ -129,14 +129,42 @@ extindere):
   greșit ce contrazicea Faza 0 — în "de depus" + sumă reală 2% × comision + text
   corect). Nume afișat bot ("CONTABIL PFA" → "Contai") se schimbă manual din BotFather.
 
-Suita: **82/82** teste verzi.
+Suita: **82/82** teste verzi (la închiderea Fazei 1).
 
-**TODO hygiene** (separat, neurgent):
-1. Pin `pydantic` în `requirements.txt` (`>=2.7,<2.12`) ca să nu reapară drift-ul
-   `Secret` pe alt mediu.
-2. Centralizare cote pentru afișaj: D100 `baza*0.02` (dashboard) + duplicarea
-   `COTA_TVA_STANDARD` din `fiscal_calendar.py` → o sursă unică de cote inclusiv
-   pentru display (e doar afișaj, nu calcul real).
+---
+
+## FAZA 2 — ARHIVĂ DOCUMENTE (Cloudflare R2) — ÎNCHISĂ
+
+Bucket privat **`cantai-arhive`** (atenție: „cantai" cu A; env `R2_*` în Render).
+Uploadurile noi se arhivează în R2; istoricul pre-R2 e pierdut (disk efemer pe
+Render). R2 = S3-compatible (boto3 cu endpoint custom). Confirmat end-to-end în
+prod (bon Lukoil doc 107 → `cantai-arhive/user_1/2026/06/<sha>.jpg`). 5 pași:
+
+- `fcade4d` (PAS 1): `storage.py` backend R2 + fallback disk + `get_bytes`
+  (boto3 lazy; `_r2_enabled` din `os.environ`, nu Settings). 7 teste (R2 mock).
+- `c7f09d5` (PAS 2): aprindere R2 — `register_source_file` pasează `user_id`+`dt`;
+  cheie `user_<id>/<an>/<lună>/<sha>.<ext>` (data upload). Dedup (în DB înainte de
+  save) + procesarea AI (pe bytes din memorie) NEATINSE. 2 teste integrare.
+- `d9b6c6e` (PAS 3): `boto3>=1.34,<2.0` + pin `pydantic>=2.7,<2.12` în requirements.
+- `eeb7f10` (PAS 4): rută download `/api/v1/documents/<id>/file` — ownership STRICT
+  (filtru `user_id`), stream din R2, 404 prietenos. 5 teste Flask.
+- `d6a8eef` (PAS 5): pagina Documente — arhivă grupată pe an/lună (din `data_doc`)
+  + buton download per document (doar dacă `has_file`), pattern authFetch→blob.
+
+Suita: **97/97** teste verzi.
+
+**Grupare cheie R2 vs afișaj:** cheia R2 e pe **data upload** (`created_at`, singura
+known la save); gruparea în pagina Documente e pe **data fiscală** (`data_doc`).
+
+---
+
+## TODO HYGIENE (neurgent, transversal)
+- ✅ Pin `pydantic` (`>=2.7,<2.12`) — FĂCUT (Faza 2 PAS 3, `d9b6c6e`).
+- Centralizare cote pentru afișaj: D100 `baza*0.02` (dashboard) + duplicarea
+  `COTA_TVA_STANDARD` din `fiscal_calendar.py` → o sursă unică de cote inclusiv
+  pentru display (doar afișaj, nu calcul real).
+- `datetime.utcnow()` (`bot_contabil.py:295`, din Faza 2 PAS 2) dă
+  `DeprecationWarning` → de înlocuit cu `datetime.now(datetime.UTC)`.
 
 ---
 
@@ -155,7 +183,8 @@ Drift pydantic/pydantic_settings (`ImportError: Secret from pydantic`) la import
 lanțului `config`. **Rezolvat local** cu `pydantic 2.11.10` (`>=2.7` pt `Secret`,
 `<2.12` pt aiogram); `requirements.txt` NEATINS → prod (Render) neafectat.
 Testele care importă `config` (ex. `tax_engine`) rulează prin `tests/conftest.py`
-(env dummy). De pinat `pydantic` în `requirements.txt` la un commit de hygiene.
+(env dummy). `pydantic` e acum pinat în `requirements.txt` (Faza 2 PAS 3) → prod și
+local aliniate, drift-ul `Secret` nu mai poate reapărea.
 
 ## COMMITURI CHEIE (sesiunea 2026-06-03)
 - `a8e66c5` fix(d100): impozit nerezident Bolt obligatoriu lunar, plata reala
@@ -171,3 +200,10 @@ Testele care importă `config` (ex. `tax_engine`) rulează prin `tests/conftest.
 - `6d84c01` fix(calendar): D700 apare doar pentru neinregistrati (fals pozitiv)
 - `d9a3459` feat(dashboard): suma reala D212 pe card din sursa unica
 - `0ef43ba` feat(dashboard): badge calendar real + brand Contai + fix card D100 fiscal (bucata #3)
+
+## COMMITURI CHEIE (sesiunea 2026-06-07 — Faza 2 arhivă R2)
+- `fcade4d` feat(storage): backend R2 + fallback disk + get_bytes (PAS 1)
+- `c7f09d5` feat(storage): aprinde R2 pentru uploaduri noi (PAS 2)
+- `d9b6c6e` chore(deps): boto3 pentru R2 + pin pydantic (PAS 3)
+- `eeb7f10` feat(api): ruta download document autentificata, stream din R2 (PAS 4)
+- `d6a8eef` feat(dashboard): pagina Documente — arhiva pe luni + download din R2 (PAS 5)
