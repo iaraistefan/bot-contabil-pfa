@@ -10,10 +10,12 @@ ACTIVITY-AWARE + PROFILE-AWARE (Pas 8.4a):
 """
 
 import logging
+import threading
 from collections import defaultdict
 from datetime import date
 from typing import Dict, Any, List, Type, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Transaction, User
@@ -186,18 +188,45 @@ def compute_period(
     }
 
 
-def compute_d212_anual(session: Session, *, user_id: int, an: int):
+# Cache in-memory pentru compute_d212_anual, validat prin FINGERPRINT (versiunea
+# datelor). Bot + scheduler + Flask sunt thread-uri in ACELASI proces -> dict
+# partajat + lock. ZERO stale: fingerprint-ul = starea datelor; orice add/delete/
+# lock/edit-suma muta fingerprint-ul -> recompute. Fara TTL, fara hooks.
+_D212_CACHE: Dict = {}
+_D212_CACHE_LOCK = threading.Lock()
+
+
+def _d212_fingerprint(session: Session, user_id: int, an: int):
+    """
+    Amprenta ieftina a datelor care alimenteaza compute_d212_anual:
+    (count, max_id, sum(amount_brut)) pe tranzactiile (user, an, locked=False)
+    — FILTRU IDENTIC cu compute_period. Orice add/delete/lock/edit-suma o schimba.
+    (Nu exista update in-place pe tx in cod -> count/max_id/sum sunt suficiente.)
+    """
+    cnt, max_id, total = (
+        session.query(
+            func.count(Transaction.id),
+            func.coalesce(func.max(Transaction.id), 0),
+            func.coalesce(func.sum(Transaction.amount_brut), 0.0),
+        )
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.period_year == an,
+            Transaction.locked == False,
+        )
+        .one()
+    )
+    return (int(cnt or 0), int(max_id or 0), round(float(total or 0.0), 2))
+
+
+def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     """
     Estimare D212 anuala (impozit + CAS + CASS) pe baza venitului REALIZAT
     pana acum in anul `an` (suma lunilor cu date — lunile fara date dau 0).
 
     SURSA UNICA pentru numarul D212: exact aceeasi cale ca declaratia reala
     (Σ compute_period -> declaratii_service.genereaza_d212 -> d212_calc ->
-    contributii). Folosita atat de /api/v1/declaratie-unica cat si de cardul
-    "cat platesc" (/api/v1/obligatii), ca sa nu existe doua surse divergente.
-
-    Returns:
-        RezultatD212Service (total_plata, cas, cass, impozit, venit_brut, ...).
+    contributii). NU se cheama direct — vezi wrapper-ul compute_d212_anual.
     """
     # import lazy pentru a evita orice ciclu de import la incarcarea modulului
     from app.integrations.anaf import declaratii_service as _decl
@@ -212,6 +241,29 @@ def compute_d212_anual(session: Session, *, user_id: int, an: int):
         except Exception:
             continue
     return _decl.genereaza_d212(an, round(venit_brut, 2), round(cheltuieli, 2))
+
+
+def compute_d212_anual(session: Session, *, user_id: int, an: int):
+    """
+    Wrapper cu cache validat prin fingerprint peste _compute_d212_anual_uncached.
+    Semnatura + return (RezultatD212Service) IDENTICE — cei 6 apelanti nu se schimba.
+
+    Cache HIT doar daca fingerprint-ul datelor e neschimbat -> NICIODATA stale
+    (orice modificare a tranzactiilor pe (user, an) invalideaza automat).
+    """
+    key = (user_id, an)
+    fp = _d212_fingerprint(session, user_id, an)
+
+    with _D212_CACHE_LOCK:
+        cached = _D212_CACHE.get(key)
+        if cached is not None and cached[0] == fp:
+            return cached[1]                 # HIT — fingerprint match, date neschimbate
+
+    # MISS — calculam in afara lock-ului (greu: 12× compute_period), apoi stocam.
+    result = _compute_d212_anual_uncached(session, user_id=user_id, an=an)
+    with _D212_CACHE_LOCK:
+        _D212_CACHE[key] = (fp, result)
+    return result
 
 
 def _format_fiscal_estimate_section(totals: Dict[str, Any]) -> List[str]:

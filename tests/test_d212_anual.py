@@ -41,7 +41,7 @@ def test_echivalenta_helper_vs_old_path(monkeypatch):
     baseline = decl.genereaza_d212(2026, round(vb, 2), round(ch, 2))
 
     # noua cale
-    r = tax_engine.compute_d212_anual(None, user_id=1, an=2026)
+    r = tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026)
 
     assert (r.venit_brut, r.cheltuieli, r.venit_net, r.cas, r.cass,
             r.impozit, r.total_plata, r.bonificatie) == \
@@ -61,8 +61,8 @@ def test_helper_agrega_anul_cerut(monkeypatch):
         return {"income_total": inc, "expense_deductible_total": 0.0}
     monkeypatch.setattr(tax_engine, "compute_period", fake)
 
-    assert tax_engine.compute_d212_anual(None, user_id=1, an=2025).venit_brut == 12_000
-    assert tax_engine.compute_d212_anual(None, user_id=1, an=2026).venit_brut == 24_000
+    assert tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2025).venit_brut == 12_000
+    assert tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026).venit_brut == 24_000
 
 
 def test_termen_an_minus_1():
@@ -91,7 +91,7 @@ def test_termen_an_minus_1():
 
 def test_caz_an_gol(monkeypatch):
     _mock_period(monkeypatch, {})  # nicio luna cu date
-    r = tax_engine.compute_d212_anual(None, user_id=1, an=2026)
+    r = tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026)
     assert r.venit_brut == 0
     assert r.total_plata == 0
     # regula card: venit_brut == 0 -> estimare_in_curs (NU afisam "0 lei" sec)
@@ -100,7 +100,7 @@ def test_caz_an_gol(monkeypatch):
 
 def test_caz_pierdere(monkeypatch):
     _mock_period(monkeypatch, {1: (3000, 5000)})  # cheltuieli > venit
-    r = tax_engine.compute_d212_anual(None, user_id=1, an=2026)
+    r = tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026)
     assert r.venit_brut == 3000
     assert r.venit_net == -2000
     assert r.total_plata == 0          # pierdere -> fara plata
@@ -109,7 +109,7 @@ def test_caz_pierdere(monkeypatch):
 
 def test_caz_venit_pozitiv_mic(monkeypatch):
     _mock_period(monkeypatch, {1: (5000, 0)})  # venit net 5000, sub 6 SMB
-    r = tax_engine.compute_d212_anual(None, user_id=1, an=2026)
+    r = tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026)
     assert r.venit_brut == 5000
     assert r.cass == 2430.0             # CASS minim pe 6 SMB (fix Faza 0)
     assert r.total_plata == 2687.0      # suma reala -> intra in plati
