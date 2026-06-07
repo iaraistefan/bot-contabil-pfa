@@ -25,11 +25,26 @@ logger = logging.getLogger(__name__)
 ROMANIA_TZ = pytz.timezone("Europe/Bucharest")
 
 
+def luna_precedenta(d) -> tuple:
+    """
+    (an, lună) ale lunii PRECEDENTE față de data `d` (date sau datetime).
+
+    Wrap corect la început de an: ianuarie -> decembrie anul anterior.
+      date(2026, 1, 2) -> (2025, 12)
+      date(2026, 2, 2) -> (2026, 1)
+    """
+    if d.month > 1:
+        return (d.year, d.month - 1)
+    return (d.year - 1, 12)
+
+
 # ============================================================
 #                  HELPER — TELEGRAM SEND
 # ============================================================
 
-def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> None:
+def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> bool:
+    """Trimite mesaj Telegram. Întoarce True la succes, False la eșec.
+    (Aditiv: apelanții existenți ignoră returul — comportament neschimbat.)"""
     import requests
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
@@ -39,8 +54,10 @@ def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> None:
             "parse_mode": "Markdown",
         }, timeout=15)
         resp.raise_for_status()
+        return True
     except Exception as e:
         logger.error(f"Scheduler send_message failed for chat_id={chat_id}: {e}")
+        return False
 
 
 # ============================================================
@@ -264,6 +281,131 @@ def run_weekly_dashboard(bot_token: str) -> None:
         )
     except Exception as e:
         logger.error(f"run_weekly_dashboard error: {e}")
+
+
+# ============================================================
+#  JOB 6: SUMAR LUNAR AUTOMAT (Ziua 2, 09:00) — Faza 3
+# ============================================================
+
+def _format_plata_line(session, user_id: int, year: int, month: int, today) -> str:
+    """
+    Linia „de plătit acum" — obligațiile de PLATĂ (suma > 0) ale perioadei
+    încheiate, al căror termen cade în luna curentă (ex. D301 iunie → 25 iulie).
+    Sursă unică: get_obligations_for_user (ca în card). DOAR sumă > 0
+    (declarativele gen D390 se văd în Calendar fiscal, nu aici).
+
+    Robust: orice eroare -> "" (sumarul tot pleacă, fără linia de plată).
+    """
+    try:
+        from app.services.proactive_alerts import (
+            _build_user_context, _get_intracom_base_for_month,
+        )
+        from app.domain.fiscal_calendar import get_obligations_for_user
+
+        ctx = _build_user_context(session, user_id)
+        intracom = _get_intracom_base_for_month(session, user_id, year, month)
+        obl = get_obligations_for_user(
+            year, month,
+            forma_juridica=ctx["forma_juridica"],
+            activity_code=ctx["activity_code"],
+            has_intracom_invoice=intracom > 0,
+            intracom_base_amount=intracom,
+            has_cod_special_tva=ctx["has_cod_special_tva"],
+            is_vat_payer=ctx["is_vat_payer"],
+            judet=ctx["judet"],
+            only_applicable=True,
+            today=today,
+        )
+        plati = [o for o in obl if o.suma_estimata and o.suma_estimata > 0]
+        if not plati:
+            return ""
+        lines = ["", "💳 *De plătit acum:*"]
+        for o in plati:
+            lines.append(
+                f"  • {o.definitie.cod}: *{o.suma_estimata:.2f} RON* "
+                f"— termen {o.termen.strftime('%d.%m.%Y')}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"_format_plata_line error user={user_id}: {e}")
+        return ""
+
+
+def _build_summary_message(session, user_id, year, month, totals, today) -> str:
+    """Bilanțul lunii încheiate (format_report_message) + linia de plată."""
+    from app.services.tax_engine import format_report_message, LUNI_RO
+    cap = f"📅 *Bilanțul lunii {LUNI_RO.get(month, month)} {year}*\n\n"
+    body = format_report_message(totals)
+    plata = _format_plata_line(session, user_id, year, month, today)
+    return cap + body + plata
+
+
+def run_monthly_summary(bot_token: str) -> None:
+    """
+    Sumar lunar automat (luna ÎNCHEIATĂ) — Ziua 2, 09:00.
+
+    Per-user IZOLAT: un user cu date stricate NU blochează restul.
+    Gardă summary_sent (verificată înainte; scrisă DOAR după trimitere reușită).
+    Lună goală (tx_count==0) → skip complet.
+    """
+    from db import get_session
+    from app.models import User, SummarySent
+    from app.services import tax_engine
+
+    now = datetime.now(ROMANIA_TZ)
+    year, month = luna_precedenta(now)
+    today = now.date()
+
+    session = get_session()
+    sent = skipped = errors = 0
+    try:
+        users = session.query(User).all()
+        for user in users:
+            if not user.telegram_id:
+                continue
+            try:
+                # gardă anti-dublură (înainte de orice)
+                already = (
+                    session.query(SummarySent)
+                    .filter_by(user_id=user.id, period_year=year, period_month=month)
+                    .first()
+                )
+                if already:
+                    skipped += 1
+                    continue
+
+                totals = tax_engine.compute_period(
+                    session, user_id=user.id, year=year, month=month
+                )
+                if totals.get("tx_count", 0) == 0:
+                    skipped += 1          # lună goală: nu trimitem, nu marcăm
+                    continue
+
+                msg = _build_summary_message(session, user.id, year, month, totals, today)
+                ok = _send_telegram_message(bot_token, user.telegram_id, msg)
+                if ok:
+                    # marcăm garda DOAR după trimitere reușită
+                    session.add(SummarySent(
+                        user_id=user.id, period_year=year, period_month=month,
+                    ))
+                    session.commit()
+                    sent += 1
+                else:
+                    errors += 1           # netrimis → nu marcăm → reîncearcă data viitoare
+            except Exception as e:
+                session.rollback()
+                errors += 1
+                logger.error(f"monthly_summary user={user.id} error: {e}")
+                continue
+    except Exception as e:
+        logger.error(f"run_monthly_summary error: {e}")
+    finally:
+        session.close()
+
+    logger.info(
+        f"✅ Monthly summary {year}/{month:02d}: "
+        f"{sent} sent, {skipped} skipped, {errors} errors"
+    )
 
 
 # ============================================================
