@@ -29,6 +29,7 @@ from app.repositories import transactions as tx_repo
 from app.repositories import users as users_repo
 from app.services import tax_engine
 from app.domain import labels_ro
+from app import storage
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
@@ -790,6 +791,52 @@ def documents_recent():
         return jsonify({"count": len(data), "documents": data})
     except Exception as e:
         logger.error(f"API documents error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
+@flask_app.route("/api/v1/documents/<int:doc_id>/file")
+def document_file(doc_id: int):
+    """
+    Descarcă fișierul original arhivat al unui document (stream din R2/disk).
+
+    Ownership STRICT: doar documentele user-ului autentificat (filtru user_id).
+    404 dacă: nu există / nu e al lui / fără fișier / fișier indisponibil
+    (istoric pierdut). Bucket-ul rămâne privat — totul trece prin auth.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    session = get_session()
+    try:
+        from app.models import Document
+        doc = (
+            session.query(Document)
+            .filter(Document.id == doc_id, Document.user_id == user_id)
+            .one_or_none()
+        )
+        if doc is None:
+            return jsonify({"error": "not found"}), 404
+        sf = doc.source_file
+        if sf is None or not sf.storage_path:
+            return jsonify({"error": "document fără fișier atașat"}), 404
+        try:
+            data = storage.get_bytes(sf.storage_path)
+        except FileNotFoundError:
+            return jsonify({"error": "fișier indisponibil"}), 404
+
+        ext = (sf.storage_path.rsplit(".", 1)[-1]
+               if "." in sf.storage_path else "bin")
+        filename = f"document_{doc_id}.{ext}"
+        return Response(
+            data,
+            mimetype=(sf.mime or "application/octet-stream"),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        logger.error(f"API document file error doc={doc_id} user={user_id}: {e}")
         return jsonify({"error": "internal error"}), 500
     finally:
         session.close()
