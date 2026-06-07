@@ -98,3 +98,16 @@ def test_document_inexistent(monkeypatch, tmp_path):
     c = _client(monkeypatch, ids["owner"])
     r = c.get("/api/v1/documents/999999/file")
     assert r.status_code == 404
+
+
+def test_endpoint_documents_has_file(monkeypatch, tmp_path):
+    # /api/v1/documents întoarce has_file + source_file_id corect
+    ids = _setup(tmp_path, monkeypatch)
+    c = _client(monkeypatch, ids["owner"])
+    r = c.get("/api/v1/documents")
+    assert r.status_code == 200
+    docs = {d["id"]: d for d in r.get_json()["documents"]}
+    assert docs[ids["doc"]]["has_file"] is True
+    assert docs[ids["doc"]]["source_file_id"] is not None
+    assert docs[ids["doc_nofile"]]["has_file"] is False
+    assert docs[ids["doc_nofile"]]["source_file_id"] is None

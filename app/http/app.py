@@ -787,6 +787,8 @@ def documents_recent():
             "detalii": doc.detalii,
             "prompt_version": doc.prompt_version,
             "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "source_file_id": doc.source_file_id,
+            "has_file": bool(doc.source_file_id),
         } for doc in docs]
         return jsonify({"count": len(data), "documents": data})
     except Exception as e:

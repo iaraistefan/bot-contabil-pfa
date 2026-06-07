@@ -53,6 +53,10 @@
   .nav-item.active::before{content:"";position:absolute;left:-14px;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--emerald);border-radius:0 3px 3px 0}
   .nav-item .badge{margin-left:auto;background:var(--gold);color:#1a1407;font-size:.66rem;font-weight:800;padding:1px 7px;border-radius:20px}
   .nav-item .badge.danger{background:var(--red);color:#fff}
+  .doc-group td{font-family:var(--display);font-weight:600;font-size:.8rem;color:var(--gold);padding-top:18px;text-transform:uppercase;letter-spacing:.04em}
+  .doc-dl{background:none;border:1px solid var(--line-2);border-radius:9px;padding:5px 9px;color:var(--cream);cursor:pointer;display:inline-flex;align-items:center;transition:border-color .16s,background .16s}
+  .doc-dl:hover{border-color:var(--emerald);background:var(--emerald-dim)}
+  .doc-dl svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
   .sidebar-foot{margin-top:auto;padding-top:16px;border-top:1px solid var(--line)}
   .profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:11px;cursor:pointer;transition:background .16s}
   .profile:hover{background:var(--night-2)}
@@ -574,13 +578,8 @@
         <div class="panel">
           <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă</a></div>
           <table>
-            <thead><tr><th>Data</th><th>Furnizor</th><th>Tip</th><th class="r">Sumă</th><th class="r">Status</th></tr></thead>
-            <tbody id="doc-tbody">
-              <tr><td>30.04</td><td>Bolt</td><td>Raport venituri</td><td class="r num">2.869,60</td><td class="r"><span class="badge-st ok">postat</span></td></tr>
-              <tr><td>29.01</td><td>DigiSign</td><td>Factură RO</td><td class="r num">202,80</td><td class="r"><span class="badge-st ok">postat</span></td></tr>
-              <tr><td>23.03</td><td>Inter Broker</td><td>Chitanță</td><td class="r num">42,00</td><td class="r"><span class="badge-st ok">postat</span></td></tr>
-              <tr><td>05.04</td><td>Rompetrol</td><td>Bon combustibil</td><td class="r num">300,00</td><td class="r"><span class="badge-st ok">postat</span></td></tr>
-            </tbody>
+            <thead><tr><th>Data</th><th>Furnizor</th><th>Tip</th><th class="r">Sumă</th><th class="r">Status</th><th class="r">Fișier</th></tr></thead>
+            <tbody id="doc-tbody"></tbody>
           </table>
         </div>
       </section>
@@ -986,18 +985,61 @@
   }
 
   // ======================= DOCUMENTE =======================
+  function _docGroupKey(data_doc){
+    // "DD.MM.YYYY" -> {key:"YYYY-MM", label:"Iunie 2026"}; invalid -> "fără dată"
+    const p=String(data_doc||"").split(".");
+    if(p.length===3){
+      const mm=parseInt(p[1],10), yy=p[2];
+      if(mm>=1&&mm<=12&&/^\d{4}$/.test(yy))
+        return {key:`${yy}-${String(mm).padStart(2,"0")}`, label:`${MONTHS[mm]} ${yy}`};
+    }
+    return {key:"0000-00", label:"Fără dată"};
+  }
+  const DL_ICO='<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   async function loadDocumente(){
     if(loaded.documente)return; loaded.documente=true;
     try{
       const docs=await getDocs();
       const tb=document.getElementById("doc-tbody");
-      if(tb){
-        tb.innerHTML = docs.length? docs.map(d=>{
-          const st=d.status==="posted"||d.status==="postat"?'<span class="badge-st ok">postat</span>':`<span class="badge-st warn">${d.status||"—"}</span>`;
-          return `<tr><td>${d.data_doc||"—"}</td><td>${d.platforma||"—"}</td><td>${d.tip||"—"}</td><td class="r num">${RON(d.brut)}</td><td class="r">${st}</td></tr>`;
-        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Niciun document încărcat.</td></tr>';
+      if(!tb)return;
+      if(!docs.length){
+        tb.innerHTML='<tr><td colspan="6" class="hint" style="padding:14px">Niciun document încărcat.</td></tr>';
+        return;
       }
+      // grupare pe an/lună din data fiscală (data_doc)
+      const groups={};
+      docs.forEach(d=>{
+        const g=_docGroupKey(d.data_doc);
+        (groups[g.key]=groups[g.key]||{label:g.label,items:[]}).items.push(d);
+      });
+      // grupuri recente sus; "fără dată" la final
+      const keys=Object.keys(groups).sort((a,b)=> a==="0000-00"?1 : b==="0000-00"?-1 : b.localeCompare(a));
+      let html="";
+      keys.forEach(k=>{
+        html+=`<tr class="doc-group"><td colspan="6">${groups[k].label}</td></tr>`;
+        groups[k].items.forEach(d=>{
+          const st=d.status==="posted"||d.status==="postat"?'<span class="badge-st ok">postat</span>':`<span class="badge-st warn">${d.status||"—"}</span>`;
+          const dl=d.has_file?`<button class="doc-dl" title="Descarcă originalul" onclick="downloadDoc(${d.id})">${DL_ICO}</button>`:"";
+          html+=`<tr><td>${d.data_doc||"—"}</td><td>${d.platforma||"—"}</td><td>${d.tip||"—"}</td><td class="r num">${RON(d.brut)}</td><td class="r">${st}</td><td class="r">${dl}</td></tr>`;
+        });
+      });
+      tb.innerHTML=html;
     }catch(e){console.error(e);}
+  }
+  async function downloadDoc(docId){
+    // același pattern ca descărcarea XML: authFetch (header init_data) -> blob -> <a download>
+    try{
+      const r=await authFetch(`/api/v1/documents/${docId}/file`);
+      if(!r.ok){alert("Fișierul nu e disponibil.");return;}
+      const cd=r.headers.get("Content-Disposition")||"";
+      const m=cd.match(/filename="?([^"]+)"?/);
+      const blob=await r.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download=m?m[1]:`document_${docId}`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }catch(e){alert("Eroare la descărcare.");}
   }
 
   // ======================= CALENDAR + PLĂȚI (obligații reale) =======================
