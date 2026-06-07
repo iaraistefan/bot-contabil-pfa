@@ -288,7 +288,7 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
             )
             session.commit()
             return result
-        ext = "jpg" if kind == "photo" else "bin"
+        ext = {"photo": "jpg", "bank_statement": "pdf"}.get(kind, "bin")
         # Arhivare R2 (dacă e configurat): cheie user_<id>/<an>/<lună>/<sha>.<ext>
         # pe data upload-ului. R2 dezactivat -> fallback disk (neschimbat).
         path = storage.save_bytes(
@@ -2035,6 +2035,95 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+def _fmt_ron(x: float) -> str:
+    """1019.45 -> '1.019,45' (format RO: punct mii, virgulă zecimale)."""
+    return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _format_bank_preview(txns) -> str:
+    """Preview felia 1: doar afișare, ZERO scriere în registru."""
+    inc = [t for t in txns if t.directie == "IN"]
+    out = [t for t in txns if t.directie == "OUT"]
+    s_in = sum(t.suma for t in inc)
+    s_out = sum(t.suma for t in out)
+    lines = [
+        f"✅ Am găsit *{len(txns)} tranzacții* în extras:",
+        f"📥 {len(inc)} încasări: *{_fmt_ron(s_in)} lei*",
+        f"📤 {len(out)} plăți: *{_fmt_ron(s_out)} lei*",
+        "✓ verificat cu totalul extrasului (RULAJ TOTAL CONT)",
+        "",
+        "_Primele tranzacții:_",
+    ]
+    for t in txns[:6]:
+        semn = "📥" if t.directie == "IN" else "📤"
+        d = t.data.strftime("%d.%m") if t.data else "??.??"
+        desc = (t.descriere[:38] + "…") if len(t.descriere) > 38 else t.descriere
+        lines.append(f"{semn} {d}  {_fmt_ron(t.suma)}  {desc}")
+    lines.append("")
+    lines.append("_Deocamdată doar afișare — nu am adăugat nimic în registru._")
+    return "\n".join(lines)
+
+
+async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Import extras bancar (PDF) — felia 1: parsare + preview, ZERO scriere registru.
+
+    Handler izolat pe filters.Document (calea foto/text neatinsă).
+    """
+    tg_id = update.effective_user.id
+    if onboarding.user_is_in_onboarding(tg_id):
+        await update.message.reply_text(
+            "⚠️ Te rog termină mai întâi configurarea profilului (/start)."
+        )
+        return
+
+    doc = update.message.document
+    fname = (doc.file_name or "").lower()
+    is_pdf = fname.endswith(".pdf") or doc.mime_type == "application/pdf"
+    if not is_pdf:
+        await update.message.reply_text(
+            "📄 Trimite extrasul ca fișier *PDF* (deocamdată doar Banca Transilvania).",
+            parse_mode="Markdown",
+        )
+        return
+    if doc.file_size and doc.file_size > 10 * 1024 * 1024:
+        await update.message.reply_text("⚠️ Fișier prea mare (max 10 MB).")
+        return
+
+    user_id = ensure_user(update)
+    if not user_id:
+        return
+
+    tg_file = await doc.get_file()
+    file_bytes = bytes(await tg_file.download_as_bytearray())
+    # arhivare + dedup la nivel fișier (nu blocăm la duplicat — felia 1 e doar preview)
+    register_source_file(
+        user_id=user_id, file_bytes=file_bytes,
+        telegram_file_id=tg_file.file_id,
+        kind="bank_statement", mime="application/pdf",
+    )
+
+    await update.message.reply_text("📄 Procesez extrasul…")
+    from app.integrations.imports.bt_parser import parse_bt_pdf
+    from app.integrations.imports.bank_statement import BankStatementError
+    try:
+        txns = parse_bt_pdf(file_bytes)
+    except BankStatementError as e:
+        await update.message.reply_text(
+            f"⚠️ Nu pot citi sigur extrasul: {e}\n\n"
+            "Deocamdată suport doar extrase *Banca Transilvania* (PDF).",
+            parse_mode="Markdown",
+        )
+        return
+    except Exception as e:
+        logger.error(f"bank_statement parse error user={user_id}: {e}")
+        await update.message.reply_text(
+            "⚠️ Nu am putut procesa fișierul. Verifică să fie un extras BT în format PDF."
+        )
+        return
+
+    await update.message.reply_text(_format_bank_preview(txns), parse_mode="Markdown")
+
+
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
     tg_id = update.effective_user.id
@@ -2444,6 +2533,10 @@ if __name__ == '__main__':
     app_bot.add_handler(CallbackQueryHandler(handle_callback_query))
 
     # Mesaje
+    # Extras bancar PDF (felia 1) — handler izolat, ÎNAINTE de foto/text
+    app_bot.add_handler(
+        MessageHandler(filters.Document.PDF, handle_bank_statement_wrapper)
+    )
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo_wrapper))
     app_bot.add_handler(
         MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_wrapper)
