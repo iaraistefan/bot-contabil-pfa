@@ -418,6 +418,82 @@ def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
 #               MAIN LOGIC — ALERTE ZILNICE
 # ============================================================
 
+def _tva_plafon_message(st: dict, ca: float) -> str:
+    """Mesaj TVA cu suma rămasă (din st['threshold_ron'], nu hardcodat)."""
+    threshold = st["threshold_ron"]
+    pct = st["utilized_pct"]
+    if st["status"] == "DEPASIT_PLAFON":
+        return (
+            f"🔴 Ai depășit plafonul TVA de {threshold:.0f} RON (ai {ca:.0f} RON). "
+            f"Ai obligația să te înregistrezi în scopuri de TVA în 10 zile de la "
+            f"depășire."
+        )
+    remaining = max(0.0, threshold - ca)
+    return (
+        f"🟡 Aproape de plafon TVA: {pct:.0f}% ({ca:.0f} / {threshold:.0f} RON). "
+        f"Mai ai ~{remaining:.0f} lei până devii plătitor TVA obligatoriu."
+    )
+
+
+def _maybe_send_plafon(session, bot_token, user, year, code, st, message) -> int:
+    """
+    Trimite o alertă de plafon dacă status ∈ {APROAPE, DEPASIT} și nu s-a mai
+    trimis (anti-spam pe an + treaptă). Caveat uniform. Returns 1 dacă trimisă.
+    """
+    status = st.get("status")
+    if status not in ("APROAPE_PLAFON", "DEPASIT_PLAFON"):
+        return 0
+    alert_type = "prag_80" if status == "APROAPE_PLAFON" else "prag_depasit"
+    if _was_alert_sent(session, user.id, code, year, 0, alert_type):
+        return 0
+    caveat = "\n\n⚠️ Estimare orientativă — verifică cu contabilul."
+    success = _send_telegram_message(bot_token, user.telegram_id, message + caveat)
+    if not success:
+        return 0                              # netrimis → NU marcăm → reîncearcă
+    # marcăm garda DOAR după trimitere reușită (ca la sumar)
+    _log_alert_sent(session, user.id, code, year, 0, alert_type, status="delivered")
+    return 1
+
+
+def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
+    """
+    Alerte „aproape de plafon" (TVA 300k + CAS 12 SMB) pe realizat YTD.
+
+    Pre-check ieftin: dacă CA YTD < PLAFON_PRECHECK_RON → skip (nu rulăm
+    compute_d212_anual). Anti-spam: o alertă / prag / treaptă (prag_80 /
+    prag_depasit) / an (period_month=0). Sursă unică: compute_d212_anual +
+    vat_threshold_status + prag_cas_status. Robust: eroare → 0.
+    """
+    try:
+        year = today.year
+        ca_ytd = _ytd_income_brut(session, user.id, year)
+        if ca_ytd < PLAFON_PRECHECK_RON:
+            return 0                          # departe de orice plafon
+        from app.services import tax_engine
+        from app.domain import contributii
+        r = tax_engine.compute_d212_anual(session, user_id=user.id, an=year)
+        sent = 0
+        # TVA — doar dacă NU e deja plătitor
+        if not ctx.get("is_vat_payer"):
+            st = ctx["fiscal_profile"].vat_threshold_status(r.venit_brut)
+            sent += _maybe_send_plafon(
+                session, bot_token, user, year, "PLAFON_TVA",
+                st, _tva_plafon_message(st, r.venit_brut),
+            )
+        # CAS 12 SMB
+        st_cas = contributii.prag_cas_status(r.venit_net, year)
+        sent += _maybe_send_plafon(
+            session, bot_token, user, year, "PLAFON_CAS",
+            st_cas, st_cas["message"],
+        )
+        return sent
+    except Exception as e:
+        logger.error(
+            f"_check_plafon_alerts error user={getattr(user, 'id', '?')}: {e}"
+        )
+        return 0
+
+
 def _process_user_alerts(
     session, bot_token: str, user, today: Optional[date] = None,
 ) -> int:
@@ -501,6 +577,8 @@ def _process_user_alerts(
                     f"period={period_year}/{period_month}"
                 )
 
+    # alerte „aproape de plafon" (TVA / CAS) pe realizat YTD
+    alerts_sent += _check_plafon_alerts(session, bot_token, user, ctx, today)
     return alerts_sent
 
 
