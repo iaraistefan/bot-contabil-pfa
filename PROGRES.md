@@ -192,7 +192,7 @@ prin **sursă unică `compute_d212_anual`** (aceeași ca dashboard-ul + declara�
 
 Suita: **127/127** teste verzi.
 
-### Alerte „aproape de plafon" (TVA + CAS) — ÎNCHISE
+### Alerte „aproape de plafon" (TVA + CAS 12/24 + CASS 60) — COMPLETE
 Avertizare PROACTIVĂ înainte de a trece praguri fiscale (ce Pick/SOLO nu fac), în
 jobul zilnic existent. Sursă unică `compute_d212_anual` + `vat_threshold_status` +
 `prag_cas_status`. 3 pași:
@@ -207,10 +207,18 @@ jobul zilnic existent. Sursă unică `compute_d212_anual` + `vat_threshold_statu
   `period_month=0`, `prag_80`/`prag_depasit`): marcat DOAR pe succes; escaladare
   80%→100% = alertă nouă. Mesaje cu suma rămasă + caveat uniform. 10 teste.
 
-Praguri la pornire: **TVA 300k + CAS 12 SMB**. Extensie viitoare (același tipar
-`prag_*_status`): **CAS 24 SMB** (baza dublă) + **CASS 60 SMB**.
+- `e134813` (extensie): `_prag_core` (matematica comună, DRY) + `prag_cas24_status`
+  (97.200, 24 SMB — baza CAS se DUBLEAZĂ, mesaj „rău" 🔴) + `prag_cass60_status`
+  (243.000, 60 SMB — CASS plafonat, mesaj informativ ℹ️ „rămâne de plată integral,
+  nu mai crește"; NU felicitare). `prag_cas_status` refactorizat pe core (cele 10
+  teste verzi, echivalență). `_check_plafon_alerts` +2 alerte (PLAFON_CAS24/CASS60,
+  anti-spam independent). Gate 38.880 (cel mai mic prag) acoperă toate. 23 teste.
 
-Suita: **151/151** teste verzi.
+**Toate cele 4 praguri fiscale relevante PFA acoperite: TVA 300k + CAS 12 SMB
+(obligatoriu) + CAS 24 SMB (baza dublă) + CASS 60 SMB (plafonare).** Sistemul de
+alerte de plafon e COMPLET — ceva ce Pick/SOLO nu fac.
+
+Suita: **180/180** teste verzi.
 
 ⚙️ **De setat în Render:** `OWNER_TELEGRAM_ID` = telegram_id-ul lui Stefan (din
 @userinfobot). Nesetat → `/sumar_test` e inert pentru toți (fail-safe).
@@ -286,6 +294,7 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `865ac0f` feat(contributii): prag_cas_status pentru alerte aproape-de-plafon (PAS 1)
 - `12a8cb5` feat(plafon): pre-check ieftin _ytd_income_brut (PAS 2)
 - `26b131a` feat(plafon): alerte aproape-de-plafon TVA+CAS in jobul proactiv (PAS 3)
+- `e134813` feat(plafon): extensie — CAS 24 SMB (dublare baza) + CASS 60 SMB (plafonare)
 
 ## COMMITURI CHEIE (Faza 3 — performanță)
 - `56fb4b9` perf(d212): cache cu fingerprint pentru compute_d212_anual (zero stale)
