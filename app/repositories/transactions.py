@@ -28,8 +28,13 @@ def create(
     occurred_on: Optional[date] = None,
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
+    import_fingerprint: Optional[str] = None,
 ) -> Transaction:
-    """Inserează o tranzacție nouă. Commit la apelant."""
+    """Inserează o tranzacție nouă. Commit la apelant.
+
+    `import_fingerprint`: amprenta liniei de extras pentru anti-dublură (felia 3);
+    None pentru tranzacțiile non-import (foto/Bolt/manual) → comportament neschimbat.
+    """
     tx = Transaction(
         user_id=user_id,
         document_id=document_id,
@@ -46,6 +51,7 @@ def create(
         occurred_on=occurred_on,
         period_year=period_year,
         period_month=period_month,
+        import_fingerprint=import_fingerprint,
     )
     session.add(tx)
     session.flush()

@@ -214,10 +214,21 @@ def post_document(
     cash: float,
     banca: float,
     data_doc: Optional[str],
+    category_override: Optional[str] = None,
+    import_fingerprint: Optional[str] = None,
 ) -> List[int]:
     """
     Derivă tranzacțiile contabile dintr-un document.
     Întoarce lista de tx_id-uri create. Commit la apelant.
+
+    Parametri opționali (felia 3 — import extras bancar; aditivi, default None
+    => comportament IDENTIC cu înainte pentru foto/Bolt):
+      - category_override: dacă e dat, ramura CHELTUIALA folosește ACEASTĂ categorie
+        și SARE peste detect_expense_category (clasificarea e deja decisă determinist
+        în felia 2). Pe date bancare e MEREU non-None => re-clasificarea pe text brut
+        (cu zgomotul „0.00RON") nu mai poate produce fals-pozitive pe SCRIERE.
+      - import_fingerprint: amprenta liniei de extras, stocată pe tranzacția EXPENSE
+        (anti-dublură). Se aplică pe ramura CHELTUIALA (singura folosită de import).
     """
     occurred_on = _parse_occurred_on(data_doc)
     period_year = occurred_on.year if occurred_on else None
@@ -250,6 +261,8 @@ def post_document(
                 detalii=detalii, brut=brut, tva=tva,
                 occurred_on=occurred_on,
                 period_year=period_year, period_month=period_month,
+                category_override=category_override,
+                import_fingerprint=import_fingerprint,
             )
 
         elif tip == "FACTURA_COMISION":
@@ -403,26 +416,39 @@ def _post_cheltuiala(
     session, *, user_id, activity, user_is_vat_payer,
     document_id, platforma, detalii, brut, tva,
     occurred_on, period_year, period_month,
+    category_override=None, import_fingerprint=None,
 ) -> List[int]:
     """
     CHELTUIALA → 1x EXPENSE.
-    Categoria + deductibilitatea vin din scoring-ul semantic.
+    Categoria + deductibilitatea vin din scoring-ul semantic, SAU din
+    `category_override` (felia 3 — clasificare deja decisă determinist; sare
+    peste re-clasificare => fals-pozitivul pe text brut e imposibil pe scriere).
     vat_treatment vine din vat_engine (cu fallback la logica veche).
+    `import_fingerprint` se stochează pe tranzacție (anti-dublură import).
     """
-    # ⭐ DETECT cu scoring semantic
-    category_code = _detect_expense_category(activity, platforma, detalii)
-
-    if category_code is None:
-        # Fallback: categorie "alte cheltuieli", deductibil 100%
-        category_code = CAT_OTHER_EXPENSE
-        deductibility_pct = 100
+    if category_override is not None:
+        # ⭐ FELIA 3 — onorăm clasificarea deterministă; NU re-clasificăm pe text.
+        category_code = category_override
+        deductibility_pct = activity.get_deductibility_pct(category_code)
         logger.info(
-            f"No category match for activity={activity.code} "
-            f"text='{platforma} {detalii}' → fallback to {CAT_OTHER_EXPENSE}"
+            f"CHELTUIALA override: category={category_code} "
+            f"pct={deductibility_pct}% (skip detect_expense_category)"
         )
     else:
-        # ⭐ DEDUCTIBILITY DINAMICĂ din activitate
-        deductibility_pct = activity.get_deductibility_pct(category_code)
+        # ⭐ DETECT cu scoring semantic (comportament istoric — foto)
+        category_code = _detect_expense_category(activity, platforma, detalii)
+
+        if category_code is None:
+            # Fallback: categorie "alte cheltuieli", deductibil 100%
+            category_code = CAT_OTHER_EXPENSE
+            deductibility_pct = 100
+            logger.info(
+                f"No category match for activity={activity.code} "
+                f"text='{platforma} {detalii}' → fallback to {CAT_OTHER_EXPENSE}"
+            )
+        else:
+            # ⭐ DEDUCTIBILITY DINAMICĂ din activitate
+            deductibility_pct = activity.get_deductibility_pct(category_code)
 
     # ════════════════════════════════════════════════════════
     # === NEW (Pas 8.4b) — VAT Engine pentru tratament TVA ===
@@ -464,6 +490,7 @@ def _post_cheltuiala(
         occurred_on=occurred_on,
         period_year=period_year,
         period_month=period_month,
+        import_fingerprint=import_fingerprint,
     )
 
     logger.info(

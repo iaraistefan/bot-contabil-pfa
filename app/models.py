@@ -180,6 +180,11 @@ class Transaction(Base):
     locked = Column(Boolean, nullable=False, default=False)
     posted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    # === Felia 3 (import extras) — anti-dublură la nivel de tranzacție bancară ===
+    # Amprentă stabilă a liniei de extras (occurred_on+amount+directie+descriere
+    # normalizată+ocurență). NULL pentru tranzacțiile non-import (foto/Bolt/manual).
+    import_fingerprint = Column(String(64), nullable=True, index=True)
+
     user = relationship("User", back_populates="transactions")
     document = relationship("Document", back_populates="transactions")
 

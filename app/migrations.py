@@ -286,6 +286,21 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "011_transactions_import_fingerprint",
+        "description": (
+            "Felia 3 (import extras): import_fingerprint pe transactions — "
+            "anti-dublura la nivel de tranzactie bancara (occurred_on+amount+"
+            "directie+descriere normalizata+ocurenta). Nullable, aditiv."
+        ),
+        "sql": [
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS import_fingerprint VARCHAR(64)",
+            """
+            CREATE INDEX IF NOT EXISTS ix_transactions_import_fingerprint
+                ON transactions (user_id, import_fingerprint)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
