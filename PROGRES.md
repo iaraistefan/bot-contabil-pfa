@@ -250,9 +250,41 @@ Suita: **199/199** teste verzi.
 
 **TODO viitor (felia 1 — extensie multi-bancă):** detecție automată bancă + registru
 parsere + profil bancă per user (acum doar BT; granița `BankTxn` e pregătită).
-**Felii următoare (import extras):** clasificare tranzacții (AI pe categorie) → postare în
-registru (via `post_document`) → anti-dublură vs sync Bolt → model persistent obligații +
-match plată ↔ obligație („marchez D212 ca achitat"; cere model nou — vezi recon).
+
+---
+
+### Import extras bancar BT — FELIA 2 ÎNCHISĂ (clasificare + preview grupat)
+Peste preview-ul feliei 1, botul **clasifică** fiecare tranzacție într-un bucket de
+nivel-extras și afișează un mini-raport grupat. **DETERMINIST, ZERO AI / ZERO scriere
+registru** (clasificarea pe „ce e clar"; ce e ambiguu → `DE_VERIFICAT`, userul decide).
+3 commituri (PAS 1 + hotfix + PAS 2):
+- `038b3ad` (PAS 1): `app/integrations/imports/classify.py` — strat separat peste `BankTxn`
+  (parserul rămâne pur). `BankTxnClasificat {txn, bucket, categorie, deductibil, incredere,
+  eticheta}`. `classify_bt(txn, activity)` pur, determinist, **6 buckete** cu precedența
+  `RETURNARE → PLATA → COMISION → BOLT(IN) → BUSINESS(OUT) → DE_VERIFICAT` (direcția IN/OUT
+  dezambiguizează returnare↔plată). **Reutilizează** `activity.detect_expense_category` +
+  `get_deductibility_pct` (classmethod, identic cu `posting.py` — NU clasificator paralel).
+  Etichete RO corecte fiscal (hint obligație TVA/Impozit+lună). Vocabular separat: bucket
+  (ce e) ≠ `incredere` SIGUR/INCERT (cât de sigur). 19 teste.
+- `621ac5f` (hotfix): **fals-pozitiv prins pe extrasul REAL** — BT scrie zgomotul lipit
+  („comision tranzactie 0.00RON", fără spațiu), denoise cerea `\s+ron` → „comision"
+  supraviețuia → 6 plăți POS către persoane fizice marcate fals `platform_commission`
+  deductibil 100%. Fix `\s+→\s*`. Testul sintetic mințea („0.00 RON" cu spațiu) → corectat
+  la formatul real + test regresie pe string-ul exact + **golden pe FIXTURE REAL**
+  (3 Bolt/8 plăți/8 returnări/9 comisioane/0 business/6 de verificat=34). Lecție: testul
+  sintetic mințea, datele reale au spus adevărul. 23 teste.
+- `e2bc1de` (PAS 2): integrare preview. Handler → `get_activity_for_user(user_id)` (sursă
+  unică, ca `post_document`) → `classify_bt` → `_format_bank_preview(list[BankTxnClasificat])`
+  (rămâne PUR). Mini-raport grupat pe buckete (sume+count, grupuri goale sărite); **Venit
+  Bolt SEPARAT de returnări**; linia **„net 0" CONDIȚIONATĂ** (doar când returnări==plăți;
+  altfel neutru „nu venit nou" — pe bani nu afirmăm fals). Disclaimer păstrat. Randat pe
+  extrasul real = design aprobat. 9 teste preview.
+
+Suita: **227/227** teste verzi.
+
+**Felii următoare (import extras):** postare în registru (via `post_document`, pe bucketele
+clare) → confirmare user pentru `DE_VERIFICAT` → anti-dublură vs sync Bolt → model persistent
+obligații + match plată ↔ obligație („marchez D212 ca achitat"; cere model nou — vezi recon).
 
 ---
 
@@ -333,3 +365,8 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 ## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 1)
 - `8f1405e` feat(import): parser determinist BT (PDF) cu auto-checksum (PAS 1)
 - `92a9fad` feat(import): handler extras BT + preview (PAS 2)
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 2)
+- `038b3ad` feat(import): clasificator determinist extras BT (felia 2 PAS 1)
+- `621ac5f` fix(import): denoise prinde 0.00RON lipit (fals-pozitiv comision pe plati POS)
+- `e2bc1de` feat(import): preview clasificat grupat pe buckete (felia 2 PAS 2)
