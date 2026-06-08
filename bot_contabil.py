@@ -24,6 +24,11 @@ from app.services import confirmare  # Pas R1 - confirmare date extrase
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
+from app.integrations.imports.classify import (
+    classify_bt,
+    VENIT_BOLT, PLATA_TAXA, RETURNARE_TAXA,
+    COMISION_BANCAR, CHELTUIALA_BUSINESS, DE_VERIFICAT,
+)
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
@@ -2040,25 +2045,76 @@ def _fmt_ron(x: float) -> str:
     return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _format_bank_preview(txns) -> str:
-    """Preview felia 1: doar afișare, ZERO scriere în registru."""
-    inc = [t for t in txns if t.directie == "IN"]
-    out = [t for t in txns if t.directie == "OUT"]
-    s_in = sum(t.suma for t in inc)
-    s_out = sum(t.suma for t in out)
+# Ordinea grupurilor în preview (relevanță fiscală) + emoji + etichetă + hint scurt.
+# Hint-ul e la nivel de GRUP (preview = sumar; detaliul fin vine la postare, felia 3).
+_BUCKET_DISPLAY = [
+    (VENIT_BOLT,          "📥", "Venituri Bolt",              None),
+    (PLATA_TAXA,          "📤", "Plăți obligații fiscale",    "decontare, nu cheltuială"),
+    (RETURNARE_TAXA,      "↩️", "Returnări (plăți respinse)", "anulează plăți, nu venit nou"),
+    (COMISION_BANCAR,     "💳", "Comisioane bancare",         "deductibile"),
+    (CHELTUIALA_BUSINESS, "🧾", "Cheltuieli business",        None),
+    (DE_VERIFICAT,        "🟡", "De verificat",               "tu decizi la confirmare"),
+]
+_EMOJI_BY_BUCKET = {b: e for b, e, _l, _h in _BUCKET_DISPLAY}
+
+
+def _format_bank_preview(clasificate) -> str:
+    """Preview felia 2: clasificare grupată pe buckete. ZERO scriere în registru.
+
+    Primește deja `list[BankTxnClasificat]` (handler-ul orchestrează activity +
+    clasificare). Funcția e PURĂ — doar formatează mesajul.
+    """
+    total = len(clasificate)
+    n_verif = sum(1 for r in clasificate if r.bucket == DE_VERIFICAT)
+    n_clasif = total - n_verif
+
+    by_bucket = {}
+    for r in clasificate:
+        by_bucket.setdefault(r.bucket, []).append(r)
+
     lines = [
-        f"✅ Am găsit *{len(txns)} tranzacții* în extras:",
-        f"📥 {len(inc)} încasări: *{_fmt_ron(s_in)} lei*",
-        f"📤 {len(out)} plăți: *{_fmt_ron(s_out)} lei*",
-        "✓ verificat cu totalul extrasului (RULAJ TOTAL CONT)",
+        f"✅ *{total} tranzacții* în extras — {n_clasif} clasificate, {n_verif} de verificat",
+        "✓ verificat cu RULAJ TOTAL CONT",
         "",
-        "_Primele tranzacții:_",
     ]
-    for t in txns[:6]:
-        semn = "📥" if t.directie == "IN" else "📤"
+
+    # Grupuri în ordinea relevanței fiscale (sărim grupurile goale)
+    for bucket, emoji, label, hint in _BUCKET_DISPLAY:
+        grup = by_bucket.get(bucket)
+        if not grup:
+            continue
+        suma = sum(r.txn.suma for r in grup)
+        sufix = f" — {hint}" if hint else ""
+        lines.append(f"{emoji} *{label}:* {len(grup)}  ({_fmt_ron(suma)} lei){sufix}")
+
+    # Linie fiscală: returnările sunt plăți respinse reîntoarse (NU venit nou).
+    # Dacă sumele plăți/returnări se potrivesc exact → se anulează net 0.
+    retur = by_bucket.get(RETURNARE_TAXA)
+    if retur:
+        s_plata = sum(r.txn.suma for r in by_bucket.get(PLATA_TAXA, []))
+        s_retur = sum(r.txn.suma for r in retur)
+        lines.append("")
+        if by_bucket.get(PLATA_TAXA) and round(s_plata, 2) == round(s_retur, 2):
+            lines.append(
+                "ℹ️ _Plățile și returnările se anulează (net 0) — "
+                "au fost respinse și reîntoarse._"
+            )
+        else:
+            lines.append(
+                "ℹ️ _Returnările sunt plăți respinse reîntoarse (nu venit nou)._"
+            )
+
+    # Exemple concrete (primele tranzacții, cu etichetă)
+    lines.append("")
+    lines.append("_Primele tranzacții:_")
+    for r in clasificate[:6]:
+        t = r.txn
         d = t.data.strftime("%d.%m") if t.data else "??.??"
-        desc = (t.descriere[:38] + "…") if len(t.descriere) > 38 else t.descriere
-        lines.append(f"{semn} {d}  {_fmt_ron(t.suma)}  {desc}")
+        et = r.eticheta or ""
+        if len(et) > 32:
+            et = et[:32] + "…"
+        lines.append(f"{_EMOJI_BY_BUCKET.get(r.bucket, '•')} {d}  {_fmt_ron(t.suma)}  _{et}_")
+
     lines.append("")
     lines.append("_Deocamdată doar afișare — nu am adăugat nimic în registru._")
     return "\n".join(lines)
@@ -2121,7 +2177,14 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
         )
         return
 
-    await update.message.reply_text(_format_bank_preview(txns), parse_mode="Markdown")
+    # Clasificare deterministă (felia 2): activity din profilul user-ului,
+    # ACEEAȘI sursă ca post_document (get_activity_for_user -> get_activity).
+    activity = get_activity_for_user(user_id)
+    clasificate = [classify_bt(t, activity) for t in txns]
+
+    await update.message.reply_text(
+        _format_bank_preview(clasificate), parse_mode="Markdown"
+    )
 
 
 async def handle_text_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
