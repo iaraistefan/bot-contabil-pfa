@@ -35,10 +35,12 @@ INCERT = "INCERT"    # incredere: ambiguu, userul decide (≠ bucket DE_VERIFICA
 _SCORE_MIN = 6          # scor minim detect_expense_category pt. a fi „sigur"
 
 # Zgomot din descrierile BT de plată card care ar păcăli detecția fiscală
-# (ex. „comision tranzactie 0.00 RON" → fals platform_commission).
+# (ex. „comision tranzactie 0.00RON" → fals platform_commission).
+# ATENȚIE: BT scrie suma LIPITĂ de monedă ("0.00RON", "6.05EUR"), fără spațiu —
+# de aceea spațiul dinaintea monedei e OPȚIONAL (\s*), nu obligatoriu.
 _NOISE = [
-    re.compile(r"comision tranzactie\s+[\d.,]+\s+ron", re.I),
-    re.compile(r"valoare tranzactie:?\s*[\d.,]+\s+eur", re.I),
+    re.compile(r"comision tranzactie\s+[\d.,]+\s*ron", re.I),
+    re.compile(r"valoare tranzactie:?\s*[\d.,]+\s*eur", re.I),
 ]
 
 # Hint obligație fiscală pt. etichetă (ex. „TVA D301 Ianuarie 2026")

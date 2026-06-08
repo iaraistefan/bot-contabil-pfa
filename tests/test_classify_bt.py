@@ -14,6 +14,7 @@ din activitatea reală (NU clasificator paralel), deci testăm cu
 `RidesharingActivity` ca în producție.
 """
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -174,7 +175,8 @@ def test_cheltuiala_business_service_50():
 def test_denoise_comision_tranzactie_nu_da_fals_pozitiv():
     # Plată card la comerciant neutru, dar extrasul atașează zgomotul BT.
     # Fără denoise, „comision" ar match-ui platform_commission → business greșit.
-    txn = _t("OUT", "Plata POS Kaufland SRL comision tranzactie 0.00 RON")
+    # FORMAT REAL BT: suma e LIPITĂ de monedă ("0.00RON"), fără spațiu.
+    txn = _t("OUT", "Plata POS Kaufland SRL comision tranzactie 0.00RON")
     r = classify_bt(txn, ACT)
     assert r.bucket == DE_VERIFICAT
     assert r.categorie != "platform_commission"
@@ -183,10 +185,28 @@ def test_denoise_comision_tranzactie_nu_da_fals_pozitiv():
 
 def test_denoise_pastreaza_keyword_real():
     # Zgomotul e curățat, dar combustibilul real rămâne detectat.
-    txn = _t("OUT", "Plata POS OMV MOTORINA comision tranzactie 0.00 RON")
+    txn = _t("OUT", "Plata POS OMV MOTORINA comision tranzactie 0.00RON")
     r = classify_bt(txn, ACT)
     assert r.bucket == CHELTUIALA_BUSINESS
     assert r.categorie == "fuel"
+
+
+def test_denoise_regresie_string_real_pos_persoana_fizica():
+    # REGRESIE: string-ul EXACT dintr-o plată POS din extrasul BT real
+    # (anonimizat). BT lipește suma de monedă ("6.05EUR", "0.00RON"). Denoise-ul
+    # vechi cerea spațiu (\s+ron) → NU prindea → „comision" supraviețuia →
+    # plata către o PERSOANĂ FIZICĂ era marcată FALS platform_commission 100%.
+    # Acest test ar fi prins bug-ul de la început.
+    descr = (
+        "Plata la POS non-BT cu card VISA EPOS 01/04/2026 XXXXXXXXXXXXXX "
+        "TID:XXXXXXXX MERCHANTUS +10000000000 US 0000000000v0a0loare "
+        "tranzactie: 6.05EUR RRN: 609108383488 comision tranzactie 0.00RON; "
+        "POPESICOUN PERSOANA FIZICA AUTORI; REF: 000XXXX000000XX"
+    )
+    r = classify_bt(_t("OUT", descr), ACT)
+    assert r.bucket == DE_VERIFICAT
+    assert r.categorie != "platform_commission"
+    assert r.categorie is None
 
 
 # ----------------------------------------------------------------------
@@ -221,3 +241,53 @@ def test_descriere_none_nu_crapa():
     r = classify_bt(txn, ACT)
     assert r.bucket == DE_VERIFICAT
     assert r.incredere == INCERT
+
+
+# ----------------------------------------------------------------------
+# GOLDEN pe FIXTURE REAL — clasificarea întregului extras BT (aprilie 2026).
+# Sintetic mințea (denoise pe „0.00 RON" cu spațiu); datele reale spun adevărul.
+# Cele 6 plăți POS către persoane fizice trebuie să fie DE_VERIFICAT, NU business.
+# ----------------------------------------------------------------------
+_FIXTURE = Path(__file__).parent / "fixtures" / "extras_bt_anon.pdf"
+
+
+@pytest.fixture(scope="module")
+def fixture_clasificat():
+    from app.integrations.imports.bt_parser import parse_bt_pdf
+    txns = parse_bt_pdf(_FIXTURE.read_bytes())
+    return [classify_bt(t, ACT) for t in txns]
+
+
+def test_fixture_golden_count_per_bucket(fixture_clasificat):
+    cl = fixture_clasificat
+    counts = {b: sum(1 for r in cl if r.bucket == b) for b in (
+        VENIT_BOLT, PLATA_TAXA, RETURNARE_TAXA,
+        COMISION_BANCAR, CHELTUIALA_BUSINESS, DE_VERIFICAT,
+    )}
+    assert len(cl) == 34
+    assert counts[VENIT_BOLT] == 3
+    assert counts[PLATA_TAXA] == 8
+    assert counts[RETURNARE_TAXA] == 8
+    assert counts[COMISION_BANCAR] == 9
+    assert counts[CHELTUIALA_BUSINESS] == 0     # ZERO fals-pozitive pe plăți POS
+    assert counts[DE_VERIFICAT] == 6            # plățile POS → userul decide
+
+
+def test_fixture_sume_per_bucket(fixture_clasificat):
+    cl = fixture_clasificat
+    def s(b):
+        return round(sum(r.txn.suma for r in cl if r.bucket == b), 2)
+    assert s(VENIT_BOLT) == 699.45
+    assert s(PLATA_TAXA) == 320.00
+    assert s(RETURNARE_TAXA) == 320.00          # = plățile → se anulează net 0
+    assert s(DE_VERIFICAT) == 442.19
+
+
+def test_fixture_zero_fals_pozitiv_platform_commission(fixture_clasificat):
+    # Nicio plată POS către persoană fizică nu trebuie să fie comision deductibil.
+    pos = [r for r in fixture_clasificat
+           if "POS non-BT" in (r.txn.descriere or "")]
+    assert pos, "fixture trebuie să conțină plăți POS non-BT"
+    for r in pos:
+        assert r.categorie != "platform_commission"
+        assert r.bucket == DE_VERIFICAT
