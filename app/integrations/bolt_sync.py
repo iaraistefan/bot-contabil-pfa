@@ -446,9 +446,14 @@ def collect_recent(user_id: int, days: int = 4) -> int:
 #              POSTARE IN REGISTRU (refoloseste posting)
 # ============================================================
 
-def _remove_existing_bolt_income(session, user_id, year, month):
+def _bolt_income_docs_query(session, user_id, year, month):
+    """Query-ul documentelor de venit Bolt pentru o lună (FILTRU = sursă unică).
+
+    Folosit de `_remove_existing_bolt_income` (înlocuire la re-/bolt) ȘI de
+    `has_bolt_income` (reconciliere de prezență, felia 4).
+    """
     data_suffix = f".{month:02d}.{year}"
-    docs = (
+    return (
         session.query(Document)
         .filter(
             Document.user_id == user_id,
@@ -457,8 +462,16 @@ def _remove_existing_bolt_income(session, user_id, year, month):
             Document.status != "rejected",
             Document.data_doc.like(f"%{data_suffix}"),
         )
-        .all()
     )
+
+
+def has_bolt_income(session, user_id: int, year: int, month: int) -> bool:
+    """True dacă există venit Bolt sincronizat pentru luna dată (felia 4)."""
+    return _bolt_income_docs_query(session, user_id, year, month).first() is not None
+
+
+def _remove_existing_bolt_income(session, user_id, year, month):
+    docs = _bolt_income_docs_query(session, user_id, year, month).all()
     removed = 0
     for d in docs:
         tx_repo.delete_for_document(session, document_id=d.id)
