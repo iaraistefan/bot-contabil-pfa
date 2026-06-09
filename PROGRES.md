@@ -338,10 +338,33 @@ ar da false-alarme dese. Deci felia 4 = reconciliere de PREZENȚĂ (factuală, n
 
 Suita: **278/278** teste verzi.
 
-**Felie următoare (import extras):** model persistent obligații + match plată ↔ obligație
-(felia 5 — `PLATA_TAXA`/`RETURNARE_TAXA` din extras sunt decontări de obligații, NU venit/
-cheltuială; „marchez D212/D301 ca achitat din extras"; cere model nou de obligație + matching
-plată↔obligație — vezi recon felia 3).
+---
+
+### Import extras bancar BT — FELIA 5a ÎNCHISĂ (compensare plată↔returnare taxe)
+Prima felie din felia 5 (match plată↔obligație). Reconul a scos verdictul + cazul de aur:
+`PLATA_TAXA`/`RETURNARE_TAXA` din extras sunt decontări de obligații (D301/D100), NU venit/
+cheltuială. Riscul DOMINANT (dovedit pe extrasul real): **toate cele 8 plăți de taxe au fost
+RESPINSE** (returnare-pereche, net 0) → obligațiile NU sunt achitate. Un match naiv „plată →
+marchez achitat" ar fi marcat FALS obligații achitate = eroare fiscală. Deci felia 5a =
+compensare ÎNAINTE de orice match. 2 commituri (pur, ZERO model/scriere):
+- `8c646ce` (PAS 1): hint obligație STRUCTURAT din classify — `ObligatieHint` dataclass
+  (tip/declarație/lună-int/an) + câmp `oblig` aditiv pe `BankTxnClasificat`. Refactor sursă
+  unică `_oblig_hint` → `_oblig_label` (etichetă, format vechi) + `_oblig_parts` (structurat),
+  o singură regex/call site. Etichetă BIT-IDENTICĂ (23 teste felia 2 verzi). 5 teste.
+- `8042170` (PAS 2): `tax_payments.py` — `compensate(clasificate)` → plăți REALE. Grupare pe
+  `(tip, declarație, lună, an, sumă)` (suma în cheie: 138 compensează doar 138); per grup
+  `max(0, n_plăți − n_returnări)` (count-based, plăți fungibile; re-plată 2+1→1, NU „anulează
+  tot"; returnări>plăți→0). Determinist. **Cazul de aur: pe fixture 8+8 → `[]`** (toate
+  respinse → nimic achitat = adevărul fiscal). 8 teste.
+
+Suita: **291/291** teste verzi.
+
+**Felii următoare (felia 5):** **5b** — model PERSISTENT obligații+plată (tabel nou per
+`(user, cod_obligație, an, lună)` cu status plată; migrație aditivă; schema+repo, fără
+consumator). **5c** (probabil re-spart) — match plată-reală↔obligație pe tip+perioadă (din
+`oblig`), userul confirmă, afișare „achitat". Azi obligațiile sunt EFEMERE (calculate on-the-fly,
+status doar pe timp; `get_obligations_for_user`), NU există status „achitat" persistent și NU
+există buton „marchează plătit" (vezi recon felia 5).
 
 ---
 
@@ -439,3 +462,8 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 ## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 4: reconciliere prezenta Bolt)
 - `7f76990` feat(import): reconciliere prezenta venit Bolt (logica) + refactor sursa unica (PAS 1)
 - `142f15b` feat(import): wiring nudge reconciliere Bolt in preview (PAS 2)
+- `2afa729` docs: PROGRES.md - felia 4 INCHISA
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 5a: compensare plata<->returnare)
+- `8c646ce` feat(import): hint obligatie structurat din classify (PAS 1)
+- `8042170` feat(import): compensare plata<->returnare taxe (PAS 2)
