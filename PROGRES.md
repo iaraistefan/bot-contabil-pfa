@@ -315,10 +315,33 @@ Flux: extras PDF → parser (felia 1) → clasificare (felia 2) → buton „Ada
 confirmare per `DE_VERIFICAT` (business+categorie / personală / sari) → postare TOT-SAU-NIMIC
 cu dedup. Doar `CHELTUIALA_BUSINESS` + `DE_VERIFICAT`-confirmat; venit Bolt/decontări excluse.
 
-**Felii următoare (import extras):** anti-dublură vs sync Bolt (felia 4 — încasările Bolt din
-extras sunt deja în registru din sync; nevoie de match bank↔sync) → model persistent obligații
-+ match plată ↔ obligație (felia 5 — PLATA_TAXA/RETURNARE_TAXA; „marchez D212 ca achitat"; cere
-model nou — vezi recon).
+---
+
+### Import extras bancar BT — FELIA 4 ÎNCHISĂ (reconciliere de prezență venit Bolt)
+Reconul a scos verdictul ONEST: „anti-dublură" e nume impropriu — dublura de venit e DEJA
+imposibilă (felia 3 exclude `VENIT_BOLT` din postare; venitul vine exclusiv din sync). Și
+reconcilierea PE SUMĂ e o capcană: depunerile bancare Bolt sunt NETE, sync-ul postează pe
+BRUT (diferă cu comisionul) + payout săptămânal ≠ lună calendaristică → potrivirea de sume
+ar da false-alarme dese. Deci felia 4 = reconciliere de PREZENȚĂ (factuală, nu pe sumă).
+2 commituri:
+- `7f76990` (PAS 1): `bolt_reconcile.py` — `bolt_months_in_statement` (pur: lunile cu
+  `VENIT_BOLT` din extras) + `bolt_reconcile_nudge` (nudge dacă o lună are Bolt în extras dar
+  fără venit sincronizat; None = tăcere când tot sincronizat). **Refactor sursă unică:** filtrul
+  de prezență Bolt extras din `_remove_existing_bolt_income` inline într-un `has_bolt_income`
+  partajat (folosit de AMBELE: înlocuire re-`/bolt` ȘI reconciliere). Text NEUTRU („nu apar încă
+  sincronizate") + notă „depunerile bancare sunt nete, nu brute". 9 teste (+2 regresie
+  `_remove_existing_bolt_income` neschimbat). Edge fals-pozitiv timing payout acceptat conștient.
+- `142f15b` (PAS 2): wiring în handler — `safe_reconcile_nudge` (gardă try/except defensivă:
+  reconcilierea e BONUS, o eroare DB NU strică preview-ul) + `append_nudge` la preview DOAR dacă
+  ≠None. `_format_bank_preview` NEATINS (preview identic). 4 teste (append aditiv, regresie
+  None→bit-identic, gardă defensivă ×2).
+
+Suita: **278/278** teste verzi.
+
+**Felie următoare (import extras):** model persistent obligații + match plată ↔ obligație
+(felia 5 — `PLATA_TAXA`/`RETURNARE_TAXA` din extras sunt decontări de obligații, NU venit/
+cheltuială; „marchez D212/D301 ca achitat din extras"; cere model nou de obligație + matching
+plată↔obligație — vezi recon felia 3).
 
 ---
 
@@ -411,3 +434,8 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `e451673` feat(import): serviciu postare cheltuieli extras + garda buckete (PAS 3)
 - `663c3f5` feat(import): UI logica pura postare extras (PAS 4a)
 - `92748d0` feat(import): UI postare extras + commit tot-sau-nimic (PAS 4b)
+- `9417cb1` docs: PROGRES.md - felia 3 INCHISA
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 4: reconciliere prezenta Bolt)
+- `7f76990` feat(import): reconciliere prezenta venit Bolt (logica) + refactor sursa unica (PAS 1)
+- `142f15b` feat(import): wiring nudge reconciliere Bolt in preview (PAS 2)
