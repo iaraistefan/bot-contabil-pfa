@@ -11,11 +11,19 @@ Fluxul:
 🛡️ UI-ul FILTREAZĂ (garda din post_bank = backup): `build_decisions` emite
 categorie DOAR pentru bucketele postabile; restul → None, STRUCTURAL.
 """
+import logging
 from typing import List, Optional
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
 
 from app.integrations.imports.classify import CHELTUIALA_BUSINESS, DE_VERIFICAT
 # Single source pentru bucketele postabile (același set ca garda serviciului).
 from app.integrations.imports.post_bank import _POSTABILE as POSTABLE_BUCKETS
+
+logger = logging.getLogger(__name__)
+
+_STATE_KEY = "bank_pending"
 
 
 # ── Opțiuni categorie pentru un DE_VERIFICAT confirmat business ──
@@ -174,3 +182,192 @@ def format_result(res: dict) -> str:
     lines.append("")
     lines.append("_Vezi în Registru / Raport._")
     return "\n".join(lines)
+
+
+def has_postable(clasificate: List) -> bool:
+    """True dacă există măcar o cheltuială postabilă (business clar sau de verificat)."""
+    return any(r.bucket in POSTABLE_BUCKETS for r in clasificate)
+
+
+# ============================================================
+#                    STARE (context.user_data)
+# ============================================================
+
+def store_state(context, state: dict) -> None:
+    context.user_data[_STATE_KEY] = state
+
+
+def get_state(context):
+    return context.user_data.get(_STATE_KEY)
+
+
+def clear_state(context) -> None:
+    context.user_data.pop(_STATE_KEY, None)
+
+
+# ============================================================
+#       COMMIT TOT-SAU-NIMIC (sync, testabil — money-critical)
+# ============================================================
+
+def finalize_bank_post(session, *, user_id, source_file_id, clasificate, decisions) -> dict:
+    """Postează cheltuielile + commit TOT-SAU-NIMIC.
+
+    `post_bank_expenses` (PAS 3) NU comite; aici facem UN SINGUR commit la final.
+    Orice excepție (inclusiv doc orfan din gaura post_document=[]) → rollback
+    COMPLET → zero scriere parțială. Întoarce {ok, result|error}.
+    """
+    from app.integrations.imports.post_bank import post_bank_expenses
+    try:
+        res = post_bank_expenses(
+            session, user_id=user_id, source_file_id=source_file_id,
+            clasificate=clasificate, decisions=decisions,
+        )
+        session.commit()
+        return {"ok": True, "result": res}
+    except Exception as e:
+        session.rollback()
+        logger.error(f"finalize_bank_post user={user_id}: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+# ============================================================
+#                    TASTATURI (inline)
+# ============================================================
+
+def kb_preview_button() -> InlineKeyboardMarkup:
+    """Butonul de sub preview-ul felia 2."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📥 Adaugă cheltuielile în registru",
+                              callback_data="bankpost|start")],
+    ])
+
+
+def _kb_screen1(n_deverif: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"▶️ Începe verificarea ({n_deverif})",
+                              callback_data="bankpost|verif")],
+        [InlineKeyboardButton("❌ Renunță", callback_data="bankpost|cancel")],
+    ])
+
+
+def _kb_decision(idx: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧾 Business", callback_data=f"bankpost|dec|{idx}|biz")],
+        [InlineKeyboardButton("🙅 Personală", callback_data=f"bankpost|dec|{idx}|pers")],
+        [InlineKeyboardButton("⏭️ Sari", callback_data=f"bankpost|dec|{idx}|skip")],
+    ])
+
+
+def _kb_category(idx: int) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(label, callback_data=f"bankpost|cat|{idx}|{key}")]
+        for key, label, _code in CATEGORY_CHOICES
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+# ============================================================
+#       HANDLERE ASYNC (glue subțire peste logica pură/sync)
+# ============================================================
+
+async def _show_current(query, state) -> None:
+    cur = current_deverificat(state)
+    if cur is None:
+        return
+    idx, c = cur
+    await query.edit_message_text(
+        format_deverificat_prompt(state["pos"], len(state["deverificat_idx"]), c),
+        parse_mode="Markdown",
+        reply_markup=_kb_decision(idx),
+    )
+
+
+async def _finalize(query, context, state) -> None:
+    from db import get_session
+    decisions = build_decisions(state)
+    session = get_session()
+    try:
+        outcome = finalize_bank_post(
+            session,
+            user_id=state["user_id"],
+            source_file_id=state["source_file_id"],
+            clasificate=state["clasificate"],
+            decisions=decisions,
+        )
+    finally:
+        session.close()
+
+    if outcome["ok"]:
+        clear_state(context)
+        await query.edit_message_text(
+            format_result(outcome["result"]), parse_mode="Markdown"
+        )
+    else:
+        # starea RĂMÂNE → userul poate reîncerca; ZERO scriere parțială
+        await query.edit_message_text(
+            "⚠️ A apărut o eroare. *Nimic nu a fost adăugat* în registru.\n"
+            "Reîncearcă — extrasul e încă valid.",
+            parse_mode="Markdown",
+        )
+
+
+async def _next_or_finalize(query, context, state) -> None:
+    if is_done(state):
+        await _finalize(query, context, state)
+    else:
+        await _show_current(query, state)
+
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gestionează callback-urile `bankpost|*` (glue subțire).
+
+    Rutat din `handle_callback_query` (care a făcut deja `query.answer()`).
+    """
+    query = update.callback_query
+    parts = query.data.split("|")
+    action = parts[1] if len(parts) > 1 else ""
+
+    state = get_state(context)
+    if not state:
+        await query.edit_message_text(
+            "⏳ Sesiunea a expirat. Încarcă extrasul din nou."
+        )
+        return
+
+    if action == "cancel":
+        clear_state(context)
+        await query.edit_message_text("❌ Anulat. Nimic adăugat în registru.")
+        return
+
+    if action == "start":
+        if state["deverificat_idx"]:
+            await query.edit_message_text(
+                format_screen1(state["clasificate"]),
+                parse_mode="Markdown",
+                reply_markup=_kb_screen1(len(state["deverificat_idx"])),
+            )
+        else:
+            await _finalize(query, context, state)
+        return
+
+    if action == "verif":
+        await _show_current(query, state)
+        return
+
+    if action == "dec":
+        idx, choice = int(parts[2]), parts[3]
+        if choice == "biz":
+            await query.edit_message_text(
+                "Ce fel de cheltuială?", reply_markup=_kb_category(idx)
+            )
+            return
+        # personală / sari → fără postare
+        if record_decision(state, idx, None):
+            await _next_or_finalize(query, context, state)
+        return
+
+    if action == "cat":
+        idx, cat_key = int(parts[2]), parts[3]
+        if record_decision(state, idx, category_from_choice(cat_key)):
+            await _next_or_finalize(query, context, state)
+        return

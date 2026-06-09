@@ -21,6 +21,7 @@ from app.services import vehicule  # Pas A.2
 from app.services import foaie_parcurs  # Pas A.3
 from app.services import combustibil  # Pas A+
 from app.services import confirmare  # Pas R1 - confirmare date extrase
+from app.services import bank_import_ui  # Felia 3 - UI postare cheltuieli extras
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
@@ -853,6 +854,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     # === CODURI FISCALE (Faza 1) ===
     if namespace == "coduri":
         await handle_coduri_callback(update, context, parts, user_id)
+        return
+
+    # === IMPORT EXTRAS — postare cheltuieli (Felia 3) ===
+    if namespace == "bankpost":
+        await bank_import_ui.handle_callback(update, context)
         return
 
     try:
@@ -2152,11 +2158,12 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     tg_file = await doc.get_file()
     file_bytes = bytes(await tg_file.download_as_bytearray())
     # arhivare + dedup la nivel fișier (nu blocăm la duplicat — felia 1 e doar preview)
-    register_source_file(
+    sf_info = register_source_file(
         user_id=user_id, file_bytes=file_bytes,
         telegram_file_id=tg_file.file_id,
         kind="bank_statement", mime="application/pdf",
     )
+    source_file_id = sf_info["id"] if sf_info else None
 
     await update.message.reply_text("📄 Procesez extrasul…")
     from app.integrations.imports.bt_parser import parse_bt_pdf
@@ -2182,8 +2189,19 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     activity = get_activity_for_user(user_id)
     clasificate = [classify_bt(t, activity) for t in txns]
 
+    # Felia 3: buton de postare + stocare stare (doar dacă există ceva postabil).
+    # Preview-ul (_format_bank_preview) rămâne NEATINS — doar se adaugă reply_markup.
+    reply_markup = None
+    if bank_import_ui.has_postable(clasificate):
+        state = bank_import_ui.init_state(clasificate, source_file_id)
+        state["user_id"] = user_id
+        bank_import_ui.store_state(context, state)
+        reply_markup = bank_import_ui.kb_preview_button()
+
     await update.message.reply_text(
-        _format_bank_preview(clasificate), parse_mode="Markdown"
+        _format_bank_preview(clasificate),
+        parse_mode="Markdown",
+        reply_markup=reply_markup,
     )
 
 

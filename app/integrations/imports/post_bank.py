@@ -147,6 +147,17 @@ def post_bank_expenses(
             import_fingerprint=fp,
         )
 
+        # 🛡️ TOT-SAU-NIMIC: post_document înghite excepțiile intern și întoarce []
+        # (comportament istoric, foto/Bolt depind de el — NU-l atingem). Dar Document-ul
+        # a fost deja creat → ar rămâne ORFAN dacă am comite. Pentru CHELTUIALA succesul
+        # înseamnă mereu 1 tranzacție; [] = eroare reală → ridicăm ca apelantul
+        # (finalize_bank_post) să facă rollback complet (zero scriere parțială).
+        if not tx_ids:
+            raise RuntimeError(
+                f"post_document a întors [] pentru bank txn idx={i} "
+                f"(doc orfan evitat → rollback)"
+            )
+
         ded_pct = activity.get_deductibility_pct(cat)
         deductibil_sum += round(r.txn.suma * ded_pct / 100.0, 2)
         posted.append({
