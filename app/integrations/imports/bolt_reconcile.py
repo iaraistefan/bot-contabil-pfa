@@ -9,11 +9,14 @@ tariful BRUT; în plus payout-ul Bolt e săptămânal (≠ lună calendaristică
 potrivirea de sume ar produce false-alarme dese chiar când totul e corect. Aici
 verificăm DOAR prezența (factual), nu corectitudinea sumelor.
 """
+import logging
 from typing import List, Optional, Set, Tuple
 
 from app.integrations.imports.classify import VENIT_BOLT
 # Sursă unică: filtrul de prezență Bolt + numele lunilor vin din bolt_sync.
 from app.integrations.bolt_sync import has_bolt_income, LUNI_LONG
+
+logger = logging.getLogger(__name__)
 
 
 def bolt_months_in_statement(clasificate: List) -> Set[Tuple[int, int]]:
@@ -50,3 +53,29 @@ def bolt_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[s
         "(depunerile bancare sunt nete, nu brute)._"
     )
     return "\n".join(lines)
+
+
+def safe_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[str]:
+    """Wrapper DEFENSIV peste `bolt_reconcile_nudge`.
+
+    Reconcilierea e BONUS, nu valoarea principală (preview-ul). O eroare la
+    interogarea de prezență (DB lent/eroare) NU trebuie să strice preview-ul →
+    o prindem și întoarcem None (preview normal).
+    """
+    try:
+        return bolt_reconcile_nudge(session, user_id, clasificate)
+    except Exception as e:
+        logger.error(f"bolt_reconcile_nudge failed (preview neafectat): {e}")
+        return None
+
+
+def append_nudge(preview_text: str, session, user_id: int, clasificate: List) -> str:
+    """Întoarce preview-ul cu nudge-ul reconcilierii adăugat ca secțiune separată.
+
+    Aditiv: dacă nu e nimic de raportat (tot sincronizat) SAU reconcilierea crapă
+    → preview-ul rămâne NESCHIMBAT (bit-identic).
+    """
+    nudge = safe_reconcile_nudge(session, user_id, clasificate)
+    if nudge:
+        return f"{preview_text}\n\n{nudge}"
+    return preview_text

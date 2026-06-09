@@ -165,3 +165,57 @@ def test_regresie_remove_existing_alta_luna_neatinsa(tmp_path):
     assert removed == 0                          # nimic atins
     assert s.get(Document, did).status == "posted"
     s.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# PAS 2 — append_nudge la preview (aditiv) + gardă defensivă
+# ──────────────────────────────────────────────────────────────
+_PREVIEW = "✅ *34 tranzacții*\n📥 Venituri Bolt: 3"
+
+
+def test_append_nudge_adauga_cand_nesincronizat(tmp_path):
+    Session, uid = _setup(tmp_path)
+    clasificate = [_cl_bolt(248.33, date(2026, 4, 14))]
+    s = Session()
+    out = bolt_reconcile.append_nudge(_PREVIEW, s, uid, clasificate)
+    s.close()
+    assert out.startswith(_PREVIEW)              # preview-ul rămâne, nudge concatenat
+    assert "Verificare venit Bolt" in out
+    assert len(out) > len(_PREVIEW)
+
+
+def test_append_nudge_neschimbat_cand_sincronizat(tmp_path):
+    # tot sincronizat → preview BIT-IDENTIC (regresie: nudge=None nu atinge textul)
+    Session, uid = _setup(tmp_path)
+    _add_bolt_income(Session, uid, data_doc="30.04.2026")
+    clasificate = [_cl_bolt(248.33, date(2026, 4, 14))]
+    s = Session()
+    out = bolt_reconcile.append_nudge(_PREVIEW, s, uid, clasificate)
+    s.close()
+    assert out == _PREVIEW                        # neschimbat
+
+
+def test_append_nudge_defensiv_pe_exceptie(tmp_path, monkeypatch):
+    # Dacă reconcilierea crapă (DB/eroare) → preview NESCHIMBAT (bonus izolat).
+    Session, uid = _setup(tmp_path)
+    clasificate = [_cl_bolt(248.33, date(2026, 4, 14))]
+
+    def _boom(*a, **k):
+        raise RuntimeError("DB lent / eroare reconciliere")
+    monkeypatch.setattr(bolt_reconcile, "bolt_reconcile_nudge", _boom)
+
+    s = Session()
+    out = bolt_reconcile.append_nudge(_PREVIEW, s, uid, clasificate)
+    s.close()
+    assert out == _PREVIEW                        # preview normal, handlerul nu crapă
+
+
+def test_safe_reconcile_nudge_prinde_exceptia(tmp_path, monkeypatch):
+    Session, uid = _setup(tmp_path)
+    monkeypatch.setattr(
+        bolt_reconcile, "bolt_reconcile_nudge",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    s = Session()
+    assert bolt_reconcile.safe_reconcile_nudge(s, uid, []) is None
+    s.close()

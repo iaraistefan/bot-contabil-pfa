@@ -30,6 +30,7 @@ from app.integrations.imports.classify import (
     VENIT_BOLT, PLATA_TAXA, RETURNARE_TAXA,
     COMISION_BANCAR, CHELTUIALA_BUSINESS, DE_VERIFICAT,
 )
+from app.integrations.imports import bolt_reconcile  # Felia 4 - reconciliere prezenta Bolt
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
     generate_registru_xlsx, filename_registru
@@ -2198,8 +2199,20 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
         bank_import_ui.store_state(context, state)
         reply_markup = bank_import_ui.kb_preview_button()
 
+    # Felia 4: reconciliere de prezență Bolt — BONUS, adăugat la preview defensiv
+    # (o eroare la reconciliere NU strică preview-ul: append_nudge prinde și întoarce
+    # textul neschimbat). `_format_bank_preview` rămâne NEATINS.
+    preview_text = _format_bank_preview(clasificate)
+    session = get_session()
+    try:
+        preview_text = bolt_reconcile.append_nudge(
+            preview_text, session, user_id, clasificate
+        )
+    finally:
+        session.close()
+
     await update.message.reply_text(
-        _format_bank_preview(clasificate),
+        preview_text,
         parse_mode="Markdown",
         reply_markup=reply_markup,
     )
