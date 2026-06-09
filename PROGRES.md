@@ -2,7 +2,7 @@
 
 > Document de stare + handoff. Citește-l la începutul fiecărei sesiuni noi de
 > dezvoltare (Claude Code nu păstrează memoria între sesiuni).
-> Ultima actualizare: 2026-06-08.
+> Ultima actualizare: 2026-06-09.
 
 ---
 
@@ -282,9 +282,43 @@ registru** (clasificarea pe „ce e clar"; ce e ambiguu → `DE_VERIFICAT`, user
 
 Suita: **227/227** teste verzi.
 
-**Felii următoare (import extras):** postare în registru (via `post_document`, pe bucketele
-clare) → confirmare user pentru `DE_VERIFICAT` → anti-dublură vs sync Bolt → model persistent
-obligații + match plată ↔ obligație („marchez D212 ca achitat"; cere model nou — vezi recon).
+---
+
+### Import extras bancar BT — FELIA 3 ÎNCHISĂ (postare cheltuieli în registru)
+Extrasul scrie EFECTIV în registru — dar DOAR cheltuielile business, cu confirmare
+per-tranzacție și anti-dublură. Prima cale de SCRIERE din import. 6 commituri (1+2+3+4a+4b):
+- `5494e6d` (PAS 1): params aditivi keyword-only în `post_document` + `tx_repo.create`:
+  **`category_override`** (onorează clasificarea felia 2, NU re-clasifică pe text brut →
+  fals-pozitivul „0.00RON" devine STRUCTURAL imposibil pe scriere) + **`import_fingerprint`**.
+  Threadati EXCLUSIV în `_post_cheltuiala` → ramurile VENIT/FACTURA zero modificări → foto+Bolt
+  bit-identice. +coloană `Transaction.import_fingerprint` + migrația `011`. 8 teste.
+- `04cf0c8` (PAS 2): `dedup.py` pur — `normalize_descriere` (FROZEN, independent de
+  `classify._denoise` — fingerprint = contract persistent) + `fingerprint(txn, ocurenta)` +
+  `compute_fingerprints` (tiebreaker pe linii identice) + `exists_fingerprint`. SAFE-BY-DEFAULT:
+  REF/RRN NU în hash (neverificate ca stabile). Golden 34→34 unice pe fixture real. 9 teste.
+- `e451673` (PAS 3): `post_bank.py` — `post_bank_expenses` orchestrare pură (nu comite).
+  **Gardă structurală** `_POSTABILE={CHELTUIALA_BUSINESS, DE_VERIFICAT}` — VENIT_BOLT (dublează
+  sync) / PLATA / RETURNARE / COMISION refuzate STRUCTURAL, chiar dacă UI le-ar cere. Per linie:
+  fingerprint → skip dublură : Document + `post_document(override, fingerprint)`. 5 teste.
+- `663c3f5` (PAS 4a): `bank_import_ui.py` logică PURĂ — state machine (anti-stale) + text
+  builders + `build_decisions` (gardă: categorie doar pe `POSTABLE_BUCKETS`, sursă unică din
+  post_bank). UI filtrează, garda serviciului = backup (defense-in-depth). 10 teste.
+- `92748d0` (PAS 4b): glue async + commit. **Gaura orfană** găsită+reparată: `post_document`
+  înghite excepții→`[]`→Document orfan; `post_bank_expenses` tratează `[]` ca eșec→raise
+  (`post_document` NEATINS). **`finalize_bank_post`** (sync, testabil): UN commit la final /
+  rollback pe orice excepție = **TOT-SAU-NIMIC**, zero scriere parțială. Handler aditiv
+  (`_format_bank_preview` neatins) + buton + router `bankpost`. 6 teste.
+
+Suita: **265/265** teste verzi.
+
+Flux: extras PDF → parser (felia 1) → clasificare (felia 2) → buton „Adaugă cheltuielile" →
+confirmare per `DE_VERIFICAT` (business+categorie / personală / sari) → postare TOT-SAU-NIMIC
+cu dedup. Doar `CHELTUIALA_BUSINESS` + `DE_VERIFICAT`-confirmat; venit Bolt/decontări excluse.
+
+**Felii următoare (import extras):** anti-dublură vs sync Bolt (felia 4 — încasările Bolt din
+extras sunt deja în registru din sync; nevoie de match bank↔sync) → model persistent obligații
++ match plată ↔ obligație (felia 5 — PLATA_TAXA/RETURNARE_TAXA; „marchez D212 ca achitat"; cere
+model nou — vezi recon).
 
 ---
 
@@ -370,3 +404,10 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 - `038b3ad` feat(import): clasificator determinist extras BT (felia 2 PAS 1)
 - `621ac5f` fix(import): denoise prinde 0.00RON lipit (fals-pozitiv comision pe plati POS)
 - `e2bc1de` feat(import): preview clasificat grupat pe buckete (felia 2 PAS 2)
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 3: postare in registru)
+- `5494e6d` feat(import): override categorie + fingerprint in post_document (PAS 1)
+- `04cf0c8` feat(import): helper dedup fingerprint stabil (PAS 2)
+- `e451673` feat(import): serviciu postare cheltuieli extras + garda buckete (PAS 3)
+- `663c3f5` feat(import): UI logica pura postare extras (PAS 4a)
+- `92748d0` feat(import): UI postare extras + commit tot-sau-nimic (PAS 4b)
