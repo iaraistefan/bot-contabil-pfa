@@ -46,6 +46,28 @@ _NOISE = [
 # Hint obligație fiscală pt. etichetă (ex. „TVA D301 Ianuarie 2026")
 _OBLIG_RE = re.compile(r"(TVA|Impozit)\s+(D\d{3})\s+([A-Za-zăâîșțĂÂÎȘȚ]+)\s+(\d{4})", re.I)
 
+# Nume lună RO → număr (pt. câmpul structurat `ObligatieHint.luna`, match cu
+# perioada_luna a obligației în felia 5c). Lunile standard RO n-au diacritice.
+_LUNI_NUM = {
+    "ianuarie": 1, "februarie": 2, "martie": 3, "aprilie": 4,
+    "mai": 5, "iunie": 6, "iulie": 7, "august": 8,
+    "septembrie": 9, "octombrie": 10, "noiembrie": 11, "decembrie": 12,
+}
+
+
+@dataclass(frozen=True)
+class ObligatieHint:
+    """Obligația fiscală parsată din descrierea unei plăți/returnări de taxă.
+
+    Structurat (felia 5) pentru match cu obligația: tip + declarație + perioadă.
+    `luna` e număr (1-12); `luna_nume` e numele brut capturat (pt. etichetă).
+    """
+    tip: str            # "TVA" | "Impozit"
+    declaratie: str     # "D301" | "D100" | ...
+    luna: int           # 1-12
+    an: int
+    luna_nume: str      # numele brut din descriere (ex. "Ianuarie")
+
 
 @dataclass(frozen=True)
 class BankTxnClasificat:
@@ -56,6 +78,7 @@ class BankTxnClasificat:
     categorie: Optional[str] = None     # cod fiscal, doar unde e clar (ex. ride_revenue, fuel)
     deductibil: Optional[int] = None    # pct (100/50/0) sau None (n/a)
     incredere: str = SIGUR              # SIGUR | DE_VERIFICAT
+    oblig: Optional[ObligatieHint] = None  # doar PLATA_TAXA/RETURNARE_TAXA cu hint parsabil
 
 
 def _denoise(text: str) -> str:
@@ -64,12 +87,25 @@ def _denoise(text: str) -> str:
     return text
 
 
-def _oblig_hint(descriere: str) -> Optional[str]:
-    m = _OBLIG_RE.search(descriere or "")
-    if not m:
+def _oblig_label(m) -> str:
+    """Eticheta-string a obligației din match (format IDENTIC cu cel vechi)."""
+    return f"{m.group(1)} {m.group(2).upper()} {m.group(3).capitalize()} {m.group(4)}"
+
+
+def _oblig_parts(m) -> Optional[ObligatieHint]:
+    """Obligația STRUCTURATĂ din același match. None dacă luna nu e mapabilă
+    (etichetă rămâne neatinsă — folosește numele brut; 5c doar sare peste match)."""
+    luna = _LUNI_NUM.get(m.group(3).lower())
+    if luna is None:
         return None
-    tip, decl, luna, an = m.group(1), m.group(2).upper(), m.group(3), m.group(4)
-    return f"{tip} {decl} {luna.capitalize()} {an}"
+    tip = "TVA" if m.group(1).upper() == "TVA" else "Impozit"
+    return ObligatieHint(
+        tip=tip,
+        declaratie=m.group(2).upper(),
+        luna=luna,
+        an=int(m.group(4)),
+        luna_nume=m.group(3),
+    )
 
 
 def classify_bt(txn: BankTxn, activity: Type) -> BankTxnClasificat:
@@ -83,22 +119,30 @@ def classify_bt(txn: BankTxn, activity: Type) -> BankTxnClasificat:
 
     # 1. RETURNARE_TAXA — revers de plată (IN); poartă textul plății returnate
     if direction == "IN" and "returnare" in d:
-        hint = _oblig_hint(txn.descriere)
+        m = _OBLIG_RE.search(txn.descriere or "")
+        label = _oblig_label(m) if m else None
         eticheta = (
-            f"Returnare taxă respinsă ({hint})" if hint
+            f"Returnare taxă respinsă ({label})" if label
             else "Returnare taxă (plată respinsă)"
         )
-        return BankTxnClasificat(txn, RETURNARE_TAXA, eticheta, incredere=SIGUR)
+        return BankTxnClasificat(
+            txn, RETURNARE_TAXA, eticheta,
+            oblig=_oblig_parts(m) if m else None, incredere=SIGUR,
+        )
 
     # 2. PLATA_TAXA — plată obligație către Trezorerie (OUT)
     if direction == "OUT" and "trezor" in d:
-        hint = _oblig_hint(txn.descriere)
+        m = _OBLIG_RE.search(txn.descriere or "")
+        label = _oblig_label(m) if m else None
         eticheta = (
-            f"Plată obligație fiscală ({hint})" if hint
+            f"Plată obligație fiscală ({label})" if label
             else "Plată obligație fiscală"
         )
         # deductibil rămâne None: e decontare de obligație, NU cheltuială de activitate
-        return BankTxnClasificat(txn, PLATA_TAXA, eticheta, incredere=SIGUR)
+        return BankTxnClasificat(
+            txn, PLATA_TAXA, eticheta,
+            oblig=_oblig_parts(m) if m else None, incredere=SIGUR,
+        )
 
     # 3. COMISION_BANCAR — comision/taxă de cont (OUT), deductibil 100%
     if direction == "OUT" and any(

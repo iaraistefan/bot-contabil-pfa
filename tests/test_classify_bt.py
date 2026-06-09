@@ -23,6 +23,7 @@ from app.integrations.imports.bank_statement import BankTxn
 from app.integrations.imports.classify import (
     classify_bt,
     BankTxnClasificat,
+    ObligatieHint,
     VENIT_BOLT,
     PLATA_TAXA,
     RETURNARE_TAXA,
@@ -291,3 +292,51 @@ def test_fixture_zero_fals_pozitiv_platform_commission(fixture_clasificat):
     for r in pos:
         assert r.categorie != "platform_commission"
         assert r.bucket == DE_VERIFICAT
+
+
+# ----------------------------------------------------------------------
+# FELIA 5a PAS 1 — hint structurat al obligației (ObligatieHint), aditiv.
+# Eticheta rămâne BIT-IDENTICĂ; câmpul nou `oblig` e populat pe PLATA/RETURNARE.
+# ----------------------------------------------------------------------
+def test_oblig_plata_structurat_si_eticheta_neschimbata():
+    r = classify_bt(_t("OUT", "Plata Trezorerie TVA D301 Ianuarie 2026"), ACT)
+    assert r.bucket == PLATA_TAXA
+    assert r.oblig == ObligatieHint(
+        tip="TVA", declaratie="D301", luna=1, an=2026, luna_nume="Ianuarie")
+    # eticheta = exact ca înainte (regresie)
+    assert r.eticheta == "Plată obligație fiscală (TVA D301 Ianuarie 2026)"
+
+
+def test_oblig_returnare_structurat():
+    r = classify_bt(_t("IN", "Returnare plata Impozit D100 Decembrie 2025"), ACT)
+    assert r.bucket == RETURNARE_TAXA
+    assert r.oblig == ObligatieHint(
+        tip="Impozit", declaratie="D100", luna=12, an=2025, luna_nume="Decembrie")
+    assert r.eticheta == "Returnare taxă respinsă (Impozit D100 Decembrie 2025)"
+
+
+def test_oblig_none_fara_pattern():
+    # plată de taxă fără hint parsabil → oblig=None, etichetă fără hint (neschimbată)
+    r = classify_bt(_t("OUT", "Plata Trezorerie obligatii bugetare"), ACT)
+    assert r.bucket == PLATA_TAXA
+    assert r.oblig is None
+    assert r.eticheta == "Plată obligație fiscală"
+
+
+def test_oblig_none_pe_alte_buckete():
+    assert classify_bt(_t("IN", "Incasare OP BOLT"), ACT).oblig is None
+    assert classify_bt(_t("OUT", "Plata POS LUKOIL MOTORINA"), ACT).oblig is None
+
+
+def test_fixture_oblig_populat_pe_toate_taxele(fixture_clasificat):
+    taxa = [r for r in fixture_clasificat
+            if r.bucket in (PLATA_TAXA, RETURNARE_TAXA)]
+    assert len(taxa) == 16                       # 8 plăți + 8 returnări
+    assert all(r.oblig is not None for r in taxa)   # toate au hint pe fixture
+    # spot-check: plata TVA D301 Ianuarie 2026 = 138,00
+    plati = [r for r in fixture_clasificat if r.bucket == PLATA_TAXA]
+    tva_ian = [r for r in plati if r.oblig.tip == "TVA"
+               and r.oblig.declaratie == "D301"
+               and r.oblig.luna == 1 and r.oblig.an == 2026]
+    assert len(tva_ian) == 1
+    assert round(tva_ian[0].txn.suma, 2) == 138.00
