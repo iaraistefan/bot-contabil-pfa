@@ -19,6 +19,7 @@ from app.integrations.imports.dedup import compute_fingerprints
 from app.integrations.imports import tax_recording
 from app.activities.ridesharing import RidesharingActivity as ACT
 from app.services import bank_tax_ui as ui
+from app.services import bank_import_ui
 from app.models import User, ObligationPayment
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extras_bt_anon.pdf"
@@ -153,3 +154,52 @@ def test_finalize_rollback_pe_exceptie(tmp_path, monkeypatch):
     s2 = Session()
     assert s2.query(ObligationPayment).count() == 0     # rollback complet, zero parțial
     s2.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# 5c-c-2 WIRING — keyboard assembly + state separat + delegare
+# ──────────────────────────────────────────────────────────────
+def _rows(kb):
+    """Reprezentare structurală: [[(text, callback_data), …], …] sau None."""
+    if kb is None:
+        return None
+    return [[(b.text, b.callback_data) for b in row] for row in kb.inline_keyboard]
+
+
+def test_keyboard_only_expenses_bit_identic():
+    # ⭐ cazul REAL (has_real_tax=False): keyboard IDENTIC cu kb_preview_button() pre-5c-c
+    kb = ui.build_preview_keyboard(has_postable=True, has_real_tax=False, n_tax=0)
+    assert _rows(kb) == _rows(bank_import_ui.kb_preview_button())
+
+
+def test_kb_preview_button_delegat_bit_identic():
+    # refactorul (kb_preview_button delegă la preview_button) → markup neschimbat
+    assert _rows(bank_import_ui.kb_preview_button()) == [
+        [("📥 Adaugă cheltuielile în registru", "bankpost|start")]
+    ]
+
+
+def test_keyboard_combinatii():
+    assert ui.build_preview_keyboard(False, False, 0) is None           # niciun buton
+    assert _rows(ui.build_preview_keyboard(False, True, 1)) == [
+        [("✅ Marchează taxele achitate (1)", "banktax|start")]
+    ]
+    both = _rows(ui.build_preview_keyboard(True, True, 2))
+    assert len(both) == 2
+    assert both[0][0][1] == "bankpost|start"        # cheltuieli primul rând
+    assert both[1][0][1] == "banktax|start"         # taxe al doilea
+    assert "(2)" in both[1][0][0]
+
+
+class _Ctx:
+    def __init__(self):
+        self.user_data = {}
+
+
+def test_state_separat_taxe_vs_cheltuieli():
+    ctx = _Ctx()
+    bank_import_ui.store_state(ctx, {"x": 1})        # bank_pending (cheltuieli)
+    ui.store_tax_state(ctx, [], 5, 1)               # bank_tax_pending (taxe)
+    ui.clear_tax_state(ctx)
+    assert ui.get_tax_state(ctx) is None
+    assert bank_import_ui.get_state(ctx) == {"x": 1}  # cheltuielile INTACTE

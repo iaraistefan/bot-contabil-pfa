@@ -22,6 +22,7 @@ from app.services import foaie_parcurs  # Pas A.3
 from app.services import combustibil  # Pas A+
 from app.services import confirmare  # Pas R1 - confirmare date extrase
 from app.services import bank_import_ui  # Felia 3 - UI postare cheltuieli extras
+from app.services import bank_tax_ui  # Felia 5c-c - UI marcare taxe achitate
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
@@ -860,6 +861,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     # === IMPORT EXTRAS — postare cheltuieli (Felia 3) ===
     if namespace == "bankpost":
         await bank_import_ui.handle_callback(update, context)
+        return
+
+    # === IMPORT EXTRAS — marcare taxe achitate (Felia 5c-c) ===
+    if namespace == "banktax":
+        await bank_tax_ui.handle_callback(update, context)
         return
 
     try:
@@ -2190,14 +2196,19 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     activity = get_activity_for_user(user_id)
     clasificate = [classify_bt(t, activity) for t in txns]
 
-    # Felia 3: buton de postare + stocare stare (doar dacă există ceva postabil).
+    # Felia 3 + 5c-c: butoane condiționate sub preview (cheltuieli + taxe achitate).
     # Preview-ul (_format_bank_preview) rămâne NEATINS — doar se adaugă reply_markup.
-    reply_markup = None
-    if bank_import_ui.has_postable(clasificate):
+    postable = bank_import_ui.has_postable(clasificate)
+    if postable:
         state = bank_import_ui.init_state(clasificate, source_file_id)
         state["user_id"] = user_id
         bank_import_ui.store_state(context, state)
-        reply_markup = bank_import_ui.kb_preview_button()
+    reale_tax = bank_tax_ui.real_tax_payments(clasificate)   # = compensate, o singură dată
+    if reale_tax:
+        bank_tax_ui.store_tax_state(context, clasificate, source_file_id, user_id)
+    reply_markup = bank_tax_ui.build_preview_keyboard(
+        postable, bool(reale_tax), len(reale_tax)
+    )
 
     # Felia 4: reconciliere de prezență Bolt — BONUS, adăugat la preview defensiv
     # (o eroare la reconciliere NU strică preview-ul: append_nudge prinde și întoarce

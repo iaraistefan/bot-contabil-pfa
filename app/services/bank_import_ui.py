@@ -234,12 +234,17 @@ def finalize_bank_post(session, *, user_id, source_file_id, clasificate, decisio
 #                    TASTATURI (inline)
 # ============================================================
 
+def preview_button() -> InlineKeyboardButton:
+    """Butonul de postare cheltuieli (felia 3) — refolosit la asamblarea
+    keyboard-ului de preview (felia 5c-c), ca să nu se dubleze."""
+    return InlineKeyboardButton(
+        "📥 Adaugă cheltuielile în registru", callback_data="bankpost|start"
+    )
+
+
 def kb_preview_button() -> InlineKeyboardMarkup:
-    """Butonul de sub preview-ul felia 2."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📥 Adaugă cheltuielile în registru",
-                              callback_data="bankpost|start")],
-    ])
+    """Butonul de sub preview-ul felia 2 (delegă la `preview_button` → bit-identic)."""
+    return InlineKeyboardMarkup([[preview_button()]])
 
 
 def _kb_screen1(n_deverif: int) -> InlineKeyboardMarkup:
