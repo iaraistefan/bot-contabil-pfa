@@ -186,7 +186,7 @@ def build_alerts_menu():
 def build_reset_confirm():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ DA, șterge tot", callback_data="settings|reset|do"),
+            InlineKeyboardButton("✅ Da, șterge tot", callback_data="settings|reset|do"),
             InlineKeyboardButton("❌ Nu, anulează", callback_data="settings|menu"),
         ],
     ])

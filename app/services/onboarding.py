@@ -228,7 +228,7 @@ def _kb_anaf_summary(forma_lipsa: bool = False):
             [InlineKeyboardButton("✏️ Completează datele lipsă", callback_data="onb|fix|menu")],
         ])
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Confirm tot — gata!", callback_data="onb|confirm_all")],
+        [InlineKeyboardButton("✅ Confirmă tot", callback_data="onb|confirm_all")],
         [InlineKeyboardButton("✏️ Vreau să corectez ceva", callback_data="onb|fix|menu")],
     ])
 
@@ -246,7 +246,7 @@ def _kb_fix_menu():
 
 def _kb_final_confirm():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Confirmă și Salvează", callback_data="onb|finalize|yes")],
+        [InlineKeyboardButton("✅ Confirmă și salvează", callback_data="onb|finalize|yes")],
         [InlineKeyboardButton("🔄 Reia de la început", callback_data="onb|finalize|restart")],
     ])
 

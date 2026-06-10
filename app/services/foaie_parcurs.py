@@ -623,7 +623,7 @@ async def _show_status(update, context, user_id, via_callback=False):
         InlineKeyboardButton("🗓️ Altă lună", callback_data="parcurs|luni"),
         InlineKeyboardButton("🚙 Mașina mea", callback_data="vehicul|menu"),
     ])
-    rows.append([InlineKeyboardButton("✖️ Închide", callback_data="nav|close")])
+    rows.append([InlineKeyboardButton("❌ Închide", callback_data="nav|close")])
     markup = InlineKeyboardMarkup(rows)
 
     if via_callback and update.callback_query:
