@@ -2325,20 +2325,20 @@ def _kb_coduri(profile: dict):
     rows = []
     if cod_tva:
         rows.append([
-            InlineKeyboardButton("✏️ Schimba cod TVA", callback_data="coduri|set_tva"),
-            InlineKeyboardButton("🗑️ Sterge", callback_data="coduri|del_tva"),
+            InlineKeyboardButton("✏️ Schimbă cod TVA", callback_data="coduri|set_tva"),
+            InlineKeyboardButton("🗑️ Șterge", callback_data="coduri|del_tva"),
         ])
     else:
         rows.append([InlineKeyboardButton(
-            "🇪🇺 Seteaza cod special TVA", callback_data="coduri|set_tva")])
+            "🇪🇺 Setează cod special TVA", callback_data="coduri|set_tva")])
     if cnp:
         rows.append([
-            InlineKeyboardButton("✏️ Schimba CNP", callback_data="coduri|set_cnp"),
-            InlineKeyboardButton("🗑️ Sterge", callback_data="coduri|del_cnp"),
+            InlineKeyboardButton("✏️ Schimbă CNP", callback_data="coduri|set_cnp"),
+            InlineKeyboardButton("🗑️ Șterge", callback_data="coduri|del_cnp"),
         ])
     else:
         rows.append([InlineKeyboardButton(
-            "🆔 Seteaza CNP", callback_data="coduri|set_cnp")])
+            "🆔 Setează CNP", callback_data="coduri|set_cnp")])
     return InlineKeyboardMarkup(rows)
 
 

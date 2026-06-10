@@ -546,9 +546,9 @@ def _format_summary_text(s: dict, auto=False) -> str:
 
 def _confirm_keyboard(year, month):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Adauga in Registru",
+        [InlineKeyboardButton("✅ Adaugă în Registru",
                               callback_data=f"boltsync|confirm|{year}|{month}")],
-        [InlineKeyboardButton("❌ Anuleaza", callback_data="boltsync|cancel")],
+        [InlineKeyboardButton("❌ Anulează", callback_data="boltsync|cancel")],
     ])
 
 
@@ -693,9 +693,9 @@ def _send_with_button(bot_token, chat_id, text_msg, year, month):
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     kb = {
         "inline_keyboard": [
-            [{"text": "✅ Adauga in Registru",
+            [{"text": "✅ Adaugă în Registru",
               "callback_data": f"boltsync|confirm|{year}|{month}"}],
-            [{"text": "❌ Ignora", "callback_data": "boltsync|cancel"}],
+            [{"text": "❌ Ignoră", "callback_data": "boltsync|cancel"}],
         ]
     }
     try:
