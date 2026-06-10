@@ -348,6 +348,62 @@ class SummarySent(Base):
 
 
 # ============================================================
+# Felia 5 - ObligationPayment (plati de obligatii detectate din extras)
+# ============================================================
+
+class ObligationPayment(Base):
+    """
+    Plata unei obligatii fiscale, detectata din extras bancar (felia 5).
+
+    Stocheaza DOAR faptul platii — obligatia ramane EFEMERA (calculata on-the-fly
+    in fiscal_calendar). Prezenta unui rand pentru (user, cod, an, luna) = obligatia
+    e achitata; lipsa = neachitata. Sursa unica de adevar a obligatiei NU se dubleaza.
+
+    Anti-dublura pe import_fingerprint (re-import acelasi extras = skip). Plati
+    MULTIPLE distincte pe aceeasi obligatie (transe/corectii) sunt permise — cheia
+    e amprenta liniei bancare, NU (cod, perioada).
+
+    perioada_luna: 1-12 lunar (D301/D100); 0 = anual (sentinel, ex. D212).
+    Fara FK la Transaction: plata de taxa NU se posteaza ca tranzactie (felia 3 o
+    exclude). Dovada = import_fingerprint + source_file_id + suma + data.
+    """
+    __tablename__ = "obligation_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
+    obligation_code = Column(String(20), nullable=False)   # "D301"/"D100" (forma scurta)
+    perioada_an = Column(Integer, nullable=False)
+    perioada_luna = Column(Integer, nullable=False, default=0)  # 0 = anual (sentinel)
+    suma_platita = Column(Float, nullable=False)           # suma reala din extras (Float, ca tot sistemul)
+    data_platii = Column(Date, nullable=False)
+    sursa = Column(String(20), nullable=False, default="bank_import")
+    import_fingerprint = Column(String(64), nullable=False)
+    source_file_id = Column(
+        Integer, ForeignKey("source_files.id"), nullable=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "import_fingerprint",
+            name="ix_oblig_pay_fingerprint",
+        ),
+        Index(
+            "ix_oblig_pay_lookup",
+            "user_id", "obligation_code", "perioada_an", "perioada_luna",
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<ObligationPayment user={self.user_id} {self.obligation_code} "
+            f"{self.perioada_an}/{self.perioada_luna:02d} suma={self.suma_platita}>"
+        )
+
+
+# ============================================================
 # Pas A - Vehicul (masini PFA/SRL/II - flota)
 # ============================================================
 

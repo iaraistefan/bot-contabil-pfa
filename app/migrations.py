@@ -301,6 +301,39 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "012_obligation_payments",
+        "description": (
+            "Felia 5b: tabel obligation_payments — faptul platii unei obligatii "
+            "fiscale detectate din extras (obligatia ramane efemera). Anti-dublura "
+            "pe (user_id, import_fingerprint); plati multiple/transe permise."
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS obligation_payments (
+                id                 SERIAL PRIMARY KEY,
+                created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                obligation_code    VARCHAR(20) NOT NULL,
+                perioada_an        INTEGER NOT NULL,
+                perioada_luna      INTEGER NOT NULL DEFAULT 0,
+                suma_platita       DOUBLE PRECISION NOT NULL,
+                data_platii        DATE NOT NULL,
+                sursa              VARCHAR(20) NOT NULL DEFAULT 'bank_import',
+                import_fingerprint VARCHAR(64) NOT NULL,
+                source_file_id     INTEGER REFERENCES source_files(id)
+            )
+            """,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_oblig_pay_fingerprint
+                ON obligation_payments (user_id, import_fingerprint)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_oblig_pay_lookup
+                ON obligation_payments (user_id, obligation_code, perioada_an, perioada_luna)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
