@@ -319,6 +319,40 @@ def _d212_plata_lines(session, user_id, obl) -> list:
         return []
 
 
+def _is_oblig_platita(session, user_id: int, o) -> bool:
+    """True dacă obligația `o` are o plată înregistrată (adnotarea „achitat", 5c-b).
+
+    DEFENSIV: adnotarea „✅ achitat" e BONUS, nu valoarea principală a sumarului.
+    ORICE eroare (DB lent, câmp perioadă lipsă) → False → linia se afișează NORMAL,
+    fără „achitat". TOATĂ citirea (cod scurt + perioadă + has_payment) e sub gardă
+    (ca `safe_reconcile_nudge` felia 4) — nu doar apelul DB.
+    """
+    try:
+        from app.repositories import obligation_payments as oblig_pay_repo
+        cod_scurt = o.definitie.cod.split()[0]
+        return oblig_pay_repo.has_payment(
+            session, user_id, cod_scurt, o.perioada_an, o.perioada_luna
+        )
+    except Exception as e:
+        logger.error(f"_is_oblig_platita user={user_id}: {e}")
+        return False
+
+
+def _plata_line_text(session, user_id: int, o) -> str:
+    """O linie din „De plătit acum" + „✅ achitat" dacă obligația e plătită.
+
+    Format de bază BYTE-IDENTIC cu cel istoric; adnotarea se ADAUGĂ doar când
+    obligația e plătită (cod scurt din `split()[0]`, perioada OBLIGAȚIEI).
+    """
+    linie = (
+        f"  • {o.definitie.cod}: *{o.suma_estimata:.2f} RON* "
+        f"— termen {o.termen.strftime('%d.%m.%Y')}"
+    )
+    if _is_oblig_platita(session, user_id, o):
+        linie += " ✅ *achitat*"
+    return linie
+
+
 def _format_plata_line(session, user_id: int, year: int, month: int, today) -> str:
     """
     Linia „de plătit acum" — obligațiile de PLATĂ (suma > 0) ale perioadei
@@ -355,10 +389,7 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             return ""
         lines = ["", "💳 *De plătit acum:*"]
         for o in plati:
-            lines.append(
-                f"  • {o.definitie.cod}: *{o.suma_estimata:.2f} RON* "
-                f"— termen {o.termen.strftime('%d.%m.%Y')}"
-            )
+            lines.append(_plata_line_text(session, user_id, o))
         lines.extend(d212_lines)
         return "\n".join(lines)
     except Exception as e:
