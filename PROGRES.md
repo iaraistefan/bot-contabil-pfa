@@ -359,12 +359,42 @@ compensare ÎNAINTE de orice match. 2 commituri (pur, ZERO model/scriere):
 
 Suita: **291/291** teste verzi.
 
-**Felii următoare (felia 5):** **5b** — model PERSISTENT obligații+plată (tabel nou per
-`(user, cod_obligație, an, lună)` cu status plată; migrație aditivă; schema+repo, fără
-consumator). **5c** (probabil re-spart) — match plată-reală↔obligație pe tip+perioadă (din
-`oblig`), userul confirmă, afișare „achitat". Azi obligațiile sunt EFEMERE (calculate on-the-fly,
-status doar pe timp; `get_obligations_for_user`), NU există status „achitat" persistent și NU
-există buton „marchează plătit" (vezi recon felia 5).
+### Import extras bancar BT — FELIA 5 (b→c) ÎNCHISĂ (match plată↔obligație + „achitat")
+Restul feliei 5: persistă plățile reale + afișează „achitat". Obligația rămâne EFEMERĂ
+(calculată on-the-fly); modelul stochează DOAR faptul plății. „Match-ul" = egalitatea cheii
+`(cod, an, lună)` rezolvată de `has_payment` la afișare (nu algoritm separat). Decizie de UX
+fermă: marcarea cere CONFIRMAREA userului (afirmație fiscală — nu auto). 4 commituri:
+- `d048beb` (5b): model `ObligationPayment` + migrația `012` (CREATE TABLE idempotent). Schema:
+  `(user, cod scurt, an, lună NOT NULL DEFAULT 0 sentinel anual, suma, data, sursă,
+  import_fingerprint, source_file_id)`. UNIQUE `(user, fingerprint)` → anti-dublură re-import +
+  permite tranșe. Float pe sumă (consistent cu tot sistemul). repo `create_payment` (check-then-
+  insert) + `has_payment`. Fundație, ZERO consumator. 5 teste.
+- `d12ce1e` (5c-a): serviciu PUR `record_tax_payments(clasificate, confirmed_fingerprints)`.
+  Cheia = FINGERPRINT (stabil, nu index/id). **Garda compensare PESTE confirmare:** înregistrează
+  doar `confirmed ∩ plăți REALE`; o plată respinsă confirmată din greșeală → refuzată structural.
+  Refactor sursă unică `real_payment_indices` (compensate = wrapper, identic). 5 teste.
+- `0225759` (5c-b): „✅ achitat" în sumarul „De plătit acum" (`scheduler._plata_line_text` +
+  `_is_oblig_platita` gardă defensivă comprehensivă). Bază BYTE-IDENTICĂ; match pe `o.perioada_an/
+  luna`; cod scurt `split()[0]`. 14 teste monthly_summary neatinse. 5 teste.
+- `2be4f68` (5c-c-1) + `1aedaab` (5c-c-2): UI confirmare — `bank_tax_ui.py` (pur+sync:
+  `format_tax_propose`/`format_tax_result`/`finalize_tax_recording` tot-sau-nimic) + glue async
+  (`banktax|*`) + buton „Marchează taxele achitate (N)" condiționat `has_real_tax`. State
+  `bank_tax_pending` separat. `build_preview_keyboard` — pe extrasul real (toate respinse →
+  `has_real_tax=False`) e **bit-identic** cu butonul de cheltuieli → felia 5c-c INVIZIBILĂ. 14 teste.
+
+Suita: **320/320** teste verzi. **Felia 5 COMPLETĂ** (compensare → model → serviciu → afișare → UI).
+
+> **Pe extrasul real al lui Stefan: toate plățile de taxe au fost RESPINSE → 0 obligații
+> marcate achitate = adevărul fiscal.** Tot lanțul (felii 1-5) îl produce corect; compensarea
+> de-riscă scrierea (nu marchează achitat ce a fost respins).
+
+**IMPORTUL EXTRAS BANCAR BT — COMPLET cap-coadă (felii 1-5):** PDF → parser determinist +
+checksum (1) → clasificare deterministă pe buckete (2) → postare cheltuieli business cu dedup
+fingerprint (3) → reconciliere prezență venit Bolt (4) → match plată↔obligație fiscală + „achitat" (5).
+
+**Felii viitoare (opțional):** afișare „achitat" și în `/calendar` + dashboard web (5c-b a
+țintit doar sumarul); D212 anual (perioada_luna sentinel cere normalizare); extensie multi-bancă
+(detecție automată; granița `BankTxn` e pregătită).
 
 ---
 
@@ -467,3 +497,11 @@ local aliniate, drift-ul `Secret` nu mai poate reapărea.
 ## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 5a: compensare plata<->returnare)
 - `8c646ce` feat(import): hint obligatie structurat din classify (PAS 1)
 - `8042170` feat(import): compensare plata<->returnare taxe (PAS 2)
+- `a13a8c5` docs: PROGRES.md - felia 5a INCHISA
+
+## COMMITURI CHEIE (Faza 3 — import extras bancar BT, felia 5 b->c: match plata<->obligatie)
+- `d048beb` feat(import): model persistent plata obligatii (schema+repo) (5b)
+- `d12ce1e` feat(import): serviciu inregistrare plati taxe (pur) (5c-a)
+- `0225759` feat(import): afisare "achitat" in sumarul lunar (5c-b)
+- `2be4f68` feat(import): UI confirmare plati taxe - logica pura (5c-c-1)
+- `1aedaab` feat(import): wiring UI confirmare plati taxe - felia 5 COMPLETA (5c-c-2)
