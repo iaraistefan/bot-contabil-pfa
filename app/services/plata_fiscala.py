@@ -223,7 +223,7 @@ def _build_obligation_picker(applicable_obligations: List[str]) -> InlineKeyboar
     # Buton extra: compliance status complet
     rows.append([
         InlineKeyboardButton(
-            "📈 Status Compliance complet",
+            "📈 Status conformitate complet",
             callback_data="plata|status"
         )
     ])

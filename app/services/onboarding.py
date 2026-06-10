@@ -172,7 +172,7 @@ def regim_impunere_label(code: str) -> str:
 
 def _kb_skip(skip_target: str):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⏭️ Skip", callback_data=f"onb|skip|{skip_target}")],
+        [InlineKeyboardButton("⏭️ Sari", callback_data=f"onb|skip|{skip_target}")],
         [InlineKeyboardButton("❌ Anulează", callback_data="onb|cancel")],
     ])
 
