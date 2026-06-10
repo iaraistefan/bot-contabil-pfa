@@ -13,7 +13,7 @@ from app.integrations.imports.bt_parser import parse_bt_pdf
 from app.integrations.imports.classify import (
     classify_bt, BankTxnClasificat, ObligatieHint, PLATA_TAXA, RETURNARE_TAXA,
 )
-from app.integrations.imports.tax_payments import compensate
+from app.integrations.imports.tax_payments import compensate, real_payment_indices
 from app.activities.ridesharing import RidesharingActivity as ACT
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extras_bt_anon.pdf"
@@ -115,3 +115,22 @@ def test_compensare_determinista_mixt():
         _plata("Impozit", "D100", 3, 2026, 4.0),
     ]
     assert compensate(cl) == compensate(cl)
+
+
+# ──────────────────────────────────────────────────────────────
+# real_payment_indices — sursa unică (compensate = wrapper); pe INDICI
+# ──────────────────────────────────────────────────────────────
+def test_real_payment_indices_pe_indici():
+    cl = [
+        _plata("TVA", "D301", 1, 2026, 138.0),   # idx 0
+        _plata("TVA", "D301", 1, 2026, 138.0),   # idx 1
+        _retur("TVA", "D301", 1, 2026, 138.0),   # idx 2 (respinge una)
+        _plata("Impozit", "D100", 3, 2026, 4.0),  # idx 3 (fără returnare → reală)
+    ]
+    idx = real_payment_indices(cl)
+    # 2 plăți D301 - 1 returnare = 1 reală; + D100 reală = 2 indici
+    assert len(idx) == 2
+    assert 3 in idx                              # D100 (fără pereche) e reală
+    assert idx[0] in (0, 1)                      # una din cele 2 plăți D301
+    # consistență cu compensate (wrapper): aceleași obiecte
+    assert compensate(cl) == [cl[i] for i in idx]

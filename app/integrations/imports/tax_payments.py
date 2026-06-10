@@ -29,25 +29,35 @@ def _key(r):
     return (o.tip, o.declaratie, o.luna, o.an, round(r.txn.suma, 2))
 
 
-def compensate(clasificate: List) -> List:
-    """Întoarce plățile de taxe REALE după compensarea 1:1 cu returnările.
+def real_payment_indices(clasificate: List) -> List[int]:
+    """INDICII (în `clasificate`) ai plăților de taxe REALE după compensarea 1:1.
 
-    Determinist: ordinea grupurilor = ordinea primei apariții în `clasificate`
-    (dict păstrează ordinea de inserare) → aceeași intrare dă același rezultat.
+    Pe indici (nu obiecte) → consumatorul (5c) poate lega fiecare plată reală de
+    AMPRENTA ei (`compute_fingerprints` e aliniat pe index), fără `id()`/poziție
+    fragilă. Determinist: ordinea = prima apariție în `clasificate`.
     """
     plati = defaultdict(list)
     returnari = defaultdict(list)
-    for r in clasificate:
+    for i, r in enumerate(clasificate):
         if r.oblig is None:
             continue
         if r.bucket == PLATA_TAXA:
-            plati[_key(r)].append(r)
+            plati[_key(r)].append(i)
         elif r.bucket == RETURNARE_TAXA:
-            returnari[_key(r)].append(r)
+            returnari[_key(r)].append(i)
 
-    reale = []
-    for key, ps in plati.items():
+    real_idx: List[int] = []
+    for key, idxs in plati.items():
         n_ret = len(returnari.get(key, ()))
-        # plățile NEpereche rămân reale: ps[n_ret:] are len = max(0, len(ps) - n_ret)
-        reale.extend(ps[n_ret:])
-    return reale
+        # indicii NEpereche rămân reali: idxs[n_ret:] are len = max(0, len(idxs) - n_ret)
+        real_idx.extend(idxs[n_ret:])
+    return real_idx
+
+
+def compensate(clasificate: List) -> List:
+    """Plățile de taxe REALE (obiecte) după compensarea 1:1 cu returnările.
+
+    Wrapper subțire peste `real_payment_indices` (sursă unică a logicii).
+    Determinist: aceeași intrare → același rezultat, în ordinea din clasificate.
+    """
+    return [clasificate[i] for i in real_payment_indices(clasificate)]

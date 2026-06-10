@@ -61,6 +61,21 @@ def create_payment(
     return pay
 
 
+def payment_exists(session: Session, user_id: int, import_fingerprint: str) -> bool:
+    """True dacă există deja o plată cu acest fingerprint (anti-dublură re-import).
+    Folosit de serviciul de înregistrare (felia 5c) pentru a număra dublurile.
+    """
+    return (
+        session.query(ObligationPayment)
+        .filter(
+            ObligationPayment.user_id == user_id,
+            ObligationPayment.import_fingerprint == import_fingerprint,
+        )
+        .first()
+        is not None
+    )
+
+
 def has_payment(
     session: Session,
     user_id: int,
