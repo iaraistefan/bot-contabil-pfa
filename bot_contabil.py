@@ -23,6 +23,8 @@ from app.services import combustibil  # Pas A+
 from app.services import confirmare  # Pas R1 - confirmare date extrase
 from app.services import bank_import_ui  # Felia 3 - UI postare cheltuieli extras
 from app.services import bank_tax_ui  # Felia 5c-c - UI marcare taxe achitate
+from app.services import banner_send  # Faza UI - trimitere bannere (wrapper comun)
+from app.ro_dates import luna_ro  # Faza UI - luni RO pentru bannere (caption Raport)
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
@@ -1145,6 +1147,26 @@ async def execute_show_profil(query, context, user_id):
     await query.edit_message_text(msg, parse_mode="Markdown")
 
 
+def _raport_banner_data(d212, year):
+    """Data dict pentru banner-ul `raport` — orizont ANUAL YTD (vezi CONTRACT.md).
+
+    Tot din `d212` (compute_d212_anual) → profit + taxe pe ACELAȘI orizont (anual),
+    aritmetic consistent (`venit_net = venit_brut − cheltuieli`, garantat de motor).
+    Bannerul DOAR afișează; plafoanele (salariu minim, TVA) sunt în motor, nu aici.
+    """
+    return {
+        "period":     f"{year} · la zi",
+        "profit":     d212.venit_net,       # hero — ANUAL YTD
+        "venituri":   d212.venit_brut,      # ANUAL YTD brut
+        "cheltuieli": d212.cheltuieli,      # ANUAL YTD deductibil → venituri−cheltuieli=profit
+        "impozit":    d212.impozit,
+        "cas":        d212.cas,
+        "cass":       d212.cass,
+        "total_taxe": d212.total_plata,     # cheia = total_taxe; valoarea din motor
+        "taxe_label": "ESTIMARE D212 ANUALĂ · LA ZI",
+    }
+
+
 async def execute_raport(query, context, user_id, year, month):
     await query.edit_message_text(
         f"🔄 Calculez raportul {LUNI_LONG[month]} {year}...",
@@ -1169,6 +1191,7 @@ async def execute_raport(query, context, user_id, year, month):
         msg = tax_engine.format_report_message(totals, d212=d212)
         # Faza 1.3: daca exista TVA D301 (reverse charge), oferim fisa D301
         tva_d301 = totals.get("vat_out_total", 0) or 0
+        rm = None
         if tva_d301 > 0:
             rm = InlineKeyboardMarkup([
                 [InlineKeyboardButton(
@@ -1184,9 +1207,16 @@ async def execute_raport(query, context, user_id, year, month):
                     callback_data=f"d100|{year}|{month}",
                 )],
             ])
-            await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=rm)
-        else:
-            await query.edit_message_text(msg, parse_mode="Markdown")
+
+        # Banner hero premium (estimare D212 anuală) + textul lunar dedesubt.
+        # Wrapper comun: build → delete → foto → text, fallback 3 niveluri cu
+        # logger.exception. Butoanele D301/D390/D100 rămân pe mesajul TEXT (jos).
+        await banner_send.send_banner_or_text(
+            query, context,
+            screen="raport", data=_raport_banner_data(d212, year),
+            text=msg, reply_markup=rm,
+            caption=f"📊 Raport · {luna_ro(month)} {year}",
+        )
 
         # Pas A+ : sectiunea combustibil deductibil (mesaj separat)
         try:

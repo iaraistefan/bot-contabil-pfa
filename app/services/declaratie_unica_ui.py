@@ -21,6 +21,8 @@ from db import get_session
 from app.services import tax_engine
 from app.domain import declaratie_unica as du_calc
 from app.repositories import users as users_repo
+from app.ro_dates import zi_luna_ro, zi_luna_ro_scurt
+from app.services import banner_send
 
 logger = logging.getLogger(__name__)
 
@@ -169,27 +171,6 @@ async def _intreaba_asigurare(send_func):
     )
 
 
-_LUNI_RO = {
-    1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
-    5: "Mai", 6: "Iunie", 7: "Iulie", 8: "August",
-    9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie",
-}
-_LUNI_RO_SCURT = {
-    1: "Ian", 2: "Feb", 3: "Mar", 4: "Apr", 5: "Mai", 6: "Iun",
-    7: "Iul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Noi", 12: "Dec",
-}
-
-
-def _zi_luna_ro(d) -> str:
-    """Data în română, lună întreagă: 25 Mai 2027 (NU strftime %b — locale)."""
-    return f"{d.day} {_LUNI_RO.get(d.month, d.month)} {d.year}"
-
-
-def _zi_luna_ro_scurt(d) -> str:
-    """Data în română, lună abreviată: 28 Feb 2027 (pt. textul mono secundar)."""
-    return f"{d.day} {_LUNI_RO_SCURT.get(d.month, d.month)} {d.year}"
-
-
 def _banner_data(rez, an):
     """Data dict pentru banner-ul „prezentare" (D212).
 
@@ -208,11 +189,11 @@ def _banner_data(rez, an):
     return {
         "amount":        rez["total_taxe"],
         "decl":          "D212 · Declarația Unică (impozit + CAS + CASS)",
-        "due_label":     f"Termen: {_zi_luna_ro(o212.termen)}",
+        "due_label":     f"Termen: {zi_luna_ro(o212.termen)}",
         "due_sub":       "Plata se face pe CNP, prin ghișeul.ro",
         "days_left":     o212.zile_ramase,
         "secondary":     "D207 — fără plată",
-        "secondary_sub": f"TERMEN {_zi_luna_ro_scurt(o207.termen)}".upper(),
+        "secondary_sub": f"TERMEN {zi_luna_ro_scurt(o207.termen)}".upper(),
     }
 
 
@@ -233,35 +214,13 @@ async def _finalizeaza_calcul(update, context, venit_brut, chelt_ded, an, luni, 
     else:
         msg = corp
 
-    query = update.callback_query
-    chat_id = query.message.chat_id
-
-    # Banner hero premium. Defensiv: orice eroare la BUILD → flux vechi (text),
-    # mesajul rămâne intact (nu s-a șters încă nimic).
-    try:
-        from app.contai_banners import build_banner
-        png = build_banner("prezentare", _banner_data(rez, an))
-    except Exception as e:
-        logger.error(f"DU banner build failed, fallback text: {e}")
-        await query.edit_message_text(msg, parse_mode="Markdown")
-        return
-
-    # Banner OK → înlocuiește mesajul text (întrebarea asig) cu FOTO + ghid text.
-    # delete eșuat (mesaj vechi/șters) → prins separat, trimitem oricum ca mesaje noi.
-    try:
-        await query.message.delete()
-    except Exception as del_err:
-        logger.warning(f"DU banner: delete mesaj vechi a eșuat (trimit nou): {del_err}")
-    try:
-        await context.bot.send_photo(                      # 1. FOTO sus (caption text simplu)
-            chat_id=chat_id, photo=png, caption=f"🧮 Declarația Unică {an}"
-        )
-        await context.bot.send_message(                    # 2. ghidul text (Markdown)
-            chat_id=chat_id, text=msg, parse_mode="Markdown"
-        )
-    except Exception as send_err:
-        logger.error(f"DU banner: send foto/text a eșuat, doar text: {send_err}")
-        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+    # Banner hero (prezentare D212) + ghidul text dedesubt — wrapper comun cu
+    # fallback 3 niveluri + logger.exception (același pe toate ecranele).
+    await banner_send.send_banner_or_text(
+        update.callback_query, context,
+        screen="prezentare", data=_banner_data(rez, an),
+        text=msg, caption=f"🧮 Declarația Unică {an}",
+    )
 
 
 # ============================================================

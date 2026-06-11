@@ -100,6 +100,8 @@ def s(v):
 
 def fmt_ron(value):
     """2813.17 -> '2.813,17' (format RO)."""
+    if value is None:                           # gardă: câmp lipsă → 0, nu crăpa bannerul
+        value = 0
     txt = f"{value:,.2f}"                       # 2,813.17
     return txt.replace(",", "§").replace(".", ",").replace("§", ".")
 
@@ -280,6 +282,218 @@ def render_declaratii(data):
     return _to_image(img)
 
 
+def _cat_row(d, x, y, w, name, amount, frac, deduct_label, accent):
+    h = s(58)
+    _rrect(d, [x, y, x + w, y + h], 12, fill=CARD, outline=CARD_LINE, width=1)
+    d.text((x + s(20), y + s(9)), name, font=font(POP_L, 17), fill=WHITE)
+    # bara proportie
+    bar_x0 = x + s(20)
+    bar_w = w * 0.42
+    by = y + s(40)
+    _rrect(d, [bar_x0, by, bar_x0 + bar_w, by + s(7)], 3, fill=(30, 50, 76))
+    _rrect(d, [bar_x0, by, bar_x0 + max(s(7), int(bar_w * frac)), by + s(7)], 3, fill=accent)
+    # suma dreapta
+    amt = fmt_ron(amount)
+    aw = d.textlength(amt, font=font(POP_B, 20))
+    d.text((x + w - s(20) - aw, y + s(9)), amt, font=font(POP_B, 20), fill=WHITE)
+    # tag deductibilitate
+    f = font(MONO_R, 11)
+    tagw = _tw(d, deduct_label, f, 1)
+    _tracked(d, (x + w - s(20) - tagw, y + s(38)), deduct_label, f, MUTED, 1)
+
+def _obl_row(d, x, y, w, title, sub, right_top, right_bottom, accent, warn=False):
+    h = s(74)
+    _rrect(d, [x, y, x + w, y + h], 14, fill=CARD, outline=CARD_LINE, width=1)
+    _rrect(d, [x, y, x + s(6), y + h], 3, fill=accent)
+    d.text((x + s(26), y + s(13)), title, font=font(POP_B, 19), fill=WHITE)
+    _tracked(d, (x + s(26), y + s(44)), sub.upper(), font(MONO_R, 11), MUTED, 1)
+    # dreapta: sus (data/sumă) + jos (zile)
+    rt_f = font(POP_B, 18)
+    rtw = d.textlength(right_top, font=rt_f)
+    d.text((x + w - s(24) - rtw, y + s(13)), right_top, font=rt_f, fill=(AMBER if warn else WHITE))
+    if right_bottom:
+        rb_f = font(MONO_R, 11)
+        rbw = _tw(d, right_bottom, rb_f, 1)
+        _tracked(d, (x + w - s(24) - rbw, y + s(46)), right_bottom, rb_f,
+                 (AMBER if warn else MUTED), 1)
+
+
+# ============================================================
+#  ECRAN — CHELTUIELI
+# ============================================================
+def render_cheltuieli(data):
+    img, d = _canvas()
+    _header(d, "CHELTUIELI")
+    d.text((s(56), s(110)), data.get("period", ""), font=font(POP_B, 30), fill=WHITE)
+    _tracked(d, (s(58), s(156)), data.get("subtitle", "").upper(), font(MONO_R, 13), MUTED, 1)
+
+    top, gap = s(196), s(20)
+    cw = (W * SCALE - s(112) - gap) / 2
+    ch = s(120)
+    _kpi(d, s(56), top, cw, ch, "TOTAL CHELTUIELI", fmt_ron(data["total"]), "lei", AMBER)
+    _kpi(d, s(56) + cw + gap, top, cw, ch, "DIN CARE DEDUCTIBIL", fmt_ron(data["deductibil"]), "lei", GREEN)
+
+    total = max(data["total"], 0.01)
+    cy = top + ch + s(28)
+    for cat in data.get("categories", [])[:3]:
+        _cat_row(d, s(56), cy, W * SCALE - s(112), cat["name"], cat["amount"],
+                 cat["amount"] / total, cat.get("deduct", ""), TEAL)
+        cy += s(70)
+
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "la zi"))
+    return _to_image(img)
+
+
+# ============================================================
+#  ECRAN — FOAIE DE PARCURS
+# ============================================================
+def render_foaie_parcurs(data):
+    img, d = _canvas()
+    _header(d, "FOAIE DE PARCURS")
+    d.text((s(56), s(110)), data.get("period", ""), font=font(POP_B, 30), fill=WHITE)
+    _tracked(d, (s(58), s(156)), data.get("subtitle", "").upper(), font(MONO_R, 13), MUTED, 1)
+
+    top, gap = s(196), s(20)
+    cw = (W * SCALE - s(112) - gap * 2) / 3
+    ch = s(150)
+    _kpi(d, s(56), top, cw, ch, "KM BUSINESS", str(data["km_total"]), "km", TEAL)
+    _kpi(d, s(56) + cw + gap, top, cw, ch, "CU PASAGER", str(data["km_pasager"]), "km", GREEN)
+    _kpi(d, s(56) + (cw + gap) * 2, top, cw, ch, "POZIȚIONARE", str(data["km_pozitionare"]), "km", AMBER)
+
+    # rand vehicul + consum
+    ry = top + ch + s(30)
+    w = W * SCALE - s(112)
+    _rrect(d, [s(56), ry, s(56) + w, ry + s(110)], 14, fill=CARD, outline=CARD_LINE, width=1)
+    _tracked(d, (s(56) + s(24), ry + s(18)), "VEHICUL", font(MONO_B, 12), MUTED, 2)
+    d.text((s(56) + s(24), ry + s(38)), data.get("vehicul", ""), font=font(POP_B, 20), fill=WHITE)
+    _tracked(d, (s(56) + s(24), ry + s(74)),
+             f"NORMĂ {data.get('norma','')} · CONSUM TEORETIC {data.get('consum_teoretic','')}",
+             font(MONO_R, 12), MUTED, 1)
+    # status combustibil dreapta
+    warn = data.get("depasit", False)
+    lbl = "DEPĂȘIT" if warn else "ÎN NORMĂ"
+    col = RED if warn else GREEN
+    f = font(MONO_B, 12)
+    _pill(d, s(56) + w - s(24) - (_tw(d, lbl, f, 2) + s(28)), ry + s(30),
+          lbl, f, col, (18, 30, 44) if warn else (16, 40, 36), tracking=2)
+    bon = f"{data.get('combustibil_bonuri','')}"
+    bw = d.textlength(bon, font=font(POP_B, 18))
+    d.text((s(56) + w - s(24) - bw, ry + s(70)), bon, font=font(POP_B, 18), fill=WHITE)
+
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "la zi"))
+    return _to_image(img)
+
+
+# ============================================================
+#  ECRAN — CALENDAR FISCAL
+# ============================================================
+def render_calendar(data):
+    img, d = _canvas()
+    _header(d, "CALENDAR FISCAL")
+    d.text((s(56), s(110)), data.get("title", ""), font=font(POP_B, 28), fill=WHITE)
+    _tracked(d, (s(58), s(154)), data.get("subtitle", "").upper(), font(MONO_R, 12), MUTED, 1)
+    x, w, y = s(56), W * SCALE - s(112), s(190)
+    for i, o in enumerate(data.get("obligations", [])[:4]):
+        _obl_row(d, x, y + i * s(90), w, o["code"], o["name"],
+                 o["date"], f"ÎN {o['days_left']} ZILE", AMBER if o.get("warn") else TEAL,
+                 warn=o.get("warn", False))
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "la zi"))
+    return _to_image(img)
+
+
+# ============================================================
+#  ECRAN — PLĂȚI
+# ============================================================
+def render_plati(data):
+    img, d = _canvas()
+    _header(d, "PLĂȚI")
+    d.text((s(56), s(110)), data.get("title", "De plată"), font=font(POP_B, 28), fill=WHITE)
+    _tracked(d, (s(58), s(154)), "PRIN GHIȘEUL.RO · PE CNP", font(MONO_R, 12), MUTED, 1)
+    x, w, y = s(56), W * SCALE - s(112), s(196)
+    for i, it in enumerate(data.get("items", [])[:4]):
+        _obl_row(d, x, y + i * s(90), w, it["name"], it.get("sub", "vezi SPV"),
+                 fmt_ron(it["amount"]) + " lei", it.get("due", ""),
+                 AMBER, warn=True)
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "scadent"),
+            AMBER)
+    return _to_image(img)
+
+
+# ============================================================
+#  ECRAN — REGISTRU
+# ============================================================
+def render_registru(data):
+    img, d = _canvas()
+    _header(d, "REGISTRU")
+    d.text((s(56), s(110)), data.get("period", ""), font=font(POP_B, 30), fill=WHITE)
+    _tracked(d, (s(58), s(156)), "ÎNCASĂRI ȘI PLĂȚI · OMFP 170/2015", font(MONO_R, 12), MUTED, 1)
+    top, gap = s(200), s(20)
+    cw = (W * SCALE - s(112) - gap * 2) / 3
+    ch = s(150)
+    sold = data["sold"]
+    _kpi(d, s(56), top, cw, ch, "TOTAL ÎNCASĂRI", fmt_ron(data["incasari"]), "lei", GREEN)
+    _kpi(d, s(56) + cw + gap, top, cw, ch, "TOTAL PLĂȚI", fmt_ron(data["plati"]), "lei", AMBER)
+    _kpi(d, s(56) + (cw + gap) * 2, top, cw, ch, "SOLD FINAL", fmt_ron(sold), "lei",
+         GREEN if sold >= 0 else RED)
+    # ultima inregistrare
+    if data.get("last"):
+        ly = top + ch + s(34)
+        _tracked(d, (s(58), ly), "ULTIMA ÎNREGISTRARE", font(MONO_B, 12), MUTED, 2)
+        d.text((s(56), ly + s(24)), data["last"], font=font(POP_L, 18), fill=WHITE)
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "la zi"))
+    return _to_image(img)
+
+
+# ============================================================
+#  ECRAN — RAPORT LUNAR (estimare fiscală live)
+# ============================================================
+def render_raport(data):
+    img, d = _canvas()
+    _header(d, "RAPORT LUNAR")
+    box = [s(56), s(116), W * SCALE - s(56), s(500)]
+    _rrect(d, box, 22, fill=CARD, outline=CARD_LINE, width=1)
+    _rrect(d, [box[0], box[1], box[0] + s(6), box[3]], 3, fill=TEAL)
+    px = box[0] + s(44)
+
+    _tracked(d, (px, box[1] + s(34)), "PROFIT NET · " + data.get("period", "").upper(),
+             font(MONO_B, 13), TEAL_SOFT, 2)
+    big = font(POP_B, 80)
+    val = fmt_ron(data.get("profit", 0))
+    d.text((px - s(4), box[1] + s(66)), val, font=big, fill=WHITE)
+    bw = d.textlength(val, font=big)
+    d.text((px + bw + s(14), box[1] + s(100)), "RON", font=font(POP_L, 28), fill=MUTED)
+
+    # venituri / cheltuieli mini (optionale)
+    sy = box[1] + s(168)
+    if data.get("venituri") is not None:
+        d.ellipse([px, sy + s(4), px + s(11), sy + s(15)], fill=GREEN)
+        d.text((px + s(24), sy - s(4)), f"Venituri  {fmt_ron(data['venituri'])} lei",
+               font=font(POP_L, 17), fill=WHITE)
+    if data.get("cheltuieli") is not None:
+        d.ellipse([px + s(360), sy + s(4), px + s(371), sy + s(15)], fill=AMBER)
+        d.text((px + s(384), sy - s(4)), f"Cheltuieli  {fmt_ron(data['cheltuieli'])} lei",
+               font=font(POP_L, 17), fill=WHITE)
+
+    d.line([(px, box[1] + s(212)), (box[2] - s(44), box[1] + s(212))], fill=CARD_LINE, width=SCALE)
+
+    # estimare fiscala live
+    _tracked(d, (px, box[1] + s(232)), data.get("taxe_label", "ESTIMARE TAXE D212 (LA ZI)"),
+             font(MONO_B, 12), AMBER, 2)
+    ty = box[1] + s(266)
+    cells = [("IMPOZIT", data.get("impozit", 0)), ("CAS", data.get("cas", 0)),
+             ("CASS", data.get("cass", 0)), ("TOTAL", data.get("total_taxe", 0))]
+    cellw = (box[2] - s(44) - px) / 4
+    for i, (lbl, v) in enumerate(cells):
+        cx = px + i * cellw
+        _tracked(d, (cx, ty), lbl, font(MONO_R, 11), MUTED, 1)
+        col = AMBER if lbl == "TOTAL" else WHITE
+        d.text((cx, ty + s(20)), fmt_ron(v), font=font(POP_B, 26), fill=col)
+
+    _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"),
+            data.get("status", "estimare la zi"), TEAL)
+    return _to_image(img)
+
+
 # ============================================================
 #  API public
 # ============================================================
@@ -287,6 +501,12 @@ _RENDERERS = {
     "prezentare": render_prezentare,
     "venituri": render_venituri,
     "declaratii": render_declaratii,
+    "cheltuieli": render_cheltuieli,
+    "foaie_parcurs": render_foaie_parcurs,
+    "calendar": render_calendar,
+    "plati": render_plati,
+    "registru": render_registru,
+    "raport": render_raport,
 }
 
 def build_banner(screen, data):
