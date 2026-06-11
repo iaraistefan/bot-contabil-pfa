@@ -12,7 +12,7 @@ Calculul efectiv se face in app/domain/declaratie_unica.py (testat separat).
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, date
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -169,7 +169,54 @@ async def _intreaba_asigurare(send_func):
     )
 
 
-async def _finalizeaza_calcul(send_func, venit_brut, chelt_ded, an, luni, asigurat):
+_LUNI_RO = {
+    1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
+    5: "Mai", 6: "Iunie", 7: "Iulie", 8: "August",
+    9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie",
+}
+_LUNI_RO_SCURT = {
+    1: "Ian", 2: "Feb", 3: "Mar", 4: "Apr", 5: "Mai", 6: "Iun",
+    7: "Iul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Noi", 12: "Dec",
+}
+
+
+def _zi_luna_ro(d) -> str:
+    """Data în română, lună întreagă: 25 Mai 2027 (NU strftime %b — locale)."""
+    return f"{d.day} {_LUNI_RO.get(d.month, d.month)} {d.year}"
+
+
+def _zi_luna_ro_scurt(d) -> str:
+    """Data în română, lună abreviată: 28 Feb 2027 (pt. textul mono secundar)."""
+    return f"{d.day} {_LUNI_RO_SCURT.get(d.month, d.month)} {d.year}"
+
+
+def _banner_data(rez, an):
+    """Data dict pentru banner-ul „prezentare" (D212).
+
+    `amount` = `rez['total_taxe']` — EXACT suma pe care `format_telegram` o afișează
+    (ca bannerul și textul să arate aceeași sumă). Termenele D212 (25 Mai an+1) și
+    D207 (28 Feb an+1) — reutilizează `compute_obligation` (luna 5 / luna 2;
+    profil-independent: termenul se calculează înainte de aplicabilitate). Luni RO.
+    """
+    from app.domain import fiscal_calendar as fc
+    today = date.today()
+    # month=12 (sfârșit an venit) → compute_obligation dă termenul din anul URMĂTOR.
+    o212 = fc.compute_obligation(fc.DEFINITII_OBLIGATII["D212"], an, 12,
+                                 "PFA", "ridesharing", today=today)
+    o207 = fc.compute_obligation(fc.DEFINITII_OBLIGATII["D207"], an, 12,
+                                 "PFA", "ridesharing", today=today)
+    return {
+        "amount":        rez["total_taxe"],
+        "decl":          "D212 · Declarația Unică (impozit + CAS + CASS)",
+        "due_label":     f"Termen: {_zi_luna_ro(o212.termen)}",
+        "due_sub":       "Plata se face pe CNP, prin ghișeul.ro",
+        "days_left":     o212.zile_ramase,
+        "secondary":     "D207 — fără plată",
+        "secondary_sub": f"TERMEN {_zi_luna_ro_scurt(o207.termen)}".upper(),
+    }
+
+
+async def _finalizeaza_calcul(update, context, venit_brut, chelt_ded, an, luni, asigurat):
     rez = du_calc.calcul_declaratie_unica(
         venit_brut, chelt_ded, an=an, asigurat_salariat=asigurat
     )
@@ -185,7 +232,36 @@ async def _finalizeaza_calcul(send_func, venit_brut, chelt_ded, an, luni, asigur
         msg = avert + corp
     else:
         msg = corp
-    await send_func(msg, parse_mode="Markdown")
+
+    query = update.callback_query
+    chat_id = query.message.chat_id
+
+    # Banner hero premium. Defensiv: orice eroare la BUILD → flux vechi (text),
+    # mesajul rămâne intact (nu s-a șters încă nimic).
+    try:
+        from app.contai_banners import build_banner
+        png = build_banner("prezentare", _banner_data(rez, an))
+    except Exception as e:
+        logger.error(f"DU banner build failed, fallback text: {e}")
+        await query.edit_message_text(msg, parse_mode="Markdown")
+        return
+
+    # Banner OK → înlocuiește mesajul text (întrebarea asig) cu FOTO + ghid text.
+    # delete eșuat (mesaj vechi/șters) → prins separat, trimitem oricum ca mesaje noi.
+    try:
+        await query.message.delete()
+    except Exception as del_err:
+        logger.warning(f"DU banner: delete mesaj vechi a eșuat (trimit nou): {del_err}")
+    try:
+        await context.bot.send_photo(                      # 1. FOTO sus (caption text simplu)
+            chat_id=chat_id, photo=png, caption=f"🧮 Declarația Unică {an}"
+        )
+        await context.bot.send_message(                    # 2. ghidul text (Markdown)
+            chat_id=chat_id, text=msg, parse_mode="Markdown"
+        )
+    except Exception as send_err:
+        logger.error(f"DU banner: send foto/text a eșuat, doar text: {send_err}")
+        await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
 
 
 # ============================================================
@@ -250,7 +326,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
             )
             return
         await _finalizeaza_calcul(
-            query.edit_message_text,
+            update, context,
             pending["venit_brut"], pending["chelt_ded"],
             pending["an"], pending["luni"], asigurat=asigurat,
         )
