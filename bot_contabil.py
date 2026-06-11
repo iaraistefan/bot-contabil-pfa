@@ -76,12 +76,14 @@ BTN_CALENDAR = "📋 Calendar Fiscal"
 BTN_PLATA = plata_fiscala.BTN_PLATA  # Pas 11.4: "💳 Plată Fiscală"
 BTN_PARCURS = foaie_parcurs.BTN_PARCURS  # Pas A: "🛣️ Foaie parcurs"
 BTN_DU = du_ui.BTN_DU  # Faza 1: "🧮 Declaratia Unica"
+BTN_CHELTUIELI = "💸 Cheltuieli"  # Faza UI: ecran cheltuieli pe categorii + banner
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
-    BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_DU, BTN_SETARI, BTN_AJUTOR,
+    BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_DU, BTN_CHELTUIELI,
+    BTN_SETARI, BTN_AJUTOR,
 }
 
 LUNI_SHORT = {
@@ -107,7 +109,7 @@ def build_main_menu():
             KeyboardButton(BTN_CALENDAR),
         ],
         [KeyboardButton(BTN_PLATA), KeyboardButton(BTN_PARCURS)],  # Pas 11.4 + A
-        [KeyboardButton(BTN_DU)],  # Faza 1: Declaratia Unica
+        [KeyboardButton(BTN_DU), KeyboardButton(BTN_CHELTUIELI)],  # Faza 1 + ecran cheltuieli
         [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
@@ -826,6 +828,8 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
     elif text == BTN_DU:
         await du_ui.handle_menu_button(update, context)
+    elif text == BTN_CHELTUIELI:
+        await handle_cheltuieli_command(update, context)   # aceeași cale ca /cheltuieli
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
 
@@ -1145,6 +1149,104 @@ async def execute_show_profil(query, context, user_id):
         f"_Pentru editare:_ `/reset_profil`"
     )
     await query.edit_message_text(msg, parse_mode="Markdown")
+
+
+def _deduct_label(pct) -> str:
+    """Procent deductibilitate → label scurt: 50 → '50%' (fără zecimale)."""
+    try:
+        return f"{int(pct)}%"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _cheltuieli_banner_data(totals, year, month):
+    """Data dict `cheltuieli` — total/deductibil + TOP 3 categorii (expense_breakdown
+    e deja sortat desc pe amount_brut). `deduct` din pct REAL. Pe lună goală:
+    total 0 + categorii [] (render are gardă, nu crapă). Luni RO.
+    """
+    return {
+        "total":      totals["expense_total_brut"],
+        "deductibil": totals["expense_deductible_total"],
+        "categories": [
+            {"name": e["label"], "amount": e["amount_brut"],
+             "deduct": _deduct_label(e["deductibility_pct"])}
+            for e in totals.get("expense_breakdown", [])[:3]
+        ],
+        "period":   f"{luna_ro(month)} {year}",
+        "subtitle": "Deductibilitate pe categorii",
+    }
+
+
+def _format_cheltuieli_text(totals, year, month) -> str:
+    """Textul de sub banner: cheltuieli per-categorie + total + deductibil.
+    `total`/`deductibil` = EXACT cifrele de pe banner (aceeași `compute_period`).
+    """
+    lines = [
+        f"💸 *Cheltuieli — {luna_ro(month)} {year}*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+    for e in totals["expense_breakdown"]:
+        lines.append(
+            f"{e['icon']} {e['label']}: `{e['amount_brut']:.2f} RON` "
+            f"_({_deduct_label(e['deductibility_pct'])} deductibil)_"
+        )
+    lines.append("")
+    lines.append(f"*Total cheltuieli: {totals['expense_total_brut']:.2f} RON*")
+    lines.append(f"💡 *Din care deductibil: {totals['expense_deductible_total']:.2f} RON*")
+    return "\n".join(lines)
+
+
+async def handle_cheltuieli_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ecran Cheltuieli (cale-comandă) — buton 💸 Cheltuieli SAU /cheltuieli [lună].
+
+    O singură cale (butonul deleagă aici). Luna implicită = curentă; `/cheltuieli 4`
+    sau `/cheltuieli 2026 4` pentru altă perioadă. Banner hero + text dedesubt
+    (reply_banner_or_text). Lună goală → banner total 0 + mesaj, fără crash.
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        return
+
+    now = datetime.now()
+    year, month = now.year, now.month
+    args = context.args or []
+    try:
+        if len(args) >= 2:
+            year, month = int(args[0]), int(args[1])
+        elif len(args) == 1:
+            month = int(args[0])
+    except ValueError:
+        await update.message.reply_text("Foloseste: /cheltuieli 4 sau /cheltuieli 2026 4")
+        return
+
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
+    except Exception as e:
+        logger.error(f"cheltuieli compute error {year}/{month} user={user_id}: {e}")
+        await update.message.reply_text("❌ Eroare la calculul cheltuielilor.")
+        return
+    finally:
+        session.close()
+
+    # Gardă lună goală: niciun breakdown → banner total 0 + mesaj (nu listă goală).
+    if not totals.get("expense_breakdown"):
+        text = (
+            f"💸 *Cheltuieli — {luna_ro(month)} {year}*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📭 Fără cheltuieli înregistrate în {luna_ro(month)} {year}."
+        )
+    else:
+        text = _format_cheltuieli_text(totals, year, month)
+
+    await banner_send.reply_banner_or_text(
+        update.message, context,
+        screen="cheltuieli", data=_cheltuieli_banner_data(totals, year, month),
+        text=text,
+        caption=f"💸 Cheltuieli · {luna_ro(month)} {year}",
+    )
 
 
 def _raport_banner_data(d212, year):
@@ -2659,6 +2761,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("plata_fiscala", plata_fiscala.handle_command))
     app_bot.add_handler(CommandHandler("sterge_tura", foaie_parcurs.handle_delete_command))  # Pas A.3
     app_bot.add_handler(CommandHandler("declaratie_unica", du_ui.handle_command))  # Faza 1
+    app_bot.add_handler(CommandHandler("cheltuieli", handle_cheltuieli_command))  # Faza UI - ecran cheltuieli
     app_bot.add_handler(CommandHandler("coduri_fiscale", handle_coduri_fiscale))  # Faza 1
     app_bot.add_handler(CommandHandler("cod_tva", handle_set_cod_tva))  # Faza 1
     app_bot.add_handler(CommandHandler("cnp", handle_set_cnp))  # Faza 1

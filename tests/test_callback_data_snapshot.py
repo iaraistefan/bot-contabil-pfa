@@ -103,6 +103,7 @@ EXPECTED_BTN_MENU = {
     "BTN_PLATA": "💳 Plată Fiscală",
     "BTN_PARCURS": "🛣️ Foaie parcurs",
     "BTN_DU": "🧮 Declarația Unică",
+    "BTN_CHELTUIELI": "💸 Cheltuieli",
     "BTN_SETARI": "⚙️ Setări",
     "BTN_AJUTOR": "🆘 Ajutor",
 }
