@@ -48,6 +48,8 @@ from app.models import Document
 from app.repositories import users as users_repo
 from app.repositories import transactions as tx_repo
 from app.services import posting
+from app.services import banner_send  # Faza UI - banner Venituri Bolt (cale-comandă)
+from app.ro_dates import luna_ro  # Faza UI - luni RO
 
 logger = logging.getLogger("bolt_sync")
 
@@ -544,6 +546,21 @@ def _format_summary_text(s: dict, auto=False) -> str:
     )
 
 
+def _venituri_banner_data(s: dict, year: int, month: int) -> dict:
+    """Data dict pentru banner-ul `venituri` — brut/comision/net EXACT din `s`
+    (același dict ca `_format_summary_text` → identice prin construcție). Subtitle:
+    curse + km cu pasager; km cu virgulă RO (`602,6`). Perioada din ro_dates.
+    """
+    km_txt = f"{s.get('km', 0):.1f}".replace(".", ",")
+    return {
+        "brut":     s["brut"],
+        "comision": s["comision"],
+        "net":      s["net"],
+        "period":   f"{luna_ro(month)} {year}",
+        "subtitle": f"{s['n']} curse · {km_txt} km cu pasager",
+    }
+
+
 def _confirm_keyboard(year, month):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Adaugă în Registru",
@@ -622,9 +639,13 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    await update.message.reply_text(
-        _format_summary_text(s),
-        parse_mode="Markdown",
+    # Banner hero „Venituri Bolt" + textul detaliat dedesubt (cale-comandă, 2 niveluri
+    # fallback cu logger.exception). Butoanele rămân pe mesajul TEXT.
+    await banner_send.reply_banner_or_text(
+        update.message, context,
+        screen="venituri", data=_venituri_banner_data(s, year, month),
+        text=_format_summary_text(s),
+        caption=f"💰 Venituri Bolt · {luna_ro(month)} {year}",
         reply_markup=_confirm_keyboard(year, month),
     )
 
