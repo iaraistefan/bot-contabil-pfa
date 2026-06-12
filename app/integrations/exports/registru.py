@@ -190,6 +190,47 @@ def _build_explicatii(tx) -> str:
 
 
 # ============================================================
+#              TOTALURI (sursă unică: Excel + banner)
+# ============================================================
+
+def _relevant_txs(transactions, year: int, month=None):
+    """Tranzacțiile relevante pt. registru (INCOME/EXPENSE + luna dacă e lunar),
+    sortate pe (occurred_on, id). SURSĂ UNICĂ — folosită de Excel ȘI de totaluri."""
+    rt = [
+        tx for tx in transactions
+        if tx.tx_type in ("INCOME", "EXPENSE")
+        and (month is None or (tx.occurred_on and tx.occurred_on.month == month))
+    ]
+    rt.sort(key=lambda tx: (
+        tx.occurred_on or date(year, 1, 1),
+        tx.id if tx.id else 0,
+    ))
+    return rt
+
+
+def registru_totals(transactions, year: int, month=None) -> dict:
+    """Totaluri registru — SURSĂ UNICĂ pentru Excel + banner (cifre identice garantat).
+
+    incasari = Σ amount_brut (INCOME), plati = Σ amount_brut (EXPENSE),
+    sold = incasari − plati (CU SEMN — poate fi negativ). `last` = ultima înregistrare
+    (dată + explicații, trunchiată) sau None dacă nu există tranzacții.
+    """
+    rt = _relevant_txs(transactions, year, month)
+    incasari = round(sum(tx.amount_brut or 0.0 for tx in rt if tx.tx_type == "INCOME"), 2)
+    plati = round(sum(tx.amount_brut or 0.0 for tx in rt if tx.tx_type == "EXPENSE"), 2)
+    sold = round(incasari - plati, 2)
+    last = None
+    if rt:
+        t = rt[-1]
+        zi = t.occurred_on.strftime("%d.%m.%Y") if t.occurred_on else "—"
+        expl = _build_explicatii(t)
+        if len(expl) > 40:
+            expl = expl[:37] + "..."
+        last = f"{zi} · {expl}"
+    return {"incasari": incasari, "plati": plati, "sold": sold, "last": last}
+
+
+# ============================================================
 #                  MAIN GENERATOR
 # ============================================================
 
@@ -331,15 +372,7 @@ def generate_registru_xlsx(
     row += 1
 
     # ── Filtrare + sortare tranzacții ────────────────────────────────────
-    relevant_txs = [
-        tx for tx in transactions
-        if tx.tx_type in ("INCOME", "EXPENSE")
-        and (month is None or (tx.occurred_on and tx.occurred_on.month == month))
-    ]
-    relevant_txs.sort(key=lambda tx: (
-        tx.occurred_on or date(year, 1, 1),
-        tx.id if tx.id else 0
-    ))
+    relevant_txs = _relevant_txs(transactions, year, month)
 
     sold_curent = 0.0
     nr_crt = 0
@@ -495,17 +528,11 @@ def generate_registru_xlsx(
     # ════════════════════════════════════════════════════════════════════
     # ── 📊 SUMAR FINANCIAR (cererea băncii + utilitate contabil) ───────
     # ════════════════════════════════════════════════════════════════════
-    total_incasari_all = round(
-        sum(tx.amount_brut or 0.0 for tx in relevant_txs
-            if tx.tx_type == "INCOME"),
-        2
-    )
-    total_plati_all = round(
-        sum(tx.amount_brut or 0.0 for tx in relevant_txs
-            if tx.tx_type == "EXPENSE"),
-        2
-    )
-    profit_net = round(total_incasari_all - total_plati_all, 2)
+    # Sursă unică: aceleași totaluri pe care le arată și banner-ul (Registru).
+    _tot = registru_totals(transactions, year, month)
+    total_incasari_all = _tot["incasari"]
+    total_plati_all = _tot["plati"]
+    profit_net = _tot["sold"]
 
     # Header SUMAR (merged A:G)
     ws.merge_cells(f"A{row}:G{row}")

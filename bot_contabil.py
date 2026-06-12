@@ -36,7 +36,7 @@ from app.integrations.imports.classify import (
 from app.integrations.imports import bolt_reconcile  # Felia 4 - reconciliere prezenta Bolt
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
-    generate_registru_xlsx, filename_registru
+    generate_registru_xlsx, filename_registru, registru_totals
 )
 from app.integrations import bolt_sync  # Bolt API - venituri automate (/bolt)
 from app.http.app import start_http_server
@@ -1433,6 +1433,7 @@ async def execute_registru(query, context, user_id, year, month=None):
     period_label = (
         f"{LUNI_LONG[month]} {year}" if month else f"anul {year}"
     )
+    period_banner = f"{luna_ro(month)} {year}" if month else str(year)  # lunar / anual
     await query.edit_message_text(
         f"🔄 Generez Registrul de Încasări și Plăți pentru {period_label}...\n"
         f"_(Excel formatat, gata de tipărit)_",
@@ -1454,6 +1455,21 @@ async def execute_registru(query, context, user_id, year, month=None):
         if month:
             q = q.filter(TxModel.period_month == month)
         txs = q.order_by(TxModel.occurred_on).all()
+
+        # Banner hero ÎNTÂI (incasari/plati/sold) — sursă unică `registru_totals` (= Excel).
+        # Aditiv/defensiv: eșec → sare bannerul, Excel-ul tot pleacă. Lună goală → 0/0/0.
+        t = registru_totals(txs, year, month)
+        banner_data = {
+            "incasari": t["incasari"], "plati": t["plati"], "sold": t["sold"],
+            "period": period_banner,
+        }
+        if t["last"]:
+            banner_data["last"] = t["last"]
+        await banner_send.send_banner_photo(
+            context, query.message.chat_id,
+            screen="registru", data=banner_data,
+            caption=f"📂 Registru · {period_banner}",
+        )
 
         if not txs:
             await query.edit_message_text(

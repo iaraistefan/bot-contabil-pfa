@@ -82,3 +82,19 @@ async def reply_banner_or_text(
     except Exception:
         logger.exception(f"banner[{screen}] send foto/text a eșuat → doar text")
         await message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+
+
+async def send_banner_photo(context, chat_id, *, screen, data, caption) -> bool:
+    """Trimite DOAR banner-ul hero (foto), ADITIV — pentru ecrane unde livrabilul e
+    altceva (ex. document Excel la Registru). Defensiv: orice eroare (build/send) →
+    `logger.exception` + SARE bannerul (restul fluxului continuă neatins).
+    Întoarce True dacă bannerul a plecat, False altfel.
+    """
+    try:
+        from app.contai_banners import build_banner
+        png = build_banner(screen, data)
+        await context.bot.send_photo(chat_id=chat_id, photo=png, caption=caption)
+        return True
+    except Exception:
+        logger.exception(f"banner[{screen}] photo a eșuat → sar bannerul (restul continuă)")
+        return False
