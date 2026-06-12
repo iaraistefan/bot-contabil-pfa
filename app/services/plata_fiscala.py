@@ -45,6 +45,8 @@ from app.domain.compliance_guardian import (
     ValidationVerdict,
 )
 from app.integrations.anaf_iban_db import get_iban_for_obligation
+from app.services import banner_send  # Faza UI - banner Plată (cale-comandă)
+from app.ro_dates import luna_ro  # Faza UI - luni RO
 
 logger = logging.getLogger(__name__)
 
@@ -475,6 +477,42 @@ def build_payment_detail_message(
 #                    TELEGRAM HANDLERS
 # ============================================================
 
+def _plata_banner_items(session, user_id, ctx, applicable) -> list:
+    """Items pentru banner-ul `plati` — obligațiile cu SUMĂ>0 pe luna CURENTĂ, calculate
+    EXACT ca detaliul (`compute_obligation`, același context + bază intracom) → banner ≡
+    detaliu. Sortate descrescător pe sumă. Defensiv: orice eroare per-obligație → sare.
+    """
+    today = date.today()
+    year, month = today.year, today.month
+    try:
+        intracom_base = _get_intracom_base_for_month(session, user_id, year, month)
+    except Exception:
+        intracom_base = 0.0
+    items = []
+    for cod in applicable:
+        definitie = DEFINITII_OBLIGATII.get(cod)
+        if not definitie:
+            continue
+        try:
+            obl = compute_obligation(
+                definitie, year, month, ctx["forma_juridica"], ctx["activity_code"],
+                has_intracom_invoice=intracom_base > 0, intracom_base_amount=intracom_base,
+                has_cod_special_tva=ctx["has_cod_special_tva"], is_vat_payer=ctx["is_vat_payer"],
+                judet=ctx["judet"], today=today,
+            )
+        except Exception:
+            continue
+        if obl.aplicabil_acum and obl.suma_estimata and obl.suma_estimata > 0:
+            items.append({
+                "name": definitie.nume,
+                "amount": round(obl.suma_estimata, 2),
+                "sub": "ghișeul.ro",
+                "due": obl.termen.strftime("%d.%m.%Y"),
+            })
+    items.sort(key=lambda x: -x["amount"])      # cele mai mari sume întâi
+    return items
+
+
 async def handle_menu_button(
     update: Update, context: ContextTypes.DEFAULT_TYPE,
 ):
@@ -493,10 +531,12 @@ async def handle_menu_button(
         fiscal_profile = from_user_id(session, user.id)
         profile_dict = users_repo.get_profile_dict(session, user.id) or {}
         ctx = _profile_to_guardian_context(fiscal_profile, profile_dict)
+        applicable = get_applicable_obligations_codes(fiscal_profile, ctx)
+        # Items banner (sume>0 pe luna curentă) — calculate cât e sesiunea deschisă.
+        items = _plata_banner_items(session, user.id, ctx, applicable) if applicable else []
     finally:
         session.close()
 
-    applicable = get_applicable_obligations_codes(fiscal_profile, ctx)
     if not applicable:
         await update.message.reply_text(
             "📭 *Nu am identificat obligații fiscale aplicabile.*\n\n"
@@ -505,14 +545,32 @@ async def handle_menu_button(
         )
         return
 
-    await update.message.reply_text(
+    picker_text = (
         f"💳 *PLATĂ FISCALĂ*\n"
         f"_Profil: {fiscal_profile.forma_juridica.value} · "
         f"{ctx['activity_code']}_\n\n"
-        f"Alege tipul plății:",
-        parse_mode="Markdown",
-        reply_markup=_build_obligation_picker(applicable),
+        f"Alege tipul plății:"
     )
+    today = date.today()
+    picker = _build_obligation_picker(applicable)
+
+    if items:
+        # Banner hero „De plată" (sume scadente) + picker-ul dedesubt pentru drill-down.
+        data = {"items": items, "title": f"De plată · {luna_ro(today.month)} {today.year}"}
+        await banner_send.reply_banner_or_text(
+            update.message, context,
+            screen="plati", data=data,
+            text=picker_text,
+            caption=f"💳 Plată Fiscală · {luna_ro(today.month)} {today.year}",
+            reply_markup=picker,
+        )
+    else:
+        # Caz gol: nicio sumă de plată acum → mesaj + picker (fără banner gol).
+        await update.message.reply_text(
+            f"✅ *Nimic de plată în {luna_ro(today.month)} {today.year}.*\n\n" + picker_text,
+            parse_mode="Markdown",
+            reply_markup=picker,
+        )
 
 
 async def handle_callback(
