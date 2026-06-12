@@ -105,6 +105,17 @@ def fmt_ron(value):
     txt = f"{value:,.2f}"                       # 2,813.17
     return txt.replace(",", "§").replace(".", ",").replace("§", ".")
 
+def _zile_label(days):
+    """Zile rămase → etichetă lizibilă (days_left int CU SEMN, neschimbat la mapare):
+    >0 → 'ÎN N ZILE', 0 → 'AZI', <0 → 'DEPĂȘIT DE N ZILE'."""
+    if days is None:
+        return ""
+    if days > 0:
+        return f"ÎN {days} ZILE"
+    if days == 0:
+        return "AZI"
+    return f"DEPĂȘIT DE {abs(days)} ZILE"
+
 def _canvas():
     img = Image.new("RGB", (W * SCALE, H * SCALE), NAVY_TOP)
     d = ImageDraw.Draw(img)
@@ -196,7 +207,7 @@ def render_prezentare(data):
     _tracked(d, (px, box[1] + s(36)), "CÂT PLĂTESC ȘI CÂND?", font(MONO_B, 14), TEAL_SOFT, 3)
     days = data.get("days_left")
     if days is not None:
-        bdg = f"SCADENT ÎN {days} ZILE"
+        bdg = f"SCADENT {_zile_label(days)}"
         f = font(MONO_B, 12)
         _pill(d, box[2] - s(34) - (_tw(d, bdg, f, 2) + s(28)), box[1] + s(30),
               bdg, f, (26, 20, 8), AMBER, tracking=2)
@@ -395,7 +406,7 @@ def render_calendar(data):
     x, w, y = s(56), W * SCALE - s(112), s(190)
     for i, o in enumerate(data.get("obligations", [])[:4]):
         _obl_row(d, x, y + i * s(90), w, o["code"], o["name"],
-                 o["date"], f"ÎN {o['days_left']} ZILE", AMBER if o.get("warn") else TEAL,
+                 o["date"], _zile_label(o["days_left"]), AMBER if o.get("warn") else TEAL,
                  warn=o.get("warn", False))
     _footer(d, data.get("cui", "PFA · CUI 53067338 · Bistrița"), data.get("status", "la zi"))
     return _to_image(img)

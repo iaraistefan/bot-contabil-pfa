@@ -1541,6 +1541,24 @@ async def execute_export(query, context, user_id, year, month):
         session.close()
 
 
+def _calendar_banner_data(alerts, year, month):
+    """Data dict `calendar` — TOP-4 obligații după URGENȚĂ (days_left crescător →
+    overdue/critical întâi), NU ordinea de definiție. `warn` = status urgent (accent
+    auriu); restul teal. Subset al textului (aceeași sursă get_monthly+get_annual).
+    """
+    ordered = sorted(alerts, key=lambda a: a["days_left"])   # overdue (<0) → apropiate
+    return {
+        "obligations": [
+            {"code": a["code"], "name": a["name"], "date": a["deadline"],
+             "days_left": a["days_left"],
+             "warn": a["status"] in ("overdue", "critical", "warning")}
+            for a in ordered[:4]
+        ],
+        "period": f"{luna_ro(month)} {year}",
+        "subtitle": "Termene și obligații",
+    }
+
+
 async def execute_fiscal(query, context, user_id, year, month):
     session = get_session()
     try:
@@ -1562,7 +1580,20 @@ async def execute_fiscal(query, context, user_id, year, month):
         session.close()
 
     msg = fiscal_calendar.format_fiscal_message(year, month, has_bolt_invoice=has_bolt)
-    await query.edit_message_text(msg, parse_mode="Markdown")
+    # Banner hero TOP-4 obligații urgente + textul complet dedesubt. Sursă = aceeași
+    # ca textul (get_monthly_alerts + get_annual_alerts filtrate -30..60, ca format_*).
+    alerts = fiscal_calendar.get_monthly_alerts(year, month, has_bolt_invoice=has_bolt) + [
+        a for a in fiscal_calendar.get_annual_alerts(year) if -30 <= a["days_left"] <= 60
+    ]
+    if alerts:
+        await banner_send.send_banner_or_text(
+            query, context,
+            screen="calendar", data=_calendar_banner_data(alerts, year, month),
+            text=msg, caption=f"📋 Calendar fiscal · {luna_ro(month)} {year}",
+        )
+    else:
+        # Caz gol: nicio obligație în fereastră → DOAR textul (explică situația), fără banner gol.
+        await query.edit_message_text(msg, parse_mode="Markdown")
 
 
 async def execute_reminder(query, context):
