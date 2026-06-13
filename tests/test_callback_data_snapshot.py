@@ -43,7 +43,7 @@ def _extract_callbacks():
     return cbs
 
 
-# Snapshot ÎNGHEȚAT (103 literali, capturat înainte de orice modernizare de text).
+# Snapshot ÎNGHEȚAT (104 literali; +tvadecl = buton-poartă ecran TVA & Declarații).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -57,6 +57,7 @@ EXPECTED_CALLBACKS = {
     "confirm|item|{i}", "confirm|save", "confirm|tip|{idx}|CHELTUIALA",
     "confirm|tip|{idx}|FACTURA_COMISION", "confirm|tip|{idx}|VENIT",
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",
+    "tvadecl|{year}|{month}",
     "du|an|{a}", "du|auto|{an}", "du|calc|asig", "du|calc|noasig", "du|manual|{an}",
     "nav|close", "nav|noop",
     "onb|activity|{a['code']}", "onb|cancel", "onb|confirm_all", "onb|cui_retry",

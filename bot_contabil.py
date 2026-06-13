@@ -1084,6 +1084,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await execute_fisa_d100(query, context, user_id, year, month)
             return
 
+        # Buton-poartă: ecran TVA & Declarații (banner + fisele D301/D390/D100)
+        if namespace == "tvadecl":
+            year = int(parts[1])
+            month = int(parts[2])
+            await execute_tva_declaratii(query, context, user_id, year, month)
+            return
+
         # Faza 1: Declaratia Unica
         if namespace == "du":
             await du_ui.handle_callback(update, context, parts)
@@ -1291,24 +1298,16 @@ async def execute_raport(query, context, user_id, year, month):
         # estimare fiscala anuala pe realizat YTD (sursa unica, ca dashboard-ul)
         d212 = tax_engine.compute_d212_anual(session, user_id=user_id, an=year)
         msg = tax_engine.format_report_message(totals, d212=d212)
-        # Faza 1.3: daca exista TVA D301 (reverse charge), oferim fisa D301
+        # Buton-poartă TVA & Declarații: pe lunile cu factură Bolt (vat_out>0),
+        # deschide ecranul dedicat (banner render_declaratii + fisele D301/D390/D100).
+        # Garda vat_out>0 e PĂSTRATĂ → lunile fără factură n-au butonul deloc.
         tva_d301 = totals.get("vat_out_total", 0) or 0
         rm = None
         if tva_d301 > 0:
-            rm = InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "📋 Fisa completare D301",
-                    callback_data=f"d301|{year}|{month}",
-                )],
-                [InlineKeyboardButton(
-                    "🇪🇺 Fisa D390 (VIES)",
-                    callback_data=f"d390|{year}|{month}",
-                )],
-                [InlineKeyboardButton(
-                    "🌍 Fisa D100 (nerezident)",
-                    callback_data=f"d100|{year}|{month}",
-                )],
-            ])
+            rm = InlineKeyboardMarkup([[InlineKeyboardButton(
+                "🧾 TVA & Declarații",
+                callback_data=f"tvadecl|{year}|{month}",
+            )]])
 
         # Banner hero premium (estimare D212 anuală) + textul lunar dedesubt.
         # Wrapper comun: build → delete → foto → text, fallback 3 niveluri cu
@@ -1338,6 +1337,84 @@ async def execute_raport(query, context, user_id, year, month):
         await query.edit_message_text("❌ Eroare la calculul raportului.")
     finally:
         session.close()
+
+
+async def execute_tva_declaratii(query, context, user_id, year, month):
+    """Ecran TVA & Declarații (buton-poartă din Raport).
+
+    Banner premium `render_declaratii` + fisele D301/D390/D100 ca reply_markup.
+    SURSĂ UNICĂ: `compute_period(...).vat_out_total` — EXACT pragul folosit de
+    `_trimite_declaratie_noua` (vat_out<=0 → 'nu se depune'). Deci 'De depus' pe
+    banner ⇔ fisa chiar se generează la apăsare (coerență prag garantată, >0 vs <=0).
+    `baza` și cota din payload (cota_tva pe dată), NU hardcodat 21%.
+
+    vat_out==0 (cale defensivă; butonul-poartă oricum nu apare atunci): banner
+    'Nimic de depus' FĂRĂ butoane — nu oferim fise care ar răspunde 'nu se depune'.
+    """
+    session = get_session()
+    try:
+        totals = tax_engine.compute_period(
+            session, user_id=user_id, year=year, month=month
+        )
+    except Exception as e:
+        logger.error(f"execute_tva_declaratii error: {e}")
+        await query.edit_message_text("❌ Eroare la calculul TVA & Declarații.")
+        return
+    finally:
+        session.close()
+
+    vat_out = totals.get("vat_out_total", 0) or 0
+    cota = totals.get("cota_tva", 0.21) or 0.21
+    tva_pct = round(cota * 100)
+
+    if vat_out > 0:
+        baza = vat_out / cota
+        # format RO (oglindă fmt_ron din contai_banners; evită importul PIL în bot)
+        baza_ro = f"{baza:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
+        data = {
+            "title": "De depus",
+            "subtitle": f"BAZĂ {baza_ro} LEI · TVA {tva_pct}%",
+            "rows": [
+                {"code": "D301", "name": "Decont special TVA"},
+                {"code": "D390", "name": "Declarație recapitulativă VIES"},
+                {"code": "D100", "name": "Impozit nerezident · 2%", "warn": True},
+            ],
+            "status": "de depus în SPV",
+        }
+        rm = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "📋 Fisa completare D301", callback_data=f"d301|{year}|{month}")],
+            [InlineKeyboardButton(
+                "🇪🇺 Fisa D390 (VIES)", callback_data=f"d390|{year}|{month}")],
+            [InlineKeyboardButton(
+                "🌍 Fisa D100 (nerezident)", callback_data=f"d100|{year}|{month}")],
+        ])
+        text = (
+            f"🧾 *TVA & Declarații · {luna_ro(month)} {year}*\n"
+            f"Bază facturi Bolt: *{baza:.2f} RON* · TVA {tva_pct}%\n"
+            f"TVA colectat D301: *{vat_out:.2f} RON*\n\n"
+            f"Apasă o fișă pentru ghid de completare + XML (DUKIntegrator)."
+        )
+    else:
+        data = {
+            "title": "Nimic de depus",
+            "subtitle": f"FĂRĂ FACTURĂ BOLT ÎN {month:02d}/{year} · NIMIC DE DECLARAT",
+            "rows": [],
+            "status": "nimic de depus",
+        }
+        rm = None
+        text = (
+            f"🧾 *TVA & Declarații · {luna_ro(month)} {year}*\n\n"
+            f"Nu există factură Bolt (comision) în {month:02d}/{year} → "
+            f"D301/D390/D100 nu se depun pentru această lună."
+        )
+
+    await banner_send.send_banner_or_text(
+        query, context,
+        screen="declaratii", data=data,
+        text=text, reply_markup=rm,
+        caption=f"🧾 TVA & Declarații · {luna_ro(month)} {year}",
+    )
 
 
 async def execute_fisa_d301(query, context, user_id, year, month):
