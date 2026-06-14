@@ -555,7 +555,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/profil - afiseaza profilul curent."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
 
     session = get_session()
@@ -615,7 +615,7 @@ async def handle_reset_profil(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         session.rollback()
         logger.error(f"reset_profil error: {e}")
-        await update.message.reply_text("❌ Eroare la reset profil.")
+        await update.message.reply_text("⚠️ N-am putut reseta profilul. Încearcă din nou.")
         return
     finally:
         session.close()
@@ -754,7 +754,7 @@ async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"handle_cont error: {e}")
-        await update.message.reply_text("❌ Eroare la citirea contului.")
+        await update.message.reply_text("⚠️ N-am putut citi contul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -766,7 +766,7 @@ async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
 
     if text == BTN_RAPORT:
@@ -844,7 +844,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     user_id = ensure_user(update)
     if not user_id:
-        await query.edit_message_text("⚠️ Eroare identificare utilizator.")
+        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
 
     data = query.data
@@ -1105,11 +1105,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     except Exception as e:
-        logger.error(f"Callback handler error data={data}: {e}")
+        logger.exception(f"Callback handler error data={data}")
         # Pas 13.1 - trimitem la Sentry
         monitoring.capture_exception(e, callback_data=data)
         try:
-            await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
+            await query.edit_message_text(
+                "⚠️ N-am putut deschide asta. Încearcă din nou — dacă ține, apasă /start."
+            )
         except Exception:
             pass
 
@@ -1213,7 +1215,7 @@ async def handle_cheltuieli_command(update: Update, context: ContextTypes.DEFAUL
     """
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
 
     now = datetime.now()
@@ -1233,7 +1235,7 @@ async def handle_cheltuieli_command(update: Update, context: ContextTypes.DEFAUL
         totals = tax_engine.compute_period(session, user_id=user_id, year=year, month=month)
     except Exception as e:
         logger.error(f"cheltuieli compute error {year}/{month} user={user_id}: {e}")
-        await update.message.reply_text("❌ Eroare la calculul cheltuielilor.")
+        await update.message.reply_text("⚠️ N-am putut calcula cheltuielile. Încearcă din nou.")
         return
     finally:
         session.close()
@@ -1334,7 +1336,7 @@ async def execute_raport(query, context, user_id, year, month):
     except Exception as e:
         session.rollback()
         logger.error(f"execute_raport error: {e}")
-        await query.edit_message_text("❌ Eroare la calculul raportului.")
+        await query.edit_message_text("⚠️ N-am putut calcula raportul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1358,7 +1360,7 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         )
     except Exception as e:
         logger.error(f"execute_tva_declaratii error: {e}")
-        await query.edit_message_text("❌ Eroare la calculul TVA & Declarații.")
+        await query.edit_message_text("⚠️ N-am putut calcula TVA & Declarații. Încearcă din nou.")
         return
     finally:
         session.close()
@@ -1446,7 +1448,7 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
         profile = users_repo.get_profile_dict(session, user_id) or {}
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua compute error {tip}: {e}")
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Eroare la calculul {tip}.")
+        await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut calcula {tip}. Încearcă din nou.")
         return
     finally:
         session.close()
@@ -1456,7 +1458,7 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
         rez = decl_nou.genereaza(tip, year, month, baza, firma=firma)
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua gen error {tip}: {e}")
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Eroare la generarea {tip}.")
+        await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut genera {tip}. Încearcă din nou.")
         return
 
     # 1. Ghidul de completare (mesaj text)
@@ -1575,7 +1577,7 @@ async def execute_registru(query, context, user_id, year, month=None):
     except Exception as e:
         session.rollback()
         logger.error(f"execute_registru error: {e}")
-        await query.edit_message_text("❌ Eroare la generarea registrului.")
+        await query.edit_message_text("⚠️ N-am putut genera registrul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1613,7 +1615,7 @@ async def execute_export(query, context, user_id, year, month):
     except Exception as e:
         session.rollback()
         logger.error(f"execute_export error: {e}")
-        await query.edit_message_text("❌ Eroare la export.")
+        await query.edit_message_text("⚠️ N-am putut exporta. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1680,7 +1682,7 @@ async def execute_reminder(query, context):
         await query.edit_message_text("✅ Reminder trimis. Verifică mesajele.")
     except Exception as e:
         logger.error(f"reminder error: {e}")
-        await query.edit_message_text("❌ Eroare la trimitere reminder.")
+        await query.edit_message_text("⚠️ N-am putut trimite reminderul. Încearcă din nou.")
 
 
 async def handle_sumar_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1722,7 +1724,7 @@ async def handle_sumar_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.error(f"sumar_test error: {e}")
-        await update.message.reply_text("❌ Eroare la generarea sumarului.")
+        await update.message.reply_text("⚠️ N-am putut genera sumarul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1773,7 +1775,7 @@ async def execute_alerts_run(query, context, user_id):
             )
     except Exception as e:
         logger.error(f"alerts run error: {e}")
-        await query.edit_message_text("❌ Eroare la monitorizare.")
+        await query.edit_message_text("⚠️ N-am putut porni monitorizarea. Încearcă din nou.")
 
 
 async def execute_alerts_history(query, context, user_id):
@@ -1808,7 +1810,7 @@ async def execute_alerts_history(query, context, user_id):
     except Exception as e:
         session.rollback()
         logger.error(f"alerts history error: {e}")
-        await query.edit_message_text("❌ Eroare la citirea istoricului.")
+        await query.edit_message_text("⚠️ N-am putut citi istoricul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1884,8 +1886,10 @@ async def execute_reset(query, context, user_id):
         )
     except Exception as e:
         session.rollback()
-        logger.error(f"execute_reset error: {e}")
-        await query.edit_message_text(f"❌ Eroare la ștergere: {str(e)[:200]}")
+        logger.exception("execute_reset error")
+        await query.edit_message_text(
+            "⚠️ N-am putut șterge datele acum. Nimic nu s-a modificat — încearcă din nou."
+        )
     finally:
         session.close()
 
@@ -1897,7 +1901,7 @@ async def execute_reset(query, context, user_id):
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
 
     args = context.args or []
@@ -1947,7 +1951,7 @@ async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         session.rollback()
         logger.error(f"delete error: {e}")
-        await update.message.reply_text("❌ Eroare la anularea documentului.")
+        await update.message.reply_text("⚠️ N-am putut anula documentul. Încearcă din nou.")
     finally:
         session.close()
 
@@ -1971,9 +1975,10 @@ async def handle_anafdebug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"\n• Localitate: `{result.get('localitate')}`"
         await update.message.reply_text(msg, parse_mode="Markdown")
     except Exception as e:
-        logger.error(f"anafdebug error: {e}")
+        logger.exception("anafdebug error")
+        # Comandă de debug (owner) — păstrăm detaliul tehnic intenționat.
         await update.message.reply_text(
-            f"❌ Eroare ANAF: `{str(e)[:300]}`", parse_mode="Markdown",
+            f"❌ Lookup ANAF a eșuat (debug):\n`{str(e)[:300]}`", parse_mode="Markdown",
         )
 
 
@@ -2142,7 +2147,7 @@ async def execute_confirmed_save(update, context, user_id):
         items = [ExtractionItem(**d) for d in pending["items"]]
     except Exception as e:
         logger.error(f"execute_confirmed_save: rebuild items failed: {e}")
-        await query.edit_message_text("❌ Eroare la citirea datelor confirmate.")
+        await query.edit_message_text("⚠️ N-am putut citi datele confirmate. Trimite documentul din nou.")
         confirmare.clear_pending(context)
         return
 
@@ -2238,12 +2243,17 @@ async def execute_confirmed_save(update, context, user_id):
             parse_mode="Markdown",
         )
     except Exception as e:
-        logger.error(f"Error in execute_confirmed_save: {e}")
+        logger.exception("Error in execute_confirmed_save")
         monitoring.capture_exception(e, stage="execute_confirmed_save")
         confirmare.clear_pending(context)
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"❌ Eroare la salvare: {str(e)}"
+            text=(
+                "⚠️ N-am putut termina salvarea. O parte din date poate fi deja "
+                "înregistrată — verifică în *Registru* ce a intrat și retrimite "
+                "doar ce lipsește."
+            ),
+            parse_mode="Markdown",
         )
 
 
@@ -2602,7 +2612,7 @@ async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TY
     """/coduri_fiscale - afiseaza codurile cu butoane de setare."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
     session = get_session()
     try:
@@ -2746,7 +2756,7 @@ async def handle_set_cod_tva(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """/cod_tva NNNNNNNN - seteaza codul special TVA art. 317."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
     args = context.args or []
     if not args:
@@ -2778,7 +2788,7 @@ async def handle_set_cnp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/cnp NNNNNNNNNNNNN - seteaza CNP-ul (pentru Declaratia Unica)."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
         return
     args = context.args or []
     if not args:

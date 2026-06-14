@@ -388,15 +388,15 @@
           </div>
           <div class="kpi r">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round"/></svg></div></div>
-            <div class="lab">Cheltuieli</div><div class="val r num" id="ov-chelt">—</div><div class="sub">RON · deductibile</div>
+            <div class="lab">Cheltuieli</div><div class="val r num" id="ov-chelt">—</div><div class="sub">doar partea deductibilă</div>
           </div>
           <div class="kpi gold">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
-            <div class="lab">TVA D301</div><div class="val gold num" id="ov-tva">—</div><div class="sub">RON · taxare inversă</div>
+            <div class="lab">TVA de declarat</div><div class="val gold num" id="ov-tva">—</div><div class="sub">D301 · pe comisionul Bolt</div>
           </div>
           <div class="kpi b">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></div></div>
-            <div class="lab">Km cu pasageri</div><div class="val num" id="ov-km">—</div><div class="sub" id="ov-km-sub">din curse</div>
+            <div class="lab">Km cu pasageri</div><div class="val num" id="ov-km">—</div><div class="sub" id="ov-km-sub">din cursele Bolt</div>
           </div>
         </div>
 
@@ -441,7 +441,7 @@
           <div class="chart-box"><canvas id="venBars"></canvas></div>
         </div>
         <div class="panel">
-          <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Sync acum</a></div>
+          <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizează acum</a></div>
           <table>
             <thead><tr><th>Lună</th><th class="r">Curse</th><th class="r">Brut</th><th class="r">Comision</th><th class="r">Net</th><th class="r">Km</th></tr></thead>
             <tbody id="ven-tbody">
@@ -511,21 +511,21 @@
       <section class="page" id="page-tva">
         <div class="alert" style="margin-bottom:16px">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
-          <div><div class="t">Taxare inversă pe comision Bolt</div><div class="d">Bolt facturează din Estonia, fără TVA → declari tu TVA-ul de 21% prin D301 + raportezi la VIES prin D390. Lunar, până pe 25.</div></div>
+          <div><div class="t">TVA pe comisionul Bolt (îl declari tu)</div><div class="d">Bolt facturează din Estonia, fără TVA → declari tu TVA-ul de 21% prin D301 + raportezi la VIES prin D390. Lunar, până pe 25.</div></div>
         </div>
         <div class="grid g-3" style="margin-bottom:16px">
-          <div class="panel hover"><div class="panel-h"><div class="t">D301</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">149,65</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">712,65</span> comision</div></div>
-          <div class="panel hover"><div class="panel-h"><div class="t">D390 VIES</div><span class="badge-st warn">de depus</span></div><div class="hint" style="margin-top:4px">Recapitulativă servicii intracom · cod „S" · țară EE · fără plată</div></div>
-          <div class="panel hover"><div class="panel-h"><div class="t">D100</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">Impozit nerezident 2% × comision Bolt · obligatoriu lunar, plată reală · termen 25</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">149,65</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">712,65</span> comision</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D390 — raportare UE (VIES)</div><span class="badge-st warn">de depus</span></div><div class="hint" style="margin-top:4px">Raportezi la UE serviciile cumpărate de la Bolt (Estonia). Fără plată.</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): 2% din comision. Lunar, termen 25.</div></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Generare declarații<span>format oficial ANAF</span></div></div>
           <div class="hint" style="margin-bottom:14px">Contai îți pregătește declarația completată pe luna selectată. Primești ghidul cu valorile de pus în formular + fișierul XML. Tu validezi, semnezi cu eToken și încarci în SPV.</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-primary" onclick="genDecl('D301')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301</button>
-            <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390</button>
-            <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100</button>
-            <button class="btn btn-ghost" onclick="genD212()">🧮 Declarația Unică (anual)</button>
+            <button class="btn btn-primary" onclick="genDecl('D301')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301 — TVA</button>
+            <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390 — VIES</button>
+            <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100 — impozit Bolt</button>
+            <button class="btn btn-ghost" onclick="genD212()">Generează Declarația Unică</button>
           </div>
           <div id="decl-rezultat" style="margin-top:18px;display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -551,9 +551,9 @@
             <div class="panel-h"><div class="t">Ritm lunar</div></div>
             <div class="hint" style="margin-bottom:14px">Ce ai de făcut în fiecare lună, recurent:</div>
             <div class="rows">
-              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D301 — decont TVA</div><div class="m">doar în lunile cu factură Bolt</div></div><span class="badge-st ok">auto</span></div>
-              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D390 — VIES</div><div class="m">recapitulativă servicii</div></div><span class="badge-st ok">auto</span></div>
-              <div class="row"><div class="ic blue"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D100 — nerezidenți</div><div class="m">posibil 0 (suportat Bolt)</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D301 — decontul de TVA</div><div class="m">doar în lunile cu factură Bolt</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D390 — raportare UE (VIES)</div><div class="m">recapitulativă servicii</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic blue"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D100 — impozit pentru Bolt</div><div class="m">posibil 0 (suportat Bolt)</div></div><span class="badge-st ok">auto</span></div>
             </div>
           </div>
         </div>
@@ -563,7 +563,7 @@
       <section class="page" id="page-plati">
         <div class="alert" style="margin-bottom:16px">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
-          <div><div class="t">Plătește prin ghiseul.ro</div><div class="d">Contai calculează suma, tu plătești cu cardul pe ghiseul.ro — contul corect e ales automat de ANAF pe CNP/CUI. Fără IBAN-uri greșite.</div></div>
+          <div><div class="t">Plătește prin ghișeul.ro</div><div class="d">Contai calculează suma, tu plătești cu cardul pe ghișeul.ro — contul corect e ales automat de ANAF pe CNP/CUI. Fără IBAN-uri greșite.</div></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Obligații de plată<span id="plati-luna"></span></div></div>
@@ -599,7 +599,7 @@
       <!-- ===== DOCUMENTE ===== -->
       <section class="page" id="page-documente">
         <div class="panel">
-          <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă</a></div>
+          <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă document</a></div>
           <table>
             <thead><tr><th>Data</th><th>Furnizor</th><th>Tip</th><th class="r">Sumă</th><th class="r">Status</th><th class="r">Fișier</th></tr></thead>
             <tbody id="doc-tbody"></tbody>
@@ -966,7 +966,7 @@
           <div class="row"><div class="info"><div class="t">${v.marca_model||"Vehicul"}</div><div class="m">${v.nr_inmatriculare||"—"}</div></div></div>
           <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">${v.norma_consum||"7,5"} L / 100 km</div></div></div>
           <div class="row"><div class="info"><div class="t">Consum teoretic</div><div class="m">${KM(pc.km_business)} km × normă</div></div><div class="amt neu num">${f.plafon_litri?KM(f.plafon_litri)+" L":"—"}</div></div>
-          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${(f.mai_poti_lei||0)>=0?'pos':'neg'} num">${(f.mai_poti_lei!=null)?(f.mai_poti_lei>=0?'OK':'depășit'):'—'}</div></div>`;
+          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${(f.mai_poti_lei||0)>=0?'pos':'neg'} num">${(f.mai_poti_lei!=null)?(f.mai_poti_lei>=0?'în normă':'peste plafon'):'—'}</div></div>`;
       }
     }catch(e){console.error(e);}
   }
@@ -1062,7 +1062,7 @@
       a.href=url; a.download=m?m[1]:`document_${docId}`;
       document.body.appendChild(a); a.click();
       document.body.removeChild(a); URL.revokeObjectURL(url);
-    }catch(e){alert("Eroare la descărcare.");}
+    }catch(e){alert("Nu am putut descărca fișierul. Verifică conexiunea și încearcă din nou.");}
   }
 
   // ======================= CALENDAR + PLĂȚI (obligații reale) =======================
@@ -1100,14 +1100,14 @@
           const termen=termenRo(o.termen);
           const btn = o.suma_estimata!=null && o.suma_estimata>0
             ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
-            : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">ghiseul.ro</a>`;
+            : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
           return `<tr><td><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" style="font-size:.78rem">${cont}</td><td class="r num neu">${suma}</td><td class="r">${termen}</td><td class="r">${btn}</td></tr>`;
         }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru această lună.</td></tr>';
       }
     }catch(e){
       console.error(e);
       const tl=document.getElementById("cal-timeline");
-      if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Eroare la încărcarea obligațiilor.</div>';
+      if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Nu am putut încărca obligațiile. Reîncarcă pagina.</div>';
     }
   }
 
@@ -1145,7 +1145,7 @@
           a.href=url; a.download=d.nume_fisier_xml||`${tip}.xml`;
           document.body.appendChild(a); a.click();
           document.body.removeChild(a); URL.revokeObjectURL(url);
-        }catch(e){alert("Eroare la descărcare.");}
+        }catch(e){alert("Nu am putut descărca fișierul. Verifică conexiunea și încearcă din nou.");}
         return false;
       };
       // avertismente
@@ -1156,7 +1156,7 @@
     }catch(e){
       console.error(e);
       titlu.textContent=`${tip} — eroare`;
-      ghid.textContent="Eroare de rețea. Încearcă din nou.";
+      ghid.textContent="Conexiune pierdută. Încearcă din nou.";
       xmlBtn.style.display="none";
     }
   }
@@ -1178,7 +1178,7 @@
       const d=await r.json().catch(()=>({}));
       if(!r.ok){
         titlu.textContent=`Declarația Unică ${Y}`;
-        ghid.textContent=d.message||"Nu s-a putut calcula Declarația Unică.";
+        ghid.textContent=d.message||"Nu am putut calcula Declarația Unică acum. Reîncearcă; verifică să ai venituri pe anul ales.";
         return;
       }
       titlu.textContent=`Declarația Unică ${Y} · de plată ${RON(d.total_plata)} lei`;
@@ -1188,7 +1188,7 @@
     }catch(e){
       console.error(e);
       titlu.textContent="Declarația Unică — eroare";
-      ghid.textContent="Eroare de rețea. Încearcă din nou.";
+      ghid.textContent="Conexiune pierdută. Încearcă din nou.";
     }
   }
   window.genD212=genD212;
@@ -1229,11 +1229,11 @@
         const ib=document.getElementById("set-iban"); if(ib) ib.value=d.iban||iban;
       }else{
         msg.style.color="var(--red)";
-        msg.textContent = d.message || "Eroare la salvare. Verifică IBAN-ul.";
+        msg.textContent = d.message || "Nu am putut salva. Verifică IBAN-ul și încearcă din nou.";
       }
     }catch(e){
       msg.style.color="var(--red)";
-      msg.textContent="Eroare de rețea. Încearcă din nou.";
+      msg.textContent="Conexiune pierdută. Încearcă din nou.";
     }finally{
       if(btn) btn.style.opacity="1";
     }
@@ -1312,8 +1312,8 @@
       <div class="pm-row"><span>Sumă de plată</span><b class="big" id="pm-suma">—</b></div>
       <div class="pm-row"><span>Cont buget</span><b id="pm-cont">—</b></div>
       <div class="pm-row"><span>Identificare</span><b id="pm-identif">—</b></div>
-      <div class="pm-note">Pe <b style="color:var(--emerald-br)">ghiseul.ro</b> plătești cu cardul. ANAF afișează singur obligațiile pe CNP — verifică suma acolo. Pentru TVA (pe CUI) confirmă în SPV. Contai nu plătește automat, ca să nu existe risc de cont greșit.</div>
-      <a class="btn btn-primary" href="https://www.ghiseul.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20" stroke-linecap="round"/></svg>Plătește pe ghiseul.ro</a>
+      <div class="pm-note">Pe <b style="color:var(--emerald-br)">ghișeul.ro</b> plătești cu cardul. ANAF afișează singur obligațiile pe CNP — verifică suma acolo. Pentru TVA (pe CUI) confirmă în SPV. Contai nu plătește automat, ca să nu existe risc de cont greșit.</div>
+      <a class="btn btn-primary" href="https://www.ghiseul.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20" stroke-linecap="round"/></svg>Plătește pe ghișeul.ro</a>
       <a class="btn btn-ghost" href="https://www.anaf.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin-top:9px">Deschide site-ul ANAF</a>
     </div>
   </div>
