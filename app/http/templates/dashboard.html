@@ -264,6 +264,19 @@
   .fiscal-stamp{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2)}
   .fiscal-stamp svg{width:13px;height:13px;stroke:var(--emerald);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
+  /* ===== B7: MICRO-INTERACȚIUNI (count-up, skeleton, confirmare) ===== */
+  .skel{background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.10),rgba(255,255,255,.04));background-size:200% 100%;animation:skel 1.3s ease-in-out infinite;border-radius:7px;display:inline-block}
+  @keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .skel-num{width:78px;height:1.5rem;vertical-align:middle}
+  .skel-line{width:100%;height:13px;margin:3px 0}
+  .skel-hero{display:block;width:100%;height:240px;border-radius:22px;margin-bottom:16px}
+  .gen-ok{color:var(--pos);display:inline-block;margin-right:6px;animation:pop .3s cubic-bezier(.2,.8,.2,1.4) both}
+  @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+  @media (prefers-reduced-motion: reduce){
+    .skel{animation:none}
+    .gen-ok{animation:none}
+  }
+
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
 
@@ -539,7 +552,7 @@
           <div class="chart-box"><canvas id="venBars"></canvas></div>
         </div>
         <div class="panel">
-          <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizează acum</a></div>
+          <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="https://t.me/contabilPFA_bot"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizează în bot</a></div>
           <table>
             <thead><tr><th>Lună</th><th class="r">Curse</th><th class="r">Brut</th><th class="r">Comision</th><th class="r">Net</th><th class="r">Km</th></tr></thead>
             <tbody id="ven-tbody"></tbody>
@@ -574,7 +587,7 @@
         </div>
         <div class="grid g-2-1">
           <div class="panel">
-            <div class="panel-h"><div class="t">Jurnal ture<span id="pc-luna">Mai 2026</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Tură nouă</a></div>
+            <div class="panel-h"><div class="t">Jurnal ture<span id="pc-luna">Mai 2026</span></div><a class="btn btn-primary" href="https://t.me/contabilPFA_bot"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Pornește o tură în bot</a></div>
             <table>
               <thead><tr><th>Data</th><th>Interval</th><th class="r">Start</th><th class="r">Stop</th><th class="r">Km</th></tr></thead>
               <tbody id="pc-tbody"></tbody>
@@ -678,7 +691,7 @@
       <!-- ===== DOCUMENTE ===== -->
       <section class="page" id="page-documente">
         <div class="panel">
-          <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă document</a></div>
+          <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="https://t.me/contabilPFA_bot"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă în bot</a></div>
           <table>
             <thead><tr><th>Data</th><th>Furnizor</th><th>Tip</th><th class="r">Sumă</th><th class="r">Status</th><th class="r">Fișier</th></tr></thead>
             <tbody id="doc-tbody"></tbody>
@@ -758,6 +771,28 @@
   const MONTHS={1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",5:"Mai",6:"Iunie",7:"Iulie",8:"August",9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"};
   const MSHORT={1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"};
   const setTxt=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  // B7: micro-interacțiuni — respectă prefers-reduced-motion (JS + @media CSS).
+  function prefersReduced(){ return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  function countUp(el, target, fmt, dur){
+    target=Number(target)||0;
+    if(prefersReduced()){ el.textContent=fmt(target); return; }   // motion off → instant
+    dur=dur||650; let t0=null;
+    function frame(now){
+      if(t0==null) t0=now;
+      let p=Math.min(1,(now-t0)/dur); p=1-Math.pow(1-p,3);          // easeOutCubic
+      el.textContent = fmt(p>=1 ? target : target*p);              // aterizare EXACTĂ pe target
+      if(p<1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  // setNum: count-up pe cifrele-hero; null → "—" (fmt(null)), fără animație.
+  function setNum(id, raw, fmt){
+    const el=document.getElementById(id); if(!el) return;
+    if(raw==null){ el.textContent=fmt(raw); return; }
+    countUp(el, raw, fmt);
+  }
+  function skelKpis(ids){ ids.forEach(id=>{const e=document.getElementById(id); if(e) e.innerHTML='<span class="skel skel-num"></span>';}); }
+  function skelRows(tbodyId, cols, n){ const tb=document.getElementById(tbodyId); if(!tb) return; let r=""; for(let i=0;i<(n||4);i++){let c=""; for(let j=0;j<cols;j++) c+='<td><span class="skel skel-line"></span></td>'; r+=`<tr>${c}</tr>`;} tb.innerHTML=r; }
   function dmy(iso){if(!iso)return "—";const p=String(iso).split("-");return p.length===3?`${p[2]}.${p[1]}`:iso;}
   // A5: timp relativ uman din ISO (Postgres "T" sau SQLite spațiu). null → "încă nesincronizat".
   function relTime(iso){
@@ -838,12 +873,14 @@
   async function loadOverview(){
     if(loaded.overview)return; loaded.overview=true;
     try{
+      skelKpis(["ov-net","ov-chelt","ov-tva","ov-km"]);
+      const _fh=document.getElementById("ov-fiscal"); if(_fh) _fh.innerHTML='<div class="skel skel-hero"></div>';
       const p=await getPeriod(Y,M);
-      setTxt("ov-net", RON(p.profit_estimated));
-      setTxt("ov-chelt", RON(p.expense_deductible_total));
-      setTxt("ov-tva", RON(p.vat_out_total));
+      setNum("ov-net", p.profit_estimated, RON);
+      setNum("ov-chelt", p.expense_deductible_total, RON);
+      setNum("ov-tva", p.vat_out_total, RON);
       // km cu pasager din parcurs (cache-only, nu lovește API Bolt)
-      try{const pc=await getParcurs(Y,M);setTxt("ov-km",KM(pc.km_bolt_pasager));setTxt("ov-km-sub",`${MONTHS[M]} · ${pc.nr_ture||0} ture`);}catch(e){setTxt("ov-km","—");}
+      try{const pc=await getParcurs(Y,M);setNum("ov-km", pc.km_bolt_pasager, KM);setTxt("ov-km-sub",`${MONTHS[M]} · ${pc.nr_ture||0} ture`);}catch(e){setTxt("ov-km","—");}
       // donut distribuție din expense_breakdown
       drawDonut("ovDonut", p.expense_breakdown||[]);
       // linie evoluție: ultimele 6 luni profit
@@ -943,13 +980,14 @@
     }).join("");
     box.innerHTML=`<section class="fhero"><div class="glow"></div>`
       +`<div class="eyebrow">Taxe estimate <span class="yr">· ${d.an} · la zi</span></div>`
-      +`<div class="htot">${RON(d.total_plata)}<span class="cur">RON</span></div>`
+      +`<div class="htot"><span class="htot-n">${RON(d.total_plata)}</span><span class="cur">RON</span></div>`
       +`<div class="htot-lab">Total de plată — impozit + CAS + CASS</div>`
       +`<div class="profit"><div class="it"><span class="dt g"></span><b>Venit net</b><span>&nbsp;${RON(d.venit_net)} lei</span></div>`
       +`<div class="it"><span class="dt a"></span><b>Rămâne după taxe</b><span>&nbsp;${RON(ramane)} lei</span></div></div>`
       +`<div class="divider"></div><div class="break-lab">Din ce se compune · apasă pentru explicație</div>`
       +lines
       +`<div class="foot-stamp"><span class="s">PFA · CUI 53067338 · Bistrița</span><span class="st"><span class="d"></span>Estimare la zi</span></div></section>`;
+    const hn=box.querySelector(".htot-n"); if(hn) countUp(hn, d.total_plata, RON);   // B7: count-up total hero
   }
 
   // ---- A4: ONBOARDING (checklist cont-nou) + EMPTY-STATES ----
@@ -1120,12 +1158,13 @@
   async function loadVenituri(){
     if(loaded.venituri)return; loaded.venituri=true;
     try{
+      skelKpis(["ven-brut","ven-comision"]); skelRows("ven-tbody",6,4);
       const p=await getPeriod(Y,M);
       // brut/comision din breakdown sau period; comision = TVA_OUT/cota dacă există
       const comision = p.expense_breakdown ? (p.expense_breakdown.find(x=>/comision/i.test(x.label))?.amount_brut||0) : 0;
       const brut = Number(p.income_total||0);
-      setTxt("ven-brut", RON(brut));
-      setTxt("ven-comision", RON(comision));
+      setNum("ven-brut", brut, RON);
+      setNum("ven-comision", comision, RON);
       // cash/card nu sunt în period — le lăsăm estimate din tranzacții dacă apar; altfel —
       setTxt("ven-cash", "—");
       setTxt("ven-card", "—");
@@ -1183,11 +1222,12 @@
   async function loadParcurs(){
     if(loaded.parcurs)return; loaded.parcurs=true;
     try{
+      skelKpis(["pc-business","pc-bolt","pc-poz"]); skelRows("pc-tbody",5,4);
       const pc=await getParcurs(Y,M);
-      setTxt("pc-business", KM(pc.km_business));
+      setNum("pc-business", pc.km_business, KM);
       setTxt("pc-business-sub", `${pc.nr_ture||0} ture`);
-      setTxt("pc-bolt", KM(pc.km_bolt_pasager));
-      setTxt("pc-poz", KM(pc.km_pozitionare));
+      setNum("pc-bolt", pc.km_bolt_pasager, KM);
+      setNum("pc-poz", pc.km_pozitionare, KM);
       setTxt("pc-luna", `${MONTHS[M]} ${Y}`);
       // tabel ture
       const tb=document.getElementById("pc-tbody");
@@ -1232,6 +1272,7 @@
     document.getElementById("reg-export").href=`/api/v1/registru/export/${Y}`;
     if(loaded.registru)return; loaded.registru=true;
     try{
+      skelKpis(["reg-inc","reg-plati","reg-sold"]); skelRows("reg-tbody",7,4);
       const tx=await getTx(Y,M);
       let inc=0,plati=0,sold=0,n=0;
       const rows=tx.map(t=>{
@@ -1244,9 +1285,9 @@
       const tb=document.getElementById("reg-tbody");
       const isNew=await isNewUser();
       if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:14px">Nicio înregistrare în '+MONTHS[M]+'.</td></tr>');
-      setTxt("reg-inc", RON(inc));
-      setTxt("reg-plati", RON(plati));
-      setTxt("reg-sold", RON(inc-plati));
+      setNum("reg-inc", inc, RON);
+      setNum("reg-plati", plati, RON);
+      setNum("reg-sold", inc-plati, RON);
     }catch(e){console.error(e);}
   }
 
@@ -1265,6 +1306,7 @@
   async function loadDocumente(){
     if(loaded.documente)return; loaded.documente=true;
     try{
+      skelRows("doc-tbody",6,4);
       const docs=await getDocs();
       const tb=document.getElementById("doc-tbody");
       if(!tb)return;
@@ -1373,7 +1415,7 @@
         xmlBtn.style.display="none";
         return;
       }
-      titlu.textContent=`${tip} — ${MONTHS[M]} ${Y}`+(d.are_plata?` · de plată ${RON(d.suma_plata)} RON`:"");
+      titlu.innerHTML='<span class="gen-ok">✓</span> '+`${tip} — ${MONTHS[M]} ${Y}`+(d.are_plata?` · de plată ${RON(d.suma_plata)} RON`:"");
       ghid.textContent=d.ghid_plain||d.ghid||"";
       // buton XML — descarcare prin authFetch (header init_data necesar)
       xmlBtn.style.display="inline-flex";
@@ -1424,7 +1466,7 @@
         ghid.textContent=d.message||"Nu am putut calcula Declarația Unică acum. Reîncearcă; verifică să ai venituri pe anul ales.";
         return;
       }
-      titlu.textContent=`Declarația Unică ${Y} · de plată ${RON(d.total_plata)} lei`;
+      titlu.innerHTML='<span class="gen-ok">✓</span> '+`Declarația Unică ${Y} · de plată ${RON(d.total_plata)} lei`;
       ghid.textContent=d.ghid_plain||d.ghid||"";
       const warns=(d.avertismente||[]);
       avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:10px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
