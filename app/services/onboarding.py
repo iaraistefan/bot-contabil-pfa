@@ -28,6 +28,7 @@ from telegram.ext import ContextTypes
 from db import get_session
 from app.repositories import users as users_repo
 from app.integrations.anaf_lookup import lookup_cui
+from app.domain.fiscal_profile import VAT_THRESHOLD_RON  # sursă unică prag TVA (B8)
 
 logger = logging.getLogger(__name__)
 
@@ -377,10 +378,12 @@ async def send_step_question(
         )
 
     elif step == STEP_REGIM_TVA:
+        # Pragul vine din VAT_THRESHOLD_RON (sursă unică, B8) — nu hardcodat.
+        prag_tva = f"{VAT_THRESHOLD_RON:,.0f}".replace(",", ".")
         msg = (
             "*💰 Regim TVA*\n\n"
             "Ești plătitor de TVA?\n"
-            "_PFA-urile sub 300.000 lei venit/an sunt de obicei neplătitoare._"
+            f"_PFA-urile sub {prag_tva} lei cifră de afaceri/an sunt de obicei neplătitoare._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -883,9 +886,11 @@ async def handle_onboarding_callback(
 
     except Exception as e:
         session.rollback()
-        logger.error(f"handle_onboarding_callback error: {e}")
+        logger.exception("handle_onboarding_callback error")
         try:
-            await query.edit_message_text(f"❌ Eroare: {str(e)[:200]}")
+            await query.edit_message_text(
+                "⚠️ N-am putut continua configurarea. Încearcă din nou cu /start."
+            )
         except Exception:
             pass
     finally:
