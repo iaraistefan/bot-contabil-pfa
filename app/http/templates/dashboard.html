@@ -254,6 +254,16 @@
   .pg-empty .d{font-size:13.5px;color:var(--muted);margin:6px auto 16px;max-width:38ch;line-height:1.5}
   .pg-empty .onb-btn{margin:0 auto}
 
+  /* ===== A5: TRUST SIGNALS (status integrări + last-synced + reasigurare) ===== */
+  .synced-line{text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted-2);text-transform:uppercase;margin-top:10px}
+  .synced-line:empty{display:none}
+  .badge-st.neutral{background:rgba(255,255,255,.05);color:var(--muted-2)}
+  .ic.off{background:rgba(255,255,255,.04);color:var(--muted-2)}
+  .reassure{display:flex;align-items:flex-start;gap:9px;margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .reassure svg{width:15px;height:15px;stroke:var(--emerald);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:1px}
+  .fiscal-stamp{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2)}
+  .fiscal-stamp svg{width:13px;height:13px;stroke:var(--emerald);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
 
@@ -513,6 +523,7 @@
             <div class="rows" id="ov-activity"></div>
           </div>
         </div>
+        <div id="ov-synced" class="synced-line"></div>
       </section>
 
       <!-- ===== VENITURI ===== -->
@@ -596,6 +607,7 @@
             <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100 — impozit Bolt</button>
             <button class="btn btn-ghost" onclick="genD212()">Generează Declarația Unică</button>
           </div>
+          <div class="reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Contai pregătește declarația — o depui tu în SPV. Nu trimitem nimic la ANAF în locul tău.</div>
           <div id="decl-rezultat" style="margin-top:18px;display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
               <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:600;font-size:1rem"></div>
@@ -605,6 +617,7 @@
             <pre id="decl-ghid" style="background:var(--night-2);border:1px solid var(--line-2);border-radius:12px;padding:16px;font-family:var(--body);font-size:.82rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--cream);margin-top:4px;max-height:none;overflow:visible"></pre>
           </div>
         </div>
+        <div class="fiscal-stamp"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Contai pregătește · tu depui în SPV</div>
       </section>
 
       <!-- ===== CALENDAR ===== -->
@@ -702,11 +715,7 @@
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Integrări</div></div>
-            <div class="rows">
-              <div class="row"><div class="ic green"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Bolt API</div><div class="m">venituri + km automat</div></div><span class="badge-st ok">conectat</span></div>
-              <div class="row"><div class="ic green"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Telegram</div><div class="m">@contabilPFA_bot</div></div><span class="badge-st ok">conectat</span></div>
-              <div class="row"><div class="ic gold"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4" stroke-linecap="round"/></svg></div><div class="info"><div class="t">ANAF / SPV</div><div class="m">depunere declarații</div></div><span class="badge-st warn">în lucru</span></div>
-            </div>
+            <div class="rows" id="set-integrari"></div>
           </div>
         </div>
       </section>
@@ -750,6 +759,19 @@
   const MSHORT={1:"Ian",2:"Feb",3:"Mar",4:"Apr",5:"Mai",6:"Iun",7:"Iul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"};
   const setTxt=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   function dmy(iso){if(!iso)return "—";const p=String(iso).split("-");return p.length===3?`${p[2]}.${p[1]}`:iso;}
+  // A5: timp relativ uman din ISO (Postgres "T" sau SQLite spațiu). null → "încă nesincronizat".
+  function relTime(iso){
+    if(!iso) return "încă nesincronizat";
+    const t=new Date(String(iso).replace(" ","T"));
+    if(isNaN(t.getTime())) return "—";
+    const s=Math.max(0,(Date.now()-t.getTime())/1000);
+    if(s<60) return "chiar acum";
+    const m=Math.floor(s/60); if(m<60) return `acum ${m} min`;
+    const h=Math.floor(m/60); if(h<24) return `acum ${h}h`;
+    const d=Math.floor(h/24); if(d===1) return "ieri";
+    if(d<30) return `acum ${d} zile`;
+    const mo=Math.floor(d/30); return mo===1?"acum o lună":`acum ${mo} luni`;
+  }
 
   let Y=new Date().getFullYear(), M=new Date().getMonth()+1;
   const cache={};
@@ -761,6 +783,7 @@
   async function getDocs(){if(cache.docs)return cache.docs;const r=await authFetch(`/api/v1/documents`);if(!r.ok)throw new Error("docs "+r.status);const d=await r.json();cache.docs=d.documents||[];return cache.docs;}
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
+  async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
 
   // ---- NAV ----
   const titles={
@@ -832,6 +855,8 @@
       // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
       try{const fisc=await getD212(Y);renderFiscalHero(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";}
       try{await renderOnboarding();}catch(e){console.error(e);}
+      // A5: linie discretă "Date actualizate {relativ}" (cel mai recent sync: Bolt sau documente)
+      try{const st=await getSetari();const ig=st.integrari||{};const ts=[ig.bolt&&ig.bolt.last_synced,ig.documente&&ig.documente.last_synced].filter(Boolean).sort();setTxt("ov-synced", ts.length?("Date actualizate "+relTime(ts[ts.length-1])):"");}catch(e){console.error(e);}
       try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
     }catch(e){console.error(e);}
   }
@@ -1412,12 +1437,33 @@
   window.genD212=genD212;
 
   // ======================= SETARI (banca + IBAN) =======================
+  // A5: Integrări ONEST din payload — badge verde DOAR pe conexiuni reale dovedite.
+  function renderIntegrari(ig){
+    const box=document.getElementById("set-integrari"); if(!box) return;
+    ig=ig||{};
+    const CHK='<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const DOT='<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4" stroke-linecap="round"/></svg>';
+    const row=(col,ico,name,sub,stCls,label)=>`<div class="row"><div class="ic ${col}">${ico}</div><div class="info"><div class="t">${name}</div><div class="m">${sub}</div></div><span class="badge-st ${stCls}">${label}</span></div>`;
+    const b=ig.bolt||{}, dc=ig.documente||{};
+    const rows=[];
+    // Bolt — verde DOAR dacă are date cache (connected real)
+    rows.push(b.connected
+      ? row("green",CHK,"Bolt API",`sincronizat ${relTime(b.last_synced)}`,"ok","conectat")
+      : row("off",DOT,"Bolt API","venituri + km automat","neutral","neconectat"));
+    // Telegram — adevărat (userul e în WebApp)
+    rows.push(row("green",CHK,"Telegram","@contabilPFA_bot","ok","conectat"));
+    // Documente — last-synced real
+    rows.push(dc.last_synced
+      ? row("green",CHK,"Documente",`ultimul ${relTime(dc.last_synced)}`,"ok","activ")
+      : row("off",DOT,"Documente","niciun document încărcat","neutral","gol"));
+    // ANAF/SPV — Contai NU depune (neutru, nu verde)
+    rows.push(row("off",DOT,"ANAF / SPV","Contai pregătește — depui tu în SPV","neutral","depui manual"));
+    box.innerHTML=rows.join("");
+  }
   async function loadSetari(){
     if(loaded.setari)return; loaded.setari=true;
     try{
-      const r=await authFetch("/api/v1/setari");
-      if(!r.ok)throw new Error("setari "+r.status);
-      const s=await r.json();
+      const s=await getSetari();
       setTxt("set-denumire", s.firma_nume||"—");
       setTxt("set-cui", s.firma_cui||"—");
       setTxt("set-cod-special", s.cod_special_tva||"—");
@@ -1425,6 +1471,7 @@
       const iban=document.getElementById("set-iban");
       if(banca) banca.value = s.banca||"";
       if(iban) iban.value = s.iban||"";
+      renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
   }
   async function salveazaSetari(){

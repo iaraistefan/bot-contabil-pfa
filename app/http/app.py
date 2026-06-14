@@ -738,12 +738,36 @@ def setari_get():
     session = get_session()
     try:
         profile = users_repo.get_profile_dict(session, user_id) or {}
+
+        # A5 trust signals: status REAL integrări + last-synced (ZERO status inventat).
+        from sqlalchemy import func
+        from app.models import Document
+        from app.integrations import bolt_sync
+        bolt_st = bolt_sync.get_sync_status(user_id)
+        last_doc = session.query(func.max(Document.created_at)).filter(
+            Document.user_id == user_id
+        ).scalar()
+        last_doc_iso = (
+            last_doc.isoformat() if hasattr(last_doc, "isoformat")
+            else (str(last_doc) if last_doc else None)
+        ) if last_doc else None
+        integrari = {
+            "telegram": {"connected": True},   # userul e în WebApp = adevărat
+            "bolt": {
+                "connected": bolt_st["connected"],
+                "last_synced": bolt_st["last_synced"],
+            },
+            "documente": {"last_synced": last_doc_iso},
+            "anaf": {"mode": "manual"},         # Contai pregătește, tu depui în SPV
+        }
+
         return jsonify({
             "banca": profile.get("banca") or "",
             "iban": profile.get("iban") or "",
             "firma_nume": profile.get("firma_nume") or "",
             "firma_cui": profile.get("firma_cui") or "",
             "cod_special_tva": profile.get("cod_special_tva") or "",
+            "integrari": integrari,
         })
     except Exception as e:
         logger.error(f"API setari GET error user={user_id}: {e}")

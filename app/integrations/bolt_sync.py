@@ -273,6 +273,30 @@ _DELETE_PERIOD_SQL = text("""
 """)
 
 
+_LAST_SYNC_SQL = text("SELECT MAX(updated_at) FROM bolt_orders WHERE user_id = :uid")
+
+
+def get_sync_status(user_id: int) -> dict:
+    """Status REAL Bolt pentru un user (trust signal A5), DIN cache-ul bolt_orders.
+
+    connected   = există comenzi sincronizate (dovadă verificabilă, fără env-guess);
+    last_synced = ISO al ultimei sincronizări (MAX updated_at) sau None.
+    Bolt e single-tenant (owner); prezența datelor în cache e proba conexiunii.
+    """
+    session = get_session()
+    try:
+        last = session.execute(_LAST_SYNC_SQL, {"uid": user_id}).scalar()
+    except Exception as e:
+        logger.error(f"bolt get_sync_status error: {e}")
+        return {"connected": False, "last_synced": None}
+    finally:
+        session.close()
+    if not last:
+        return {"connected": False, "last_synced": None}
+    iso = last.isoformat() if hasattr(last, "isoformat") else str(last)
+    return {"connected": True, "last_synced": iso}
+
+
 def _cache_clear_period(user_id, year, month):
     """Sterge cache-ul unei luni, ca urmatorul /bolt sa re-traga din API."""
     session = get_session()
