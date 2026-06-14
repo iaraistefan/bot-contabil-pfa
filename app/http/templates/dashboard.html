@@ -220,6 +220,40 @@
   .fhero .foot-stamp .st{display:inline-flex;align-items:center;gap:5px;color:var(--emerald);font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase}
   .fhero .foot-stamp .st .d{width:6px;height:6px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
 
+  /* ===== A4: CARD ONBOARDING (cont nou) + EMPTY-STATE PAGINĂ — port mockup contai_onboarding_card ===== */
+  .onb{position:relative;border:1px solid var(--line-2);border-radius:24px;overflow:hidden;background:linear-gradient(160deg,var(--card),var(--card-2));padding:32px 30px 28px;margin-bottom:16px}
+  .onb .glow{position:absolute;top:-140px;right:-100px;width:460px;height:460px;background:radial-gradient(circle,var(--emerald-dim),transparent 64%);pointer-events:none}
+  .onb .glow2{position:absolute;bottom:-160px;left:-120px;width:420px;height:420px;background:radial-gradient(circle,var(--gold-dim),transparent 68%);pointer-events:none}
+  .onb-badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--emerald-br);border:1px solid var(--emerald-dim);background:var(--emerald-dim);padding:5px 11px;border-radius:20px;position:relative}
+  .onb-badge .d{width:6px;height:6px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
+  .onb h1{font-family:var(--display);font-weight:800;font-size:30px;line-height:1.12;margin:16px 0 8px;letter-spacing:-.01em;color:var(--cream);position:relative}
+  .onb h1 .hl{color:var(--emerald)}
+  .onb .lead{font-size:15px;color:var(--muted);line-height:1.5;max-width:46ch;position:relative}
+  .onb-steps{margin:24px 0 6px;position:relative}
+  .onb-steps::before{content:'';position:absolute;left:22px;top:24px;bottom:24px;width:2px;background:linear-gradient(180deg,var(--emerald),var(--pos),var(--gold));opacity:.35}
+  .onb-step{display:flex;gap:16px;padding:11px 0;position:relative}
+  .onb-step .num{width:44px;height:44px;flex-shrink:0;border-radius:13px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:17px;position:relative;z-index:1}
+  .onb-step.done .num{background:var(--pos);color:#06231f;border:1px solid var(--pos)}
+  .onb-step.active .num{background:var(--emerald-dim);color:var(--emerald);border:1px solid var(--emerald)}
+  .onb-step.todo .num{background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--line-2)}
+  .onb-step .num svg{width:20px;height:20px;stroke:#06231f;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .onb-step .t{font-family:var(--display);font-weight:600;font-size:16px;color:var(--cream)}
+  .onb-step .d{font-size:13.5px;color:var(--muted);margin-top:2px;line-height:1.45}
+  .onb-step .d b{color:var(--gold);font-weight:600}
+  .onb-cta{display:flex;gap:11px;margin-top:22px;flex-wrap:wrap;position:relative}
+  .onb-btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--display);font-weight:600;font-size:14.5px;padding:13px 20px;border-radius:13px;cursor:pointer;border:none;text-decoration:none;transition:transform .15s;background:linear-gradient(135deg,var(--emerald),var(--pos));color:#06231f}
+  .onb-btn:hover{transform:translateY(-2px)}
+  .onb-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .onb-reassure{display:flex;align-items:center;gap:9px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);position:relative}
+  .onb-reassure svg{width:15px;height:15px;stroke:var(--emerald);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+  .pg-empty{border:1px dashed var(--line-2);border-radius:18px;background:var(--card);padding:34px 26px;text-align:center}
+  .pg-empty .ic{width:46px;height:46px;border-radius:13px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;background:var(--emerald-dim);color:var(--emerald)}
+  .pg-empty .ic svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .pg-empty .ic svg .fill{fill:currentColor;stroke:none}
+  .pg-empty .t{font-family:var(--display);font-weight:600;font-size:17px;color:var(--cream)}
+  .pg-empty .d{font-size:13.5px;color:var(--muted);margin:6px auto 16px;max-width:38ch;line-height:1.5}
+  .pg-empty .onb-btn{margin:0 auto}
+
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
 
@@ -436,6 +470,7 @@
 
       <!-- ===== OVERVIEW ===== -->
       <section class="page active" id="page-overview">
+        <div id="ov-onboarding"></div>
         <div id="ov-fiscal"></div>
         <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
@@ -796,6 +831,7 @@
       // obligații fiscale (cache-uit) → cardul "cât plătesc" + termene reale
       // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
       try{const fisc=await getD212(Y);renderFiscalHero(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";}
+      try{await renderOnboarding();}catch(e){console.error(e);}
       try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
     }catch(e){console.error(e);}
   }
@@ -891,6 +927,55 @@
       +`<div class="foot-stamp"><span class="s">PFA · CUI 53067338 · Bistrița</span><span class="st"><span class="d"></span>Estimare la zi</span></div></section>`;
   }
 
+  // ---- A4: ONBOARDING (checklist cont-nou) + EMPTY-STATES ----
+  const BOT_URL="https://t.me/contabilPFA_bot";
+  // isNewUser = cont fără documente ȘI fără venituri/cheltuieli pe an (semnale deja cache-uite).
+  async function isNewUser(){
+    try{ const docs=await getDocs(); const d=await getD212(Y);
+      return (docs.length||0)===0 && (d.venit_brut||0)===0 && (d.cheltuieli||0)===0;
+    }catch(e){ return false; }
+  }
+  function _useIco(id){ return `<svg viewBox="0 0 24 24"><use href="#${id}"/></svg>`; }
+  // Empty-state de pagină (cont-nou): CE / DE CE / CTA onest în bot.
+  function pgEmpty(iconId,title,desc,cta){
+    return `<div class="pg-empty"><div class="ic">${_useIco(iconId)}</div>`
+      +`<div class="t">${title}</div><div class="d">${desc}</div>`
+      +`<a class="onb-btn" href="${BOT_URL}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> ${cta||"Adaugă din bot"}</a></div>`;
+  }
+  // Cardul-onboarding pe Overview — checklist persistent cât onboarding incomplet.
+  // Stare reală per pas; CTA unic onest "Deschide botul"; dispare la income+docs.
+  async function renderOnboarding(){
+    const box=document.getElementById("ov-onboarding"); if(!box) return;
+    let d,docs;
+    try{ d=await getD212(Y); docs=await getDocs(); }catch(e){ box.innerHTML=""; return; }
+    const venit=(d.venit_brut||0)>0, hasDocs=(docs.length||0)>0, hasEst=(d.total_plata||0)>0;
+    if(venit && hasDocs){ box.innerHTML=""; return; }   // onboarding complet → fără card
+    const steps=[
+      {done:venit,   t:"Conectează Bolt",            d:'Veniturile din curse intră automat. <b>Zero introducere manuală.</b>'},
+      {done:hasDocs, t:"Trimite primul bon în bot",  d:'Combustibil, service, telefon — AI-ul le citește și le face deductibile.'},
+      {done:hasEst,  t:"Vezi estimarea ta de taxe",  d:'Impozit, CAS, CASS — calculate la zi, cu explicații pentru fiecare leu.'},
+    ];
+    const doneCount=steps.filter(s=>s.done).length;
+    let activePlaced=false;
+    const stepHtml=steps.map((s,i)=>{
+      let cls,inner;
+      if(s.done){ cls="done"; inner='<svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>'; }
+      else if(!activePlaced){ cls="active"; activePlaced=true; inner=String(i+1); }
+      else { cls="todo"; inner=String(i+1); }
+      return `<div class="onb-step ${cls}"><div class="num">${inner}</div><div><div class="t">${s.t}</div><div class="d">${s.d}</div></div></div>`;
+    }).join("");
+    // Badge onest: "Cont nou" doar la 0 pași; altfel reflectă progresul.
+    const badge = doneCount===0 ? "Cont nou · 3 pași până la prima estimare" : `Configurare cont · ${doneCount}/3 pași gata`;
+    box.innerHTML=`<section class="onb"><div class="glow"></div><div class="glow2"></div>`
+      +`<span class="onb-badge"><span class="d"></span>${badge}</span>`
+      +`<h1>Bun venit la <span class="hl">Contai</span>.<br>Hai să-ți vedem taxele.</h1>`
+      +`<p class="lead">Contai citește automat veniturile din Bolt și bonurile tale, apoi îți arată live cât ai de plătit la stat — fără calcule, fără contabil.</p>`
+      +`<div class="onb-steps">${stepHtml}</div>`
+      +`<div class="onb-cta"><a class="onb-btn" href="${BOT_URL}"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>Deschide botul</a></div>`
+      +`<div class="onb-reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Datele tale rămân private. Contai nu depune nimic la ANAF fără confirmarea ta.</div>`
+      +`</section>`;
+  }
+
   // ---- "Cât plătesc și când?" + termene reale ----
   function _splitObligatii(obl){
     const estimari=obl.filter(o=>o.estimare_in_curs);
@@ -957,7 +1042,7 @@
   }
   function renderDeadlines(obl){
     const box=document.getElementById("ov-deadlines");if(!box)return;
-    if(!obl.length){box.innerHTML='<div class="hint" style="padding:10px">Nicio obligație fiscală pentru această lună. ✓</div>';return;}
+    if(!obl.length){box.innerHTML='<div class="hint" style="padding:10px">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✓</div>';return;}
     const sorted=[...obl].sort((a,b)=>a.zile_ramase-b.zile_ramase);  // depășite primele
     box.innerHTML=sorted.map(o=>{
       const dot=DOT[o.status]||"ok";
@@ -996,7 +1081,7 @@
     VAT_IN:'<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>'};
   function renderActivity(tx){
     const box=document.getElementById("ov-activity");if(!box)return;
-    if(!tx.length){box.innerHTML='<div class="hint" style="padding:14px">Nicio tranzacție în această lună.</div>';return;}
+    if(!tx.length){box.innerHTML='<div class="hint" style="padding:14px">Nicio tranzacție în '+MONTHS[M]+'.</div>';return;}
     box.innerHTML=tx.slice(0,6).map(t=>{
       const inc=t.tx_type==="INCOME";
       const col=inc?"green":(t.tx_type==="VAT_OUT"?"gold":"red");
@@ -1030,7 +1115,11 @@
           rows.push(`<tr><td>${MONTHS[mm]} ${yy}</td><td class="r num">${pp.tx_count||"—"}</td><td class="r num">${RON(pp.income_total)}</td><td class="r num neg">${RON(com)}</td><td class="r num pos">${RON(pp.profit_estimated)}</td><td class="r num">${km}</td></tr>`);
         }catch(e){}
       }
-      const tb=document.getElementById("ven-tbody");if(tb)tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:14px">Fără încasări înregistrate.</td></tr>';
+      const tb=document.getElementById("ven-tbody");
+      if(tb){
+        if(await isNewUser()) tb.innerHTML='<tr><td colspan="6">'+pgEmpty("i-car","Aici vezi încasările din curse Bolt","Se completează automat din Bolt. Deschide botul ca să conectezi contul.","Conectează din bot")+'</td></tr>';
+        else tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:14px">Fără încasări în '+MONTHS[M]+'.</td></tr>';
+      }
       buildVenBars();
     }catch(e){console.error(e);}
   }
@@ -1050,6 +1139,7 @@
       const p=await getPeriod(Y,M);
       setTxt("ch-luna", `${MONTHS[M]} ${Y}`);
       const items=p.expense_breakdown||[];
+      const isNew=await isNewUser();
       const box=document.getElementById("ch-rows");
       const max=Math.max(1,...items.map(i=>Number(i.amount_brut||0)));
       const colorFor=(pct)=>pct<100?"gold":"";
@@ -1058,7 +1148,7 @@
           const w=Math.round(Number(i.amount_brut||0)/max*100);
           const ded=i.deductibility_pct<100?`${i.deductibility_pct}% deductibil`:"100% deductibil";
           return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:1rem">'+i.icon+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${i.label}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
-        }).join("") : '<div class="hint" style="padding:14px">Nicio cheltuială în această lună.</div>';
+        }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:14px">Nicio cheltuială în '+MONTHS[M]+'.</div>');
       }
       drawDonut("chDonut", items);
     }catch(e){console.error(e);}
@@ -1077,11 +1167,12 @@
       // tabel ture
       const tb=document.getElementById("pc-tbody");
       const ture=pc.ture||[];
+      const isNew=await isNewUser();
       if(tb){
         tb.innerHTML = ture.length? ture.map(t=>{
           const interval=(t.ora_start||"—")+" → "+(t.ora_stop||"—");
           return `<tr><td>${dmy(t.trip_date)}</td><td>${interval}</td><td class="r num">${t.odometer_start??"—"}</td><td class="r num">${t.odometer_end??"—"}</td><td class="r num pos">${KM(t.km)}</td></tr>`;
-        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio tură în această lună.</td></tr>';
+        }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio tură în '+MONTHS[M]+'.</td></tr>');
       }
       // vehicul + combustibil
       const vb=document.getElementById("pc-vehicul");
@@ -1126,7 +1217,8 @@
         return `<tr><td>${n}</td><td>${dmy(t.occurred_on)}</td><td>${t.category_ro||t.category||"—"}</td><td>${t.counterparty||"—"}</td><td class="r num pos">${isInc?RON(val):"—"}</td><td class="r num neg">${isInc?"—":RON(val)}</td><td class="r num">${RON(sold)}</td></tr>`;
       });
       const tb=document.getElementById("reg-tbody");
-      if(tb)tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="7" class="hint" style="padding:14px">Nicio înregistrare.</td></tr>';
+      const isNew=await isNewUser();
+      if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:14px">Nicio înregistrare în '+MONTHS[M]+'.</td></tr>');
       setTxt("reg-inc", RON(inc));
       setTxt("reg-plati", RON(plati));
       setTxt("reg-sold", RON(inc-plati));
@@ -1152,7 +1244,7 @@
       const tb=document.getElementById("doc-tbody");
       if(!tb)return;
       if(!docs.length){
-        tb.innerHTML='<tr><td colspan="6" class="hint" style="padding:14px">Niciun document încărcat.</td></tr>';
+        tb.innerHTML='<tr><td colspan="6">'+pgEmpty("i-doc","Trimite bonuri și facturi în bot","Le citește AI-ul și le face deductibile — zero introducere manuală.","Încarcă din bot")+'</td></tr>';
         return;
       }
       // grupare pe an/lună din data fiscală (data_doc)
@@ -1211,7 +1303,7 @@
           const dot=DOT[o.status]||"ok";
           const suma=o.suma_estimata!=null?` · ${RON(o.suma_estimata)} RON`:"";
           return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
-        }).join("") : '<div class="hint" style="padding:10px">Nicio obligație fiscală pentru această lună. ✅</div>';
+        }).join("") : '<div class="hint" style="padding:10px">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✅</div>';
       }
 
       // --- PLĂȚI (tabel, doar cele cu sumă/IBAN de plată) ---
@@ -1228,7 +1320,7 @@
             ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
             : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
           return `<tr><td><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" style="font-size:.78rem">${cont}</td><td class="r num neu">${suma}</td><td class="r">${termen}</td><td class="r">${btn}</td></tr>`;
-        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru această lună.</td></tr>';
+        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
       }
     }catch(e){
       console.error(e);
@@ -1252,7 +1344,7 @@
       const d=await r.json().catch(()=>({}));
       if(!r.ok){
         titlu.textContent=`${tip} — ${MONTHS[M]} ${Y}`;
-        ghid.textContent = d.message || "Nu s-a putut genera declarația pentru această lună.";
+        ghid.textContent = d.message || ("Nu am putut genera declarația pentru "+MONTHS[M]+". Încearcă din nou.");
         xmlBtn.style.display="none";
         return;
       }
