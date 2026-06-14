@@ -475,12 +475,7 @@
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Activitate recentă</div></div>
-            <div class="rows" id="ov-activity">
-              <div class="row"><div class="ic green"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Raport Bolt adăugat</div><div class="m">Aprilie · 190 curse · doc #103</div></div><div class="amt pos num">+2.869,60</div></div>
-              <div class="row"><div class="ic red"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8zM9 8V5a3 3 0 0 1 6 0v3" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">DigiSign — certificat</div><div class="m">29.01 · factură RO</div></div><div class="amt neg num">−202,80</div></div>
-              <div class="row"><div class="ic gold"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Inter Broker — asigurare</div><div class="m">23.03 · poliță RCA</div></div><div class="amt neg num">−42,00</div></div>
-              <div class="row"><div class="ic blue"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 17h14M6 17l1.5-5h9L18 17" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Foaie parcurs · 4 ture</div><div class="m">Mai · 569 km business</div></div><div class="amt neu num">569 km</div></div>
-            </div>
+            <div class="rows" id="ov-activity"></div>
           </div>
         </div>
       </section>
@@ -501,11 +496,7 @@
           <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizează acum</a></div>
           <table>
             <thead><tr><th>Lună</th><th class="r">Curse</th><th class="r">Brut</th><th class="r">Comision</th><th class="r">Net</th><th class="r">Km</th></tr></thead>
-            <tbody id="ven-tbody">
-              <tr><td>Aprilie 2026</td><td class="r num">190</td><td class="r num">2.869,60</td><td class="r num neg">712,65</td><td class="r num pos">2.156,95</td><td class="r num">602,6</td></tr>
-              <tr><td>Martie 2026</td><td class="r num">176</td><td class="r num">2.640,20</td><td class="r num neg">655,10</td><td class="r num pos">1.985,10</td><td class="r num">548,0</td></tr>
-              <tr><td>Februarie 2026</td><td class="r num">142</td><td class="r num">2.114,40</td><td class="r num neg">524,30</td><td class="r num pos">1.590,10</td><td class="r num">441,2</td></tr>
-            </tbody>
+            <tbody id="ven-tbody"></tbody>
           </table>
         </div>
       </section>
@@ -514,13 +505,8 @@
       <section class="page" id="page-cheltuieli">
         <div class="grid g-2-1" style="margin-bottom:16px">
           <div class="panel">
-            <div class="panel-h"><div class="t">Cheltuieli pe categorii<span>Aprilie</span></div></div>
-            <div class="rows" id="ch-rows">
-              <div class="row"><div class="ic red"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 13h2l1-4h12l1 4h2M5 13v6h14v-6M8 19v2M16 19v2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Comision Bolt</div><div class="m">100% deductibil</div><div class="bar-track"><div class="bar-fill" style="width:78%"></div></div></div><div class="amt neg num">712,65</div></div>
-              <div class="row"><div class="ic gold"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 11l1-5h12l1 5M4 11h16v7H4z" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Combustibil</div><div class="m">50% deductibil · din foaia de parcurs</div><div class="bar-track"><div class="bar-fill gold" style="width:33%"></div></div></div><div class="amt neg num">300,00</div></div>
-              <div class="row"><div class="ic blue"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></div><div class="info"><div class="t">Certificat digital</div><div class="m">100% · DigiSign</div><div class="bar-track"><div class="bar-fill" style="width:22%"></div></div></div><div class="amt neg num">202,80</div></div>
-              <div class="row"><div class="ic green"><svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="info"><div class="t">Asigurare RCA</div><div class="m">100% · Inter Broker</div><div class="bar-track"><div class="bar-fill" style="width:6%"></div></div></div><div class="amt neg num">42,00</div></div>
-            </div>
+            <div class="panel-h"><div class="t">Cheltuieli pe categorii<span id="ch-luna"></span></div></div>
+            <div class="rows" id="ch-rows"></div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Pondere</div></div>
@@ -545,21 +531,12 @@
             <div class="panel-h"><div class="t">Jurnal ture<span id="pc-luna">Mai 2026</span></div><a class="btn btn-primary" href="#"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>Tură nouă</a></div>
             <table>
               <thead><tr><th>Data</th><th>Interval</th><th class="r">Start</th><th class="r">Stop</th><th class="r">Km</th></tr></thead>
-              <tbody id="pc-tbody">
-                <tr><td>12.05</td><td>08:10 → 17:40</td><td class="r num">125.430</td><td class="r num">125.610</td><td class="r num pos">180</td></tr>
-                <tr><td>13.05</td><td>07:50 → 16:20</td><td class="r num">125.640</td><td class="r num">125.890</td><td class="r num pos">250</td></tr>
-                <tr><td>14.05</td><td>09:00 → 14:30</td><td class="r num">125.890</td><td class="r num">126.029</td><td class="r num pos">139</td></tr>
-              </tbody>
+              <tbody id="pc-tbody"></tbody>
             </table>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Vehicul</div></div>
-            <div class="rows" id="pc-vehicul">
-              <div class="row"><div class="info"><div class="t">Citroen C4 Picasso</div><div class="m">BN 37 LWM</div></div></div>
-              <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">7,5 L / 100 km</div></div></div>
-              <div class="row"><div class="info"><div class="t">Consum teoretic Mai</div><div class="m">569 km × 7,5%</div></div><div class="amt neu num">42,7 L</div></div>
-              <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">40 L · 300 RON</div></div><div class="amt pos num">OK</div></div>
-            </div>
+            <div class="rows" id="pc-vehicul"></div>
           </div>
         </div>
       </section>
@@ -571,7 +548,7 @@
           <div><div class="t">TVA pe comisionul Bolt (îl declari tu)</div><div class="d">Bolt facturează din Estonia, fără TVA → declari tu TVA-ul de 21% prin D301 + raportezi la VIES prin D390. Lunar, până pe 25.</div></div>
         </div>
         <div class="grid g-3" style="margin-bottom:16px">
-          <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">149,65</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">712,65</span> comision</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">—</span> comision</div></div>
           <div class="panel hover"><div class="panel-h"><div class="t">D390 — raportare UE (VIES)</div><span class="badge-st warn">de depus</span></div><div class="hint" style="margin-top:4px">Raportezi la UE serviciile cumpărate de la Bolt (Estonia). Fără plată.</div></div>
           <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): 2% din comision. Lunar, termen 25.</div></div>
         </div>
@@ -640,9 +617,6 @@
           <table>
             <thead><tr><th>Nr</th><th>Data</th><th>Document</th><th>Explicații</th><th class="r">Încasări</th><th class="r">Plăți</th><th class="r">Sold</th></tr></thead>
             <tbody id="reg-tbody">
-              <tr><td>1</td><td>30.04</td><td>Raport Bolt</td><td>Venituri ridesharing</td><td class="r num pos">2.869,60</td><td class="r num">—</td><td class="r num">2.869,60</td></tr>
-              <tr><td>2</td><td>30.04</td><td>Statement Bolt</td><td>Comision platformă</td><td class="r num">—</td><td class="r num neg">712,65</td><td class="r num">2.156,95</td></tr>
-              <tr><td>3</td><td>29.01</td><td>DGS/445566</td><td>Certificat digital</td><td class="r num">—</td><td class="r num neg">202,80</td><td class="r num">1.954,15</td></tr>
             </tbody>
           </table>
         </div>
@@ -811,7 +785,7 @@
       setTxt("ov-chelt", RON(p.expense_deductible_total));
       setTxt("ov-tva", RON(p.vat_out_total));
       // km cu pasager din parcurs (cache-only, nu lovește API Bolt)
-      try{const pc=await getParcurs(Y,M);setTxt("ov-km",KM(pc.km_bolt_pasager));setTxt("ov-km-sub",`Aprilie · ${pc.nr_ture||0} ture`);}catch(e){setTxt("ov-km","—");}
+      try{const pc=await getParcurs(Y,M);setTxt("ov-km",KM(pc.km_bolt_pasager));setTxt("ov-km-sub",`${MONTHS[M]} · ${pc.nr_ture||0} ture`);}catch(e){setTxt("ov-km","—");}
       // donut distribuție din expense_breakdown
       drawDonut("ovDonut", p.expense_breakdown||[]);
       // linie evoluție: ultimele 6 luni profit
@@ -1056,7 +1030,7 @@
           rows.push(`<tr><td>${MONTHS[mm]} ${yy}</td><td class="r num">${pp.tx_count||"—"}</td><td class="r num">${RON(pp.income_total)}</td><td class="r num neg">${RON(com)}</td><td class="r num pos">${RON(pp.profit_estimated)}</td><td class="r num">${km}</td></tr>`);
         }catch(e){}
       }
-      const tb=document.getElementById("ven-tbody");if(tb&&rows.length)tb.innerHTML=rows.join("");
+      const tb=document.getElementById("ven-tbody");if(tb)tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:14px">Fără încasări înregistrate.</td></tr>';
       buildVenBars();
     }catch(e){console.error(e);}
   }
@@ -1074,6 +1048,7 @@
     if(loaded.cheltuieli)return; loaded.cheltuieli=true;
     try{
       const p=await getPeriod(Y,M);
+      setTxt("ch-luna", `${MONTHS[M]} ${Y}`);
       const items=p.expense_breakdown||[];
       const box=document.getElementById("ch-rows");
       const max=Math.max(1,...items.map(i=>Number(i.amount_brut||0)));
