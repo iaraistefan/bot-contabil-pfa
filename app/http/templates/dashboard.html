@@ -277,6 +277,38 @@
     .gen-ok{animation:none}
   }
 
+  /* ===== B8: BANDĂ PRAGURI FISCALE (Unde te afli fiscal) — port mockup contai_threshold_band ===== */
+  .band{position:relative;border:1px solid var(--line-2);border-radius:22px;overflow:hidden;background:linear-gradient(160deg,var(--card),var(--card-2));padding:26px 26px 22px;margin-bottom:16px}
+  .band-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .band-head .t{font-family:var(--display);font-weight:700;font-size:18px}
+  .band-head .badge{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--emerald-br);border:1px solid var(--emerald-dim);background:var(--emerald-dim);padding:3px 9px;border-radius:20px;margin-left:auto}
+  .band-sub{font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.45}
+  .tbar{padding:14px 0;border-bottom:1px solid var(--line)}
+  .tbar:last-child{border-bottom:none;padding-bottom:4px}
+  .tb-top{display:flex;align-items:baseline;gap:10px;margin-bottom:9px}
+  .tb-ic{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:13px}
+  .tb-ic.ok{color:var(--emerald)} .tb-ic.near{color:var(--gold)} .tb-ic.over{color:var(--red)}
+  .tb-name{font-family:var(--display);font-weight:600;font-size:15px}
+  .tb-pct{margin-left:auto;font-family:var(--mono);font-size:13px;font-weight:600}
+  .tb-pct.ok{color:var(--emerald-br)} .tb-pct.near{color:var(--gold)} .tb-pct.over{color:var(--red)}
+  .tb-track{height:11px;border-radius:7px;background:rgba(255,255,255,.06);overflow:hidden;position:relative}
+  .tb-fill{height:100%;border-radius:7px;transition:width .9s cubic-bezier(.22,1,.36,1)}
+  .tb-fill.ok{background:linear-gradient(90deg,var(--emerald),var(--pos))}
+  .tb-fill.near{background:linear-gradient(90deg,var(--gold),#E89A2B)}
+  .tb-fill.over{background:linear-gradient(90deg,var(--red),#D9483B)}
+  .tb-track .mark{position:absolute;right:0;top:0;bottom:0;width:2px;background:rgba(255,255,255,.22)}
+  .tb-cap{display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;gap:12px}
+  .tb-cap .l{font-size:12px;color:var(--muted);line-height:1.4}
+  .tb-cap .l b{color:var(--cream);font-weight:600}
+  .tb-cap .r{font-family:var(--mono);font-size:10.5px;color:var(--muted-2);white-space:nowrap;text-align:right}
+  .band-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted-2)}
+  .band-foot svg{width:14px;height:14px;stroke:var(--muted-2);stroke-width:2;fill:none;flex-shrink:0}
+  .legend{display:flex;gap:16px;justify-content:center;margin:2px 0 16px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted-2);text-transform:uppercase}
+  .legend .it{display:flex;align-items:center;gap:6px}
+  .legend .sw{width:18px;height:7px;border-radius:4px}
+  .legend .sw.ok{background:var(--emerald)} .legend .sw.near{background:var(--gold)} .legend .sw.over{background:var(--red)}
+  @media (prefers-reduced-motion: reduce){ .tb-fill{transition:none} }
+
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
 
@@ -495,6 +527,7 @@
       <section class="page active" id="page-overview">
         <div id="ov-onboarding"></div>
         <div id="ov-fiscal"></div>
+        <div id="ov-praguri"></div>
         <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
@@ -890,7 +923,7 @@
       renderActivity(tx);
       // obligații fiscale (cache-uit) → cardul "cât plătesc" + termene reale
       // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
-      try{const fisc=await getD212(Y);renderFiscalHero(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";}
+      try{const fisc=await getD212(Y);renderFiscalHero(fisc);renderPraguri(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";const pb=document.getElementById("ov-praguri");if(pb)pb.innerHTML="";}
       try{await renderOnboarding();}catch(e){console.error(e);}
       // A5: linie discretă "Date actualizate {relativ}" (cel mai recent sync: Bolt sau documente)
       try{const st=await getSetari();const ig=st.integrari||{};const ts=[ig.bolt&&ig.bolt.last_synced,ig.documente&&ig.documente.last_synced].filter(Boolean).sort();setTxt("ov-synced", ts.length?("Date actualizate "+relTime(ts[ts.length-1])):"");}catch(e){console.error(e);}
@@ -988,6 +1021,65 @@
       +lines
       +`<div class="foot-stamp"><span class="s">PFA · CUI 53067338 · Bistrița</span><span class="st"><span class="d"></span>Estimare la zi</span></div></section>`;
     const hn=box.querySelector(".htot-n"); if(hn) countUp(hn, d.total_plata, RON);   // B7: count-up total hero
+  }
+
+  // ---- B8: bandă praguri fiscale "Unde te afli fiscal" (din vat + praguri, ZERO recalcul) ----
+  // Culoarea/iconul vin din `status` din payload (nu recalculăm pragul de 80% în JS).
+  function _prCls(status){ return status==="DEPASIT_PLAFON"?"over":(status==="APROAPE_PLAFON"?"near":"ok"); }
+  const _PR_GLYPH={ok:"✓",near:"!",over:"✕"};
+  function _prBar(cls,name,pct,lTxt,rTxt){
+    const w=Math.min(100,Math.round(pct||0));                      // clamp lățime (pct>100 la venituri mari)
+    const pctLbl = cls==="over" ? "peste" : `${Math.round(pct||0)}%`;
+    return `<div class="tbar"><div class="tb-top"><span class="tb-ic ${cls}">${_PR_GLYPH[cls]}</span>`
+      +`<span class="tb-name">${name}</span><span class="tb-pct ${cls}">${pctLbl}</span></div>`
+      +`<div class="tb-track"><div class="tb-fill ${cls}" data-w="${w}" style="width:0"></div><span class="mark"></span></div>`
+      +`<div class="tb-cap"><span class="l">${lTxt}</span><span class="r">${rTxt}</span></div></div>`;
+  }
+  function renderPraguri(d){
+    const box=document.getElementById("ov-praguri"); if(!box) return;
+    if(!d || ((d.venit_brut||0)<=0 && (d.venit_net||0)<=0)){ box.innerHTML=""; return; }  // cont nou fără date → fără bandă
+    const pg=d.praguri||{}, vat=d.vat, bars=[];
+    // 1. PLAFON TVA (vedeta) — doar dacă neplătitor cu plafon de monitorizat
+    if(vat && !vat.is_payer && vat.threshold_ron!=null){
+      const cls=_prCls(vat.status);
+      const l=`Cifra de afaceri <b>${lei0(vat.cifra_afaceri)} lei</b> din ${lei0(vat.threshold_ron)} lei`;
+      const r = cls==="over" ? `ai depășit — înregistrează-te<br>plătitor TVA (în 10 zile)`
+              : cls==="near" ? `atenție: mai ai doar ${lei0(vat.remaining_ron)} lei<br>până devii plătitor TVA`
+              :                `mai ai ${lei0(vat.remaining_ron)} lei<br>până devii plătitor TVA`;
+      bars.push(_prBar(cls,"Plafon TVA",vat.utilized_pct,l,r));
+    }
+    // 2. PODEA CASS — peste podea = pe venitul real (NU e alarmă → teal); sub podea = pe minim (status)
+    const c6=pg.cass6;
+    if(c6){
+      const above=(c6.utilized_pct||0)>=100;
+      const cls=above?"ok":_prCls(c6.status);
+      const l=`Venit net <b>${lei0(d.venit_net)} lei</b> din ${lei0(c6.threshold_ron)} lei`;
+      const r=above?`peste podea → CASS pe<br>venitul real`
+                   :`sub podea → CASS pe<br>baza minimă (${lei0(d.cass)} lei)`;
+      bars.push(_prBar(cls,"Podeaua CASS (6 salarii minime)",c6.utilized_pct,l,r));
+    }
+    // 3. PRAG CAS — peste prag = CAS obligatoriu
+    const c12=pg.cas12;
+    if(c12){
+      const over=(c12.status==="DEPASIT_PLAFON");
+      const cls=_prCls(c12.status);
+      const l=over?`Venit net <b>peste ${lei0(c12.threshold_ron)} lei</b>`
+                  :`Venit net <b>${lei0(d.venit_net)} lei</b> din ${lei0(c12.threshold_ron)} lei`;
+      const r=over?`CAS obligatoriu<br>(25% pe baza de 12 SMB)`
+                  :`sub prag → CAS<br>neobligatoriu (0 lei)`;
+      bars.push(_prBar(cls,"Prag CAS (12 salarii minime)",c12.utilized_pct,l,r));
+    }
+    if(!bars.length){ box.innerHTML=""; return; }
+    const sm=lei0((pg.salariu_minim)||4050), thr=lei0((vat&&vat.threshold_ron)||395000);
+    box.innerHTML=`<section class="band"><div class="band-head"><span class="t">Unde te afli fiscal</span><span class="badge">${d.an} · la zi</span></div>`
+      +`<p class="band-sub">Cât spațiu fiscal mai ai până la fiecare prag care îți schimbă obligațiile.</p>`
+      +bars.join("")
+      +`<div class="band-foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>Pragurile sunt din salariul minim ${sm} lei și plafonul TVA legal (${thr} lei, OG 22/2025).</div></section>`
+      +`<div class="legend"><span class="it"><span class="sw ok"></span>✓ În normă (sub 80%)</span><span class="it"><span class="sw near"></span>! Aproape (≥80%)</span><span class="it"><span class="sw over"></span>✕ Peste prag (≥100%)</span></div>`;
+    // animație lățime (ca B7): reduced-motion → instant; altfel rAF declanșează tranziția CSS
+    const fills=box.querySelectorAll(".tb-fill");
+    if(prefersReduced()) fills.forEach(f=>f.style.width=f.dataset.w+"%");
+    else requestAnimationFrame(()=>fills.forEach(f=>f.style.width=f.dataset.w+"%"));
   }
 
   // ---- A4: ONBOARDING (checklist cont-nou) + EMPTY-STATES ----
