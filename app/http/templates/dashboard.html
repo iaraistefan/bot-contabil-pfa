@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#070B14; --night:#0D1524; --night-2:#121E33; --night-3:#19293F;
+    --ink:#070B14; --night:#0D1524; --night-2:#121E33; --night-3:#19293F; --card:#13263F; --card-2:#152A46;
     --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.12); --line-input:rgba(255,255,255,.40);
     /* Accent Telegram = TEAL (interactiv / activ). Emerald devine semantic "pozitiv" → --pos. */
     --emerald:#2DD4BF; --emerald-br:#82E0D3; --emerald-dim:rgba(45,212,191,.14);
@@ -163,6 +163,62 @@
   .hero-pay.is-clean .hp-total{color:var(--pos-br)}
   .hero-pay .hp-empty{display:flex;align-items:center;gap:13px;color:var(--pos-br);font-family:var(--display);font-weight:600;font-size:.98rem}
   .hero-pay .hp-empty .sub{display:block;font-family:var(--body);font-weight:400;font-size:.8rem;color:var(--muted);margin-top:3px}
+
+  /* ===== A3: HERO FISCAL EXPLICATIV (Prezentare) — port mockup contai_hero_explainer ===== */
+  .fhero{position:relative;border:1px solid var(--line-2);border-radius:22px;overflow:hidden;background:linear-gradient(160deg,var(--card),var(--card-2));padding:28px 26px 24px;margin-bottom:16px}
+  .fhero::before{content:'';position:absolute;inset:0 auto 0 0;width:5px;background:var(--emerald)}
+  .fhero .glow{position:absolute;top:-120px;right:-80px;width:400px;height:400px;background:radial-gradient(circle,var(--emerald-dim),transparent 65%);pointer-events:none}
+  .fhero .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--emerald-br);text-transform:uppercase}
+  .fhero .eyebrow .yr{color:var(--muted)}
+  .fhero .htot{font-family:var(--display);font-weight:800;font-size:48px;line-height:1.05;margin-top:9px;letter-spacing:-.02em;color:var(--gold)}
+  .fhero .htot .cur{font-family:var(--display);font-weight:300;font-size:20px;color:var(--muted);margin-left:8px}
+  .fhero .htot-lab{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:4px}
+  .fhero .profit{display:flex;gap:24px;margin-top:14px;flex-wrap:wrap;font-size:14px}
+  .fhero .profit .it{display:flex;align-items:center;gap:8px}
+  .fhero .profit .it .dt{width:9px;height:9px;border-radius:50%}
+  .fhero .profit .it .dt.g{background:var(--pos)} .fhero .profit .it .dt.a{background:var(--gold)}
+  .fhero .profit .it b{font-weight:600} .fhero .profit .it span{color:var(--muted)}
+  .fhero .divider{height:1px;background:var(--line-2);margin:20px 0 6px}
+  .fhero .break-lab{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin-bottom:6px}
+  .fline{border-bottom:1px solid var(--line)}
+  .fline:last-child{border-bottom:none}
+  .fl-head{display:flex;align-items:center;gap:12px;padding:13px 4px;cursor:pointer;user-select:none}
+  .fl-head:hover .fl-name{color:var(--emerald-br)}
+  .fl-chev{width:16px;height:16px;color:var(--muted);transition:transform .2s;flex-shrink:0}
+  .fline.open .fl-chev{transform:rotate(90deg);color:var(--emerald)}
+  .fl-name{font-family:var(--display);font-weight:600;font-size:15.5px;transition:color .15s}
+  .fl-sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--muted-2);text-transform:uppercase;margin-top:1px}
+  .fl-amt{margin-left:auto;font-family:var(--display);font-weight:700;font-size:18px}
+  .fl-amt.zero{color:var(--muted)}
+  .fl-why{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--emerald);text-transform:uppercase;padding:2px 8px;border:1px solid var(--emerald-dim);border-radius:20px;background:var(--emerald-dim)}
+  .fl-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .fline.open .fl-body{max-height:360px}
+  .fl-inner{padding:2px 4px 16px 32px}
+  .fl-inner .formula{font-size:14px;line-height:1.5;color:var(--cream)}
+  .fl-inner .formula b{color:var(--gold);font-weight:600}
+  .fl-inner .formula .tn{color:var(--pos);font-weight:600}
+  /* Nivel 2 — detaliul fiscal, ascuns până la "mai mult" */
+  .fl-inner .tech{display:none;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--muted-2);margin-top:10px;line-height:1.5}
+  .fl-inner.show-tech .tech{display:block}
+  .fl-inner .tech .k{color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .tech-more{display:inline-flex;align-items:center;gap:5px;margin-top:11px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);cursor:pointer;background:none;border:none;padding:0}
+  .tech-more:hover{color:var(--emerald-br)}
+  .tech-more .tm-chev{transition:transform .2s}
+  .fl-inner.show-tech .tech-more{color:var(--emerald)}
+  .fl-inner.show-tech .tech-more .tm-chev{transform:rotate(180deg)}
+  .thr{margin-top:13px}
+  .thr-top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:6px}
+  .thr-top .l{color:var(--muted)}
+  .thr-top .r{font-family:var(--mono);font-size:11px;color:var(--cream);font-weight:500}
+  .thr .bar-track{height:8px;border-radius:5px;background:rgba(255,255,255,.07);overflow:hidden;position:relative;margin-top:0}
+  .thr .bar-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--emerald),var(--pos))}
+  .thr .bar-fill.gold{background:linear-gradient(90deg,var(--gold),#E89A2B)}
+  .thr-cap{font-family:var(--mono);font-size:10px;color:var(--muted-2);margin-top:6px;line-height:1.5}
+  .thr-cap b{color:var(--muted)}
+  .fhero .foot-stamp{display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  .fhero .foot-stamp .s{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted-2);text-transform:uppercase}
+  .fhero .foot-stamp .st{display:inline-flex;align-items:center;gap:5px;color:var(--emerald);font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+  .fhero .foot-stamp .st .d{width:6px;height:6px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
 
   .chart-box{position:relative;height:230px}
   .chart-box.sm{height:200px}
@@ -380,6 +436,7 @@
 
       <!-- ===== OVERVIEW ===== -->
       <section class="page active" id="page-overview">
+        <div id="ov-fiscal"></div>
         <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
@@ -694,6 +751,7 @@
   async function getParcurs(y,m){const k=`pc${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/parcurs/${y}/${m}`);if(!r.ok)throw new Error("parcurs "+r.status);cache[k]=await r.json();return cache[k];}
   async function getDocs(){if(cache.docs)return cache.docs;const r=await authFetch(`/api/v1/documents`);if(!r.ok)throw new Error("docs "+r.status);const d=await r.json();cache.docs=d.documents||[];return cache.docs;}
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
+  async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
 
   // ---- NAV ----
   const titles={
@@ -762,8 +820,101 @@
       const tx=await getTx(Y,M);
       renderActivity(tx);
       // obligații fiscale (cache-uit) → cardul "cât plătesc" + termene reale
+      // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
+      try{const fisc=await getD212(Y);renderFiscalHero(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";}
       try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
     }catch(e){console.error(e);}
+  }
+
+  // ---- A3: Hero fiscal explicativ (din breakdown + praguri /declaratie-unica) ----
+  // REGULA DE AUR: toate sumele/bazele/procentele vin DIRECT din payload; JS doar
+  // formatează și alege bara de prag relevantă. Singura derivare de afișaj:
+  // "rămâne după taxe" = venit_net − total_plata (scădere a două valori autoritare).
+  const lei0 = v => (v==null?"—":Math.round(v).toLocaleString("ro-RO"));
+  const FLINE = {
+    impozit:{name:"Impozit pe venit", tech:"Impozit 10% pe venitul net rămas după deducerea CAS și CASS (art. 68 Cod fiscal)."},
+    cas:    {name:"CAS — pensie",      tech:"Sub 12 SMB, CAS opțional (implicit 0). Peste 12 SMB: 25% pe baza de 12 SMB; peste 24 SMB baza se dublează."},
+    cass:   {name:"CASS — sănătate",   tech:"Sub 6 SMB: CASS pe baza minimă de 6 SMB. Între 6 și 60 SMB: 10% pe venitul real. Peste 60 SMB: se plafonează."},
+  };
+  function _flSub(it,d){
+    if(it.tip==="impozit") return `cota ${it.cota_pct}%`;
+    if(it.tip==="cas") return it.aplicabil ? `cota ${it.cota_pct}%` : "neaplicabil sub plafon";
+    if(!it.aplicabil) return "neaplicabil";
+    if(it.baza>d.venit_net) return "pe baza minimă";
+    if(it.baza<d.venit_net) return "plafonat";
+    return `cota ${it.cota_pct}%`;
+  }
+  function _flFormula(it,d){
+    const vn=`<span class="tn">${lei0(d.venit_net)}</span>`;
+    if(it.tip==="impozit"){
+      return `<b>${it.cota_pct}%</b> × baza impozabilă <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>`
+        +`Baza = venit net <span class="tn">${lei0(d.venit_net)}</span> − CAS <span class="tn">${lei0(d.cas)}</span> − CASS <span class="tn">${lei0(d.cass)}</span>. Impozitul se aplică <i>după</i> ce scazi contribuțiile.`;
+    }
+    if(it.tip==="cas"){
+      if(!it.aplicabil){
+        return `Venitul tău net (${vn} lei) e <b>sub pragul de 12 salarii minime</b> (${lei0(d.praguri.cas12.threshold_ron)} lei). CAS-ul devine obligatoriu doar peste acest prag — deci nu plătești CAS anul acesta.`;
+      }
+      return `<b>${it.cota_pct}%</b> × baza <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>`
+        +`Baza CAS e fixată la pragul de salarii minime atins, nu la venitul tău integral.`;
+    }
+    // cass
+    if(it.baza>d.venit_net){
+      return `<b>${it.cota_pct}%</b> × baza minimă <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>`
+        +`Venitul tău net (${vn} lei) e sub <b>podeaua de 6 salarii minime</b>, așa că CASS se calculează la minim, <i>nu</i> la venitul real.`;
+    }
+    return `<b>${it.cota_pct}%</b> × <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>CASS se calculează pe venitul net real.`;
+  }
+  function _flBar(it,d){
+    if(it.tip==="impozit") return "";   // impozitul nu are bară de prag
+    let pr,gold=false,lab,cap;
+    if(it.tip==="cas"){
+      pr = it.aplicabil ? d.praguri.cas24 : d.praguri.cas12;
+      lab = it.aplicabil ? "Pragul CAS (24 salarii minime)" : "Pragul CAS (12 salarii minime)";
+    } else { // cass
+      gold=true;
+      if(it.baza>d.venit_net){ pr=d.praguri.cass6; lab="Podeaua CASS (6 salarii minime)"; }
+      else { pr=d.praguri.cass60; lab="Plafonul CASS (60 salarii minime)"; }
+    }
+    if(!pr) return "";
+    const pct=Math.min(100,Math.round(pr.utilized_pct));
+    if(it.tip==="cass" && it.baza>d.venit_net){
+      cap=`Venitul tău <b>${lei0(d.venit_net)} lei</b> din <b>${lei0(pr.threshold_ron)} lei</b> · sub această podea plătești CASS pe baza minimă (~${lei0(it.suma)} lei/an)`;
+    } else {
+      const ce = it.tip==="cas" ? (it.aplicabil?"până baza CAS se dublează":"până CAS devine obligatoriu") : "până CASS se plafonează";
+      cap=`Venitul tău <b>${lei0(d.venit_net)} lei</b> din <b>${lei0(pr.threshold_ron)} lei</b> · mai sunt ${lei0(pr.remaining_ron)} lei ${ce}`;
+    }
+    return `<div class="thr"><div class="thr-top"><span class="l">${lab}</span><span class="r">${pct}%</span></div>`
+      +`<div class="bar-track"><div class="bar-fill${gold?' gold':''}" style="width:${pct}%"></div></div>`
+      +`<div class="thr-cap">${cap}</div></div>`;
+  }
+  function renderFiscalHero(d){
+    const box=document.getElementById("ov-fiscal"); if(!box) return;
+    if(!d || !Array.isArray(d.breakdown)){ box.innerHTML=""; return; }
+    const ramane = d.venit_net - d.total_plata;
+    const lines = d.breakdown.map(it=>{
+      const meta=FLINE[it.tip]||{name:it.tip,tech:""};
+      const zero=(it.suma||0)===0?" zero":"";
+      // Toate liniile ÎNCHISE by default (ajustare 1). Detaliu fiscal pe nivel 2 (ajustare 2).
+      return `<div class="fline"><div class="fl-head" onclick="this.parentElement.classList.toggle('open')">`
+        +`<svg class="fl-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`
+        +`<div><div class="fl-name">${meta.name}</div><div class="fl-sub">${_flSub(it,d)}</div></div>`
+        +`<div class="fl-amt${zero}">${RON(it.suma)} lei</div><div class="fl-why">De ce?</div></div>`
+        +`<div class="fl-body"><div class="fl-inner">`
+        +`<div class="formula">${_flFormula(it,d)}</div>`
+        +_flBar(it,d)
+        +`<button class="tech-more" onclick="this.closest('.fl-inner').classList.toggle('show-tech')">mai mult <span class="tm-chev">▾</span></button>`
+        +`<div class="tech"><span class="k">Detaliu fiscal</span> · ${meta.tech}</div>`
+        +`</div></div></div>`;
+    }).join("");
+    box.innerHTML=`<section class="fhero"><div class="glow"></div>`
+      +`<div class="eyebrow">Taxe estimate <span class="yr">· ${d.an} · la zi</span></div>`
+      +`<div class="htot">${RON(d.total_plata)}<span class="cur">RON</span></div>`
+      +`<div class="htot-lab">Total de plată — impozit + CAS + CASS</div>`
+      +`<div class="profit"><div class="it"><span class="dt g"></span><b>Venit net</b><span>&nbsp;${RON(d.venit_net)} lei</span></div>`
+      +`<div class="it"><span class="dt a"></span><b>Rămâne după taxe</b><span>&nbsp;${RON(ramane)} lei</span></div></div>`
+      +`<div class="divider"></div><div class="break-lab">Din ce se compune · apasă pentru explicație</div>`
+      +lines
+      +`<div class="foot-stamp"><span class="s">PFA · CUI 53067338 · Bistrița</span><span class="st"><span class="d"></span>Estimare la zi</span></div></section>`;
   }
 
   // ---- "Cât plătesc și când?" + termene reale ----
