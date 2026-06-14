@@ -291,6 +291,45 @@ def prag_cas24_status(venit_net: float, an: int) -> dict:
     return {**core, "message": message}
 
 
+def prag_cass6_status(venit_net: float, an: int) -> dict:
+    """
+    Status față de PODEAUA CASS de 6 SMB (sub care CASS se calculează pe baza
+    MINIMĂ 6 SMB, NU pe venitul real).
+
+    Relevant pentru venituri MICI: sub 6 SMB plătești CASS pe 6 SMB (24.300 ×
+    10% = 2.430) chiar dacă ai câștigat mai puțin — bara arată „de ce" plătești
+    minimul. La/peste 6 SMB, CASS = 10% pe venitul net real. Ton informativ.
+    Toate cifrele din sursa unică (PARAMETRI_CONTRIBUTII).
+    """
+    p = _params(an)
+    sm = p["salariu_minim"]
+    threshold = float(p["cass_jos"] * sm)                  # 6 × 4050 = 24.300
+    cass_min = round(threshold * p["cota_cass"] / 100, 2)  # ~2.430
+    core = _prag_core(venit_net, threshold)
+    status = core["status"]
+    utilized_pct = core["utilized_pct"]
+
+    if status == "DEPASIT_PLAFON":
+        message = (
+            f"✅ Peste podeaua CASS de {p['cass_jos']} salarii minime "
+            f"({threshold:.0f} RON). CASS se calculează pe venitul net real."
+        )
+    elif status == "APROAPE_PLAFON":
+        message = (
+            f"ℹ️ Aproape de podeaua CASS de {p['cass_jos']} salarii minime: "
+            f"{utilized_pct:.0f}% ({venit_net:.0f} / {threshold:.0f} RON). Sub "
+            f"{threshold:.0f} RON, CASS se calculează pe baza minimă (~{cass_min:.0f} lei/an)."
+        )
+    else:
+        message = (
+            f"ℹ️ Sub podeaua CASS de {p['cass_jos']} salarii minime: {utilized_pct:.0f}% "
+            f"({venit_net:.0f} / {threshold:.0f} RON). CASS se plătește pe baza minimă "
+            f"(~{cass_min:.0f} lei/an), nu pe venitul tău."
+        )
+
+    return {**core, "message": message}
+
+
 def prag_cass60_status(venit_net: float, an: int) -> dict:
     """
     Status față de plafonul CASS de 60 SMB (peste care CASS se PLAFONEAZĂ).

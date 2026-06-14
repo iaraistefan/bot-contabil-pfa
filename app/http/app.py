@@ -588,6 +588,43 @@ def declaratie_unica_d212(year: int):
     finally:
         session.close()
 
+    # A3: defalcare explicativă + praguri pentru hero-ul fiscal (Prezentare web).
+    # Sursă unică: app.domain.contributii (aceleași funcții pe care le folosește
+    # motorul D212) → ZERO calcul fiscal nou. Baza impozitului = venit net − CAS −
+    # CASS (identic cu d212_calc.venit_impozabil), NU venitul net.
+    from app.domain import contributii
+    vn = r.venit_net
+    cas_d = contributii.calcul_cas(vn, year)
+    cass_d = contributii.calcul_cass(vn, year)
+    venit_impozabil = max(0.0, round(vn - r.cas - r.cass, 2))
+
+    breakdown = [
+        {
+            "tip": "impozit", "suma": r.impozit, "baza": venit_impozabil,
+            "cota_pct": 10, "aplicabil": r.impozit > 0,
+            "nota": "Impozit 10% pe venitul net rămas după scăderea CAS și CASS.",
+        },
+        {
+            "tip": "cas", "suma": r.cas, "baza": cas_d["baza"],
+            "cota_pct": cas_d["cota_pct"], "aplicabil": cas_d["aplicabil"],
+            "nota": cas_d["nota"],
+        },
+        {
+            "tip": "cass", "suma": r.cass, "baza": cass_d["baza"],
+            "cota_pct": cass_d["cota_pct"], "aplicabil": cass_d["aplicabil"],
+            "nota": cass_d["nota"],
+        },
+    ]
+
+    praguri = {
+        "venit_net": vn,
+        "salariu_minim": contributii.salariu_minim(year),
+        "cas12": contributii.prag_cas_status(vn, year),    # CAS devine obligatoriu
+        "cas24": contributii.prag_cas24_status(vn, year),  # baza CAS se dublează
+        "cass6": contributii.prag_cass6_status(vn, year),  # podeaua CASS (baza minimă)
+        "cass60": contributii.prag_cass60_status(vn, year),  # CASS se plafonează
+    }
+
     return jsonify({
             "an": r.an,
             "venit_brut": r.venit_brut,
@@ -599,6 +636,8 @@ def declaratie_unica_d212(year: int):
             "total_plata": r.total_plata,
             "bonificatie": r.bonificatie,
             "total_cu_bonificatie": r.total_cu_bonificatie,
+            "breakdown": breakdown,
+            "praguri": praguri,
             "ghid": r.ghid_telegram,
             "ghid_plain": r.ghid_plain,
             "avertismente": r.avertismente,
