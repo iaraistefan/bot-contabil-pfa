@@ -578,10 +578,20 @@ def declaratie_unica_d212(year: int):
         return err
 
     session = get_session()
+    vat_st = None
     try:
         # Sursa unica: helper partajat (acelasi numar ca declaratia reala si
         # ca suma D212 din cardul "cat platesc").
         r = tax_engine.compute_d212_anual(session, user_id=user_id, an=year)
+        # B8: status plafon TVA. Cifra de afaceri = venit_brut (încasări din propriile
+        # prestări, fără TVA la neplătitor). Sursă unică: FiscalProfile.vat_threshold_status
+        # (aceeași cale ca alerta din proactive_alerts). Non-fatal: eroare → vat=None.
+        try:
+            from app.domain import fiscal_profile as _fp
+            vat_st = _fp.from_user_id(session, user_id).vat_threshold_status(r.venit_brut)
+        except Exception as _e:
+            logger.error(f"API D212 vat status error user={user_id}: {_e}")
+            vat_st = None
     except Exception as e:
         logger.error(f"API D212 error {year} user={user_id}: {e}")
         return jsonify({"error": "internal error"}), 500
@@ -625,6 +635,22 @@ def declaratie_unica_d212(year: int):
         "cass60": contributii.prag_cass60_status(vn, year),  # CASS se plafonează
     }
 
+    # B8: bloc TVA pentru banda de praguri (cifra_afaceri + remaining_ron peste ce
+    # întoarce vat_threshold_status). threshold din VAT_THRESHOLD_RON (sursă unică).
+    if vat_st is None:
+        vat = None
+    else:
+        _thr = vat_st.get("threshold_ron")
+        vat = {
+            "is_payer": vat_st.get("is_payer", False),
+            "cifra_afaceri": r.venit_brut,
+            "threshold_ron": _thr,
+            "utilized_pct": vat_st.get("utilized_pct"),
+            "remaining_ron": (max(0.0, round(_thr - r.venit_brut, 2)) if _thr else None),
+            "status": vat_st.get("status"),
+            "message": vat_st.get("message"),
+        }
+
     return jsonify({
             "an": r.an,
             "venit_brut": r.venit_brut,
@@ -638,6 +664,7 @@ def declaratie_unica_d212(year: int):
             "total_cu_bonificatie": r.total_cu_bonificatie,
             "breakdown": breakdown,
             "praguri": praguri,
+            "vat": vat,
             "ghid": r.ghid_telegram,
             "ghid_plain": r.ghid_plain,
             "avertismente": r.avertismente,

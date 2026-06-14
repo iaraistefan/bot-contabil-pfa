@@ -45,8 +45,9 @@ logger = logging.getLogger(__name__)
 # app.domain.contributii (NU duplicat aici). Valoarea de la 1 ianuarie = 4050.
 SALARIU_MINIM_BRUT_2026 = float(_salariu_minim_an(2026))
 
-# Plafon TVA general (cifra afaceri RON)
-VAT_THRESHOLD_RON = 300_000.0
+# Plafon TVA general (cifra afaceri RON, fără TVA)
+# OG 22/2025, MO 806/29.08.2025, în vigoare 01.09.2025 (de la 300.000).
+VAT_THRESHOLD_RON = 395_000.0
 
 # Plafon TVA e-commerce intracomunitar (EUR)
 VAT_THRESHOLD_EU_ECOMMERCE_EUR = 10_000.0  # OSS pentru e-commerce
