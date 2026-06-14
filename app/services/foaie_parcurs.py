@@ -53,6 +53,7 @@ from app.repositories import trip_logs as trip_repo
 from app.repositories import audit as audit_repo
 from app.integrations.exports import foaie_parcurs_export
 from app.services import combustibil
+from app.services import banner_send
 from app.integrations import bolt_sync  # A.1.b: km cu pasager (cache-only)
 from app.models import TRIP_STATUS_OPEN, TRIP_STATUS_CLOSED
 
@@ -514,6 +515,43 @@ async def _reply_result(update: Update, result: dict):
 #       STATUS / SUMAR LUNA  (meniu modern cu butoane)
 # ============================================================
 
+def _foaie_parcurs_banner_data(summary, km_bolt, fuel_summary, vehicul,
+                               year, month) -> dict:
+    """Data dict pentru banner-ul `foaie_parcurs`, din ACELEAȘI surse ca
+    `_show_status` (compute_month_summary + bolt_sync + get_fuel_summary +
+    vehicul) → banner = text, aceleași cifre.
+
+    NU pasează `depasit`: verdictul fiscal (`mai_poti_lei`) e calculat pe RON,
+    suspectat fals-pozitiv, și se repară separat în combustibil.py. Fără cheia
+    `depasit`, `render_foaie_parcurs` ascunde COMPLET pill-ul (niciun verdict
+    DEPĂȘIT/ÎN NORMĂ). `combustibil_bonuri` rămâne (e factual, nu verdict).
+    """
+    km_business = summary["km_business"]
+    km_poz = max(km_business - km_bolt, 0.0) if km_business > 0 else 0.0
+
+    if fuel_summary:
+        norma = fuel_summary["norma_consum"]
+        plafon_litri = fuel_summary["plafon_litri"]
+        bonuri_lei = fuel_summary["total_bonuri_lei"]
+    else:
+        norma = vehicul.norma_consum if vehicul else 7.5
+        plafon_litri = km_business * norma / 100.0
+        bonuri_lei = 0.0
+
+    return {
+        "period": f"{LUNI_LONG[month]} {year}",
+        "subtitle": "Km business · combustibil normat",
+        "km_total": _fmt_km(km_business),
+        "km_pasager": _fmt_km(km_bolt),
+        "km_pozitionare": _fmt_km(km_poz),
+        "vehicul": (vehicul.nr_inmatriculare if vehicul else "—"),
+        "norma": f"{norma:g} L/100KM".replace(".", ","),
+        "consum_teoretic": f"{plafon_litri:.1f} L".replace(".", ","),
+        "combustibil_bonuri": f"{bonuri_lei:,.0f} RON".replace(",", "."),
+        # depasit: OMIS intenționat → pill ascuns (fix fiscal separat, post-UI)
+    }
+
+
 async def _show_status(update, context, user_id, via_callback=False):
     """Afiseaza meniul foii de parcurs: tura curenta + sumar + butoane."""
     now = _now_ro()
@@ -523,6 +561,7 @@ async def _show_status(update, context, user_id, via_callback=False):
     try:
         open_trip = trip_repo.get_open_trip(session, user_id)
         trips = trip_repo.list_for_month(session, user_id, year, month)
+        vehicul = vehicule_repo.get_default(session, user_id)
     finally:
         session.close()
 
@@ -555,6 +594,7 @@ async def _show_status(update, context, user_id, via_callback=False):
         )
 
     # A.1.b: defalcare business = cu pasager (Bolt) + pozitionare (mers gol)
+    km_bolt = 0.0
     try:
         bolt_km = bolt_sync.get_month_km(user_id, year, month)
         km_bolt = bolt_km.get("km", 0.0)
@@ -590,6 +630,7 @@ async def _show_status(update, context, user_id, via_callback=False):
         lines.append("_Nicio tură încă. Apasă butonul Pornește o tură._")
 
     # Sectiunea combustibil deductibil
+    fuel_summary = None
     try:
         fuel_summary = combustibil.get_fuel_summary(user_id, year, month)
         fuel_section = combustibil.format_fuel_section(fuel_summary)
@@ -626,13 +667,22 @@ async def _show_status(update, context, user_id, via_callback=False):
     rows.append([InlineKeyboardButton("❌ Închide", callback_data="nav|close")])
     markup = InlineKeyboardMarkup(rows)
 
+    banner_data = _foaie_parcurs_banner_data(
+        summary, km_bolt, fuel_summary, vehicul, year, month
+    )
+    caption = f"🛣️ Foaie parcurs · {LUNI_LONG[month]} {year}"
+
     if via_callback and update.callback_query:
-        await update.callback_query.edit_message_text(
-            text, parse_mode="Markdown", reply_markup=markup
+        await banner_send.send_banner_or_text(
+            update.callback_query, context,
+            screen="foaie_parcurs", data=banner_data,
+            text=text, caption=caption, reply_markup=markup,
         )
     else:
-        await update.message.reply_text(
-            text, parse_mode="Markdown", reply_markup=markup
+        await banner_send.reply_banner_or_text(
+            update.message, context,
+            screen="foaie_parcurs", data=banner_data,
+            text=text, caption=caption, reply_markup=markup,
         )
 
 

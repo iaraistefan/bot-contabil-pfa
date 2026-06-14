@@ -381,12 +381,16 @@ def render_foaie_parcurs(data):
              f"NORMĂ {data.get('norma','')} · CONSUM TEORETIC {data.get('consum_teoretic','')}",
              font(MONO_R, 12), MUTED, 1)
     # status combustibil dreapta
-    warn = data.get("depasit", False)
-    lbl = "DEPĂȘIT" if warn else "ÎN NORMĂ"
-    col = RED if warn else GREEN
-    f = font(MONO_B, 12)
-    _pill(d, s(56) + w - s(24) - (_tw(d, lbl, f, 2) + s(28)), ry + s(30),
-          lbl, f, col, (18, 30, 44) if warn else (16, 40, 36), tracking=2)
+    # `depasit` lipsă (None) ⇒ NU afișa pill (niciun verdict DEPĂȘIT/ÎN NORMĂ).
+    # Verdictul fiscal (mai_poti_lei) e suspectat fals-pozitiv → se repară separat
+    # în combustibil.py; până atunci bannerul nu face nicio afirmație de plafon.
+    warn = data.get("depasit")
+    if warn is not None:
+        lbl = "DEPĂȘIT" if warn else "ÎN NORMĂ"
+        col = RED if warn else GREEN
+        f = font(MONO_B, 12)
+        _pill(d, s(56) + w - s(24) - (_tw(d, lbl, f, 2) + s(28)), ry + s(30),
+              lbl, f, col, (18, 30, 44) if warn else (16, 40, 36), tracking=2)
     bon = f"{data.get('combustibil_bonuri','')}"
     bw = d.textlength(bon, font=font(POP_B, 18))
     d.text((s(56) + w - s(24) - bw, ry + s(70)), bon, font=font(POP_B, 18), fill=WHITE)
