@@ -607,7 +607,7 @@
         </div>
         <div class="alert">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
-          <div><div class="t">Deductibilitate combustibil</div><div class="d">Motorina e 50% deductibilă la nivel D212. Foaia de parcurs justifică km business — verifică să nu cumperi mai mult decât acoperă km parcurși.</div></div>
+          <div><div class="t">Deductibilitate combustibil</div><div class="d">Combustibilul e <b>100% deductibil pe baza foii de parcurs</b> (km business documentați + consum normat). <b>Fără foaie de parcurs, doar 50%.</b> Verdictul de mai sus compară litrii de pe bonuri cu consumul normat al km parcurși.</div></div>
         </div>
       </section>
 
@@ -1350,7 +1350,7 @@
           <div class="row"><div class="info"><div class="t">${v.marca_model||"Vehicul"}</div><div class="m">${v.nr_inmatriculare||"—"}</div></div></div>
           <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">${v.norma_consum||"7,5"} L / 100 km</div></div></div>
           <div class="row"><div class="info"><div class="t">Consum teoretic</div><div class="m">${KM(pc.km_business)} km × normă</div></div><div class="amt neu num">${f.plafon_litri?KM(f.plafon_litri)+" L":"—"}</div></div>
-          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${(f.mai_poti_lei||0)>=0?'pos':'neg'} num">${(f.mai_poti_lei!=null)?(f.mai_poti_lei>=0?'în normă':'peste plafon'):'—'}</div></div>`;
+          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${f.depasit===true?'neg':f.depasit===false?'pos':'neu'} num">${f.depasit===true?'peste plafon':f.depasit===false?'în normă':'scrie litrii'}</div></div>`;
       }
     }catch(e){console.error(e);}
   }

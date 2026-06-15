@@ -5,19 +5,20 @@ Calculeaza cat combustibil mai poate incarca user-ul, pe baza km
 business documentati prin foaia de parcurs.
 
 LOGICA:
-  plafon_litri = km_business x norma_consum / 100
-  pret_mediu   = total_lei_bonuri_cu_litri / total_litri  (din bonuri reale)
-  plafon_lei   = plafon_litri x pret_mediu
-  mai_poti     = plafon_lei - total_bonuri_lei
+  plafon_litri  = km_business x norma_consum / 100        (consum normat, LITRI)
+  VERDICT       = total_litri (din bonuri) vs plafon_litri  → pe LITRI, NU pe lei
+  pret_mediu    = total_lei_bonuri_cu_litri / total_litri   (doar pentru afișaj lei)
+  plafon_lei    = plafon_litri x pret_mediu                 (informativ)
 
-Pretul se calculeaza automat din bonurile care contin litri in descriere
-(campul detalii al documentului). Daca niciun bon nu are litri inregistrati
--> fallback la pretul de referinta.
+Verdictul se dă pe LITRI fiindcă lei-ul amestecă banii TUTUROR bonurilor cu un
+pret derivat doar din bonurile CU litri → fals „depășit" când lipsesc litri pe
+unele bonuri (#5). Pretul se extrage din descrierea bonurilor; fără niciun litru
+-> verdict necunoscut + nudge „scrie litrii".
 
-NOTA: Pentru activitatea de ridesharing, combustibilul aferent km business
-documentati prin foaia de parcurs este integral deductibil (exceptat de la
-plafonul de 50%). Acest modul arata cat mai poate incarca user-ul astfel
-incat totul sa fie acoperit de foaia de parcurs.
+NOTA fiscală (Cod fiscal art. 68, Norme pct. 7): pentru ridesharing, combustibilul
+aferent km business e 100% deductibil DACA e justificat prin foaie de parcurs
+(km + scop + normă); FĂRĂ foaie de parcurs, doar 50%. Acest modul arată cât mai
+poate încărca user-ul astfel încât totul să fie acoperit de foaia de parcurs.
 
 CHANGELOG:
   - v1 (Pas A+): Versiune initiala
@@ -34,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 # Pret de referinta motorina (RON/L) - folosit DOAR daca niciun bon nu are litri
 PRET_MOTORINA_FALLBACK = 7.5
+
+# Norma de consum implicita (L/100km) - daca userul n-are vehicul cu norma setata.
+# DISTINCTA de pretul de mai sus: un pret (RON/L) NU poate fi o norma (L/100km).
+NORMA_CONSUM_FALLBACK = 7.5
 
 # Categoria sub care se salveaza bonurile de combustibil (din ridesharing.py)
 FUEL_CATEGORY = "fuel"
@@ -107,7 +112,9 @@ def get_fuel_summary(user_id: int, year: int, month: int) -> dict:
       total_litri      - litri inregistrati pe bonuri (cele cu litri)
       pret_mediu       - RON/L (din bonuri sau fallback)
       pret_din_bonuri  - True daca pretul e calculat din bonuri reale
-      mai_poti_lei     - cat mai poate incarca (poate fi negativ = depasit)
+      mai_poti_litri   - VERDICT: cati L mai poate deduce (plafon_litri - total_litri)
+      depasit          - True/False pe litri verificati; None = necunoscut (fara litri)
+      mai_poti_lei     - INFORMATIV (afisaj lei), NU verdict (vezi #5)
       nr_bonuri        - numar bonuri de combustibil
       nr_bonuri_cu_litri - cate au litri inregistrati
     """
@@ -133,11 +140,11 @@ def get_fuel_summary(user_id: int, year: int, month: int) -> dict:
         trips = trip_repo.list_closed_for_month(session, user_id, year, month)
         km_business = sum((t.km or 0.0) for t in trips)
 
-        # Norma de consum a masinii
+        # Norma de consum a masinii (L/100km) — fallback la NORMA, nu la pret.
         vehicul = vehicule_repo.get_default(session, user_id)
-        norma = vehicul.norma_consum if vehicul else PRET_MOTORINA_FALLBACK
+        norma = vehicul.norma_consum if vehicul else NORMA_CONSUM_FALLBACK
         if not norma or norma <= 0:
-            norma = 7.5
+            norma = NORMA_CONSUM_FALLBACK
     finally:
         session.close()
 
@@ -159,7 +166,21 @@ def get_fuel_summary(user_id: int, year: int, month: int) -> dict:
             lei_cu_litri += suma
             nr_bonuri_cu_litri += 1
 
-    # Pret mediu: din bonuri reale daca avem litri, altfel fallback
+    return _summarize(
+        km_business=km_business, norma=norma,
+        total_bonuri_lei=total_bonuri_lei, total_litri=total_litri,
+        lei_cu_litri=lei_cu_litri, nr_bonuri=nr_bonuri,
+        nr_bonuri_cu_litri=nr_bonuri_cu_litri, year=year, month=month,
+    )
+
+
+def _summarize(*, km_business, norma, total_bonuri_lei, total_litri,
+               lei_cu_litri, nr_bonuri, nr_bonuri_cu_litri, year, month) -> dict:
+    """
+    Partea PURĂ a sumarului (fără I/O) — verdictul pe LITRI. Separată ca să fie
+    testabilă cu numere, fără DB. Vezi #5.
+    """
+    # Pret mediu: din bonuri reale daca avem litri, altfel fallback (doar afișaj)
     if total_litri > 0:
         pret_mediu = lei_cu_litri / total_litri
         pret_din_bonuri = True
@@ -167,10 +188,21 @@ def get_fuel_summary(user_id: int, year: int, month: int) -> dict:
         pret_mediu = PRET_MOTORINA_FALLBACK
         pret_din_bonuri = False
 
-    # Plafon deductibil
+    # Plafon deductibil (în LITRI — consum normat)
     plafon_litri = km_business * norma / 100.0
     plafon_lei = plafon_litri * pret_mediu
-    mai_poti_lei = plafon_lei - total_bonuri_lei
+
+    # Verdict pe LITRI (sursă fiscală reală), NU pe lei (lei-ul amesteca banii
+    # tuturor bonurilor cu un pret derivat doar din bonurile cu litri → fals
+    # „depășit" când lipsesc litri pe unele bonuri). #5.
+    mai_poti_litri = plafon_litri - total_litri
+    # depasit: doar pe litri VERIFICAȚI. Fără niciun litru → necunoscut (None):
+    # nu dăm un verdict „în normă" pe date nepuse (bonuri doar în lei).
+    if total_litri > 0:
+        depasit = total_litri > plafon_litri
+    else:
+        depasit = None
+    mai_poti_lei = plafon_lei - total_bonuri_lei  # păstrat, DOAR informativ
 
     return {
         "year": year,
@@ -183,7 +215,9 @@ def get_fuel_summary(user_id: int, year: int, month: int) -> dict:
         "total_litri": total_litri,
         "pret_mediu": pret_mediu,
         "pret_din_bonuri": pret_din_bonuri,
-        "mai_poti_lei": mai_poti_lei,
+        "mai_poti_litri": mai_poti_litri,   # verdict (litri)
+        "depasit": depasit,                 # True/False pe litri verificați, None = necunoscut
+        "mai_poti_lei": mai_poti_lei,       # informativ (afișaj lei)
         "nr_bonuri": nr_bonuri,
         "nr_bonuri_cu_litri": nr_bonuri_cu_litri,
     }
@@ -231,7 +265,10 @@ def format_fuel_section(summary: dict) -> str:
     plafon_litri = summary["plafon_litri"]
     plafon_lei = summary["plafon_lei"]
     total_bonuri = summary["total_bonuri_lei"]
-    mai_poti = summary["mai_poti_lei"]
+    total_litri = summary["total_litri"]
+    depasit = summary["depasit"]
+    mai_poti_litri = summary["mai_poti_litri"]
+    bonuri_fara_litri = summary["nr_bonuri"] - summary["nr_bonuri_cu_litri"]
 
     lines.append("")
     lines.append(f"🛣️ Km business (foaie): *{_fmt_litri(km)} km*")
@@ -239,19 +276,36 @@ def format_fuel_section(summary: dict) -> str:
         f"📊 Plafon deductibil: *{_fmt_litri(plafon_litri)} L* "
         f"(~{_fmt_lei(plafon_lei)} lei)"
     )
-    lines.append(f"🧾 Bonuri încărcate: *{_fmt_lei(total_bonuri)} lei*")
+    lines.append(
+        f"🧾 Bonuri încărcate: *{_fmt_lei(total_bonuri)} lei*"
+        + (f" · *{_fmt_litri(total_litri)} L*" if total_litri > 0 else "")
+    )
     lines.append("━━━━━━━━━━━━━━━━━━━━")
 
-    # Verdictul
-    if mai_poti >= 1:
-        lines.append(f"✅ *Mai poți încărca: ~{_fmt_lei(mai_poti)} lei*")
-    elif mai_poti <= -1:
+    # Verdict pe LITRI (consum normat), NU pe lei. #5
+    if depasit is None:
+        # niciun litru pe bonuri → nu putem verifica plafonul (doar lei)
         lines.append(
-            f"⚠️ *Ai depășit plafonul cu ~{_fmt_lei(abs(mai_poti))} lei*\n"
-            f"_Acea parte nu e acoperită de foaia de parcurs._"
+            "ℹ️ *Scrie litrii pe bonuri* ca să verificăm plafonul "
+            "(deocamdată avem doar suma în lei)."
         )
+    elif depasit:
+        lines.append(
+            f"⚠️ *Ai depășit plafonul cu ~{_fmt_litri(total_litri - plafon_litri)} L*\n"
+            f"_Litrii peste consumul normat nu sunt acoperiți de foaia de parcurs._"
+        )
+    elif mai_poti_litri >= 0.5:
+        lines.append(f"✅ *Mai poți deduce: ~{_fmt_litri(mai_poti_litri)} L*")
     else:
         lines.append("🎯 *Ești exact la plafon.*")
+
+    # Caveat: bonuri fără litri → verdictul acoperă doar litrii verificați
+    if depasit is not None and bonuri_fara_litri > 0:
+        lines.append(
+            f"_ℹ️ {bonuri_fara_litri} "
+            f"{'bon' if bonuri_fara_litri == 1 else 'bonuri'} fără litri — "
+            f"scrie-i ca verdictul să fie complet._"
+        )
 
     # Nota despre pret
     pret = summary["pret_mediu"]

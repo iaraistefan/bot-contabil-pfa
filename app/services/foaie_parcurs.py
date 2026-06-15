@@ -521,10 +521,10 @@ def _foaie_parcurs_banner_data(summary, km_bolt, fuel_summary, vehicul,
     `_show_status` (compute_month_summary + bolt_sync + get_fuel_summary +
     vehicul) → banner = text, aceleași cifre.
 
-    NU pasează `depasit`: verdictul fiscal (`mai_poti_lei`) e calculat pe RON,
-    suspectat fals-pozitiv, și se repară separat în combustibil.py. Fără cheia
-    `depasit`, `render_foaie_parcurs` ascunde COMPLET pill-ul (niciun verdict
-    DEPĂȘIT/ÎN NORMĂ). `combustibil_bonuri` rămâne (e factual, nu verdict).
+    Verdictul `depasit` se calculează acum pe LITRI (#5): True/False pe litrii
+    verificați din bonuri, None (necunoscut, fără litri) → cheia LIPSEȘTE →
+    `render_foaie_parcurs` ascunde pill-ul (nu dăm verdict pe date nepuse).
+    `combustibil_bonuri` rămâne (e factual, nu verdict).
     """
     km_business = summary["km_business"]
     km_poz = max(km_business - km_bolt, 0.0) if km_business > 0 else 0.0
@@ -533,12 +533,14 @@ def _foaie_parcurs_banner_data(summary, km_bolt, fuel_summary, vehicul,
         norma = fuel_summary["norma_consum"]
         plafon_litri = fuel_summary["plafon_litri"]
         bonuri_lei = fuel_summary["total_bonuri_lei"]
+        depasit = fuel_summary["depasit"]      # True/False/None
     else:
         norma = vehicul.norma_consum if vehicul else 7.5
         plafon_litri = km_business * norma / 100.0
         bonuri_lei = 0.0
+        depasit = None
 
-    return {
+    data = {
         "period": f"{LUNI_LONG[month]} {year}",
         "subtitle": "Km business · combustibil normat",
         "km_total": _fmt_km(km_business),
@@ -548,8 +550,12 @@ def _foaie_parcurs_banner_data(summary, km_bolt, fuel_summary, vehicul,
         "norma": f"{norma:g} L/100KM".replace(".", ","),
         "consum_teoretic": f"{plafon_litri:.1f} L".replace(".", ","),
         "combustibil_bonuri": f"{bonuri_lei:,.0f} RON".replace(",", "."),
-        # depasit: OMIS intenționat → pill ascuns (fix fiscal separat, post-UI)
     }
+    # Pill verdict: DOAR când e cunoscut sigur (litri verificați). None → cheia
+    # lipsește → render ascunde pill-ul (verdict pe date incomplete = tăcere). #5
+    if depasit is not None:
+        data["depasit"] = depasit
+    return data
 
 
 async def _show_status(update, context, user_id, via_callback=False):

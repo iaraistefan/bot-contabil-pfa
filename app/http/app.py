@@ -466,9 +466,14 @@ def parcurs_summary(year: int, month: int):
             "total_litri": fuel["total_litri"],
             "pret_mediu": fuel["pret_mediu"],
             "pret_din_bonuri": fuel["pret_din_bonuri"],
+            # Verdict pe LITRI (#5): depasit True/False/None(necunoscut),
+            # mai_poti_litri = câți L mai poate deduce. mai_poti_lei informativ.
+            "depasit": fuel["depasit"],
+            "mai_poti_litri": fuel["mai_poti_litri"],
             "mai_poti_lei": fuel["mai_poti_lei"],
             "norma_consum": fuel["norma_consum"],
             "nr_bonuri": fuel["nr_bonuri"],
+            "nr_bonuri_cu_litri": fuel["nr_bonuri_cu_litri"],
         }
     except Exception as e:
         logger.error(f"API parcurs fuel error: {e}")
