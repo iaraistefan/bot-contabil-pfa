@@ -132,10 +132,11 @@ def check_and_remind(bot_token: str) -> None:
 def check_fiscal_deadlines(bot_token: str) -> None:
     """Alertă termene fiscale — ziua 20 a fiecărei luni."""
     from db import get_session
-    from app.models import User, Transaction
+    from app.models import User
     from app.domain.fiscal_calendar import format_fiscal_message
     from app.domain.fiscal_profile import from_user_dict
     from app.repositories import users as users_repo
+    from app.services import tax_engine
 
     now = datetime.now(ROMANIA_TZ)
     year, month = now.year, now.month
@@ -146,17 +147,10 @@ def check_fiscal_deadlines(bot_token: str) -> None:
         for user in users:
             if not user.telegram_id:
                 continue
-            has_bolt = (
-                session.query(Transaction)
-                .filter(
-                    Transaction.user_id == user.id,
-                    Transaction.period_year == year,
-                    Transaction.period_month == month,
-                    Transaction.vat_treatment == "REVERSE_CHARGE",
-                    Transaction.tx_type == "EXPENSE",
-                )
-                .count()
-            ) > 0
+            # Fiscal #4: vat_out_total>0 (sursă unică), NU vechiul filtru
+            # (EXPENSE+REVERSE_CHARGE) → mereu False → reminder „nu se depun".
+            has_bolt = tax_engine.has_taxable_bolt_invoice(
+                session, user_id=user.id, year=year, month=month)
             # Cota nerezident D100 din profil (None = neconfigurat → fără 2%
             # presupus în reminder). #3 — nu trimitem „D100 2%" unui scutit/NULL.
             profile = users_repo.get_profile_dict(session, user.id) or {}

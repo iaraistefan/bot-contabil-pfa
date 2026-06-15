@@ -1684,18 +1684,11 @@ async def execute_fiscal(query, context, user_id, year, month):
     session = get_session()
     cota_nerez = None
     try:
-        from app.models import Transaction
-        has_bolt = (
-            session.query(Transaction)
-            .filter(
-                Transaction.user_id == user_id,
-                Transaction.period_year == year,
-                Transaction.period_month == month,
-                Transaction.vat_treatment == "REVERSE_CHARGE",
-                Transaction.tx_type == "EXPENSE",
-            )
-            .count()
-        ) > 0
+        # Fiscal #4: semnalul „are factură Bolt taxabilă" = vat_out_total>0
+        # (sursă unică, ca web/banner), NU vechiul filtru (EXPENSE+REVERSE_CHARGE)
+        # care era relicvă de model vechi → mereu False → calendar „nu se depun".
+        has_bolt = tax_engine.has_taxable_bolt_invoice(
+            session, user_id=user_id, year=year, month=month)
         # Cota nerezident D100 din profil (None = neconfigurat). #3.
         from app.domain.fiscal_profile import from_user_dict
         profile = users_repo.get_profile_dict(session, user_id) or {}

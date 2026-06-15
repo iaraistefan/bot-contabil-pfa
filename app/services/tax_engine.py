@@ -188,6 +188,33 @@ def compute_period(
     }
 
 
+def has_taxable_bolt_invoice(
+    session: Session, *, user_id: int, year: int, month: int
+) -> bool:
+    """
+    True dacă luna are o factură de comision Bolt taxabilă (reverse charge) —
+    semnalul care declanșează obligațiile lunare D301/D390/D100.
+
+    SURSĂ UNICĂ: `compute_period(...)["vat_out_total"] > 0` — EXACT semnalul
+    folosit deja de web (`/api/v1/obligatii`) și de banner-ul TVA & Declarații.
+    Refolosim compute_period (NU reimplementăm suma) ca să nu poată diverge.
+    vat_out_total sumează tx_type 'VAT_OUT' (reverse charge din factura comision,
+    `posting._post_factura_comision`).
+
+    ⚠️ Fiscal #4: înlocuiește filtrul vechi `(EXPENSE + REVERSE_CHARGE)` — relicvă
+    a modelului de postare de dinainte de vat-engine. După refactor, factura se
+    stochează ca VAT_OUT (nu EXPENSE), iar comisionul din raport ca EXPENSE
+    'AUTO_FROM_REPORT' (nu REVERSE_CHARGE) → combinația veche nu se mai potrivea
+    cu niciun tx → has_bolt era structural mereu False.
+
+    GRANIȚĂ (documentată, nerezolvată în #4): comisionul DOAR din raport Bolt
+    (EXPENSE 'AUTO_FROM_REPORT', fără factură formală) nu produce VAT_OUT → False.
+    Corect pe modelul actual (reverse charge se naște din factura formală).
+    """
+    totals = compute_period(session, user_id=user_id, year=year, month=month)
+    return float(totals.get("vat_out_total") or 0.0) > 0
+
+
 # Cache in-memory pentru compute_d212_anual, validat prin FINGERPRINT (versiunea
 # datelor). Bot + scheduler + Flask sunt thread-uri in ACELASI proces -> dict
 # partajat + lock. ZERO stale: fingerprint-ul = starea datelor; orice add/delete/
