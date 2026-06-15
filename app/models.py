@@ -43,10 +43,14 @@ class User(Base):
     # Valori: NEPLATITOR / PLATITOR_21 / SPECIAL_INTRACOM
     regim_impunere = Column(String(20), nullable=True)
     # Valori: SISTEM_REAL / NORMA_VENIT / MICRO_1 / MICRO_3
+    # [DEPRECAT — vezi regim_nerezident_bolt] Pastrat ca fallback de recuperare
+    # (NU sters): captarea Bolt din #3 a scris aici; backfill non-distructiv in _bolt.
     regim_nerezident = Column(String(20), nullable=True)
-    # Regim impozit nerezident, per-platforma (enum RegimNerezident):
-    # BOLT_CU_CRF (2%) / BOLT_FARA_CRF (16%) active; UBER_CU_CRF (0%) /
-    # UBER_FARA_CRF (16%) definite, nu in UI inca. NULL = neconfigurat (vezi #3).
+    # Regim impozit nerezident PER-PLATFORMA (suport Uber). enum RegimNerezident:
+    # _bolt: BOLT_CU_CRF (2%) / BOLT_FARA_CRF (16%); _uber: UBER_CU_CRF (0%) /
+    # UBER_FARA_CRF (16%). NULL = neconfigurat (NU presupunem cota, vezi #3).
+    regim_nerezident_bolt = Column(String(20), nullable=True)
+    regim_nerezident_uber = Column(String(20), nullable=True)
 
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)

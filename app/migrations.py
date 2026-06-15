@@ -346,6 +346,27 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_nerezident VARCHAR(20)",
         ],
     },
+    {
+        "id": "014_regim_nerezident_per_platforma",
+        "description": (
+            "Suport Uber (sub-pas A): regim nerezident PER-PLATFORMA "
+            "(regim_nerezident_bolt/_uber). Backfill NE-DISTRUCTIV: copiaza "
+            "alegerea Bolt existenta in _bolt DOAR unde _bolt e NULL si vechiul "
+            "e setat; vechiul regim_nerezident RAMANE (deprecat, fallback)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_nerezident_bolt VARCHAR(20)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_nerezident_uber VARCHAR(20)",
+            # Backfill ne-distructiv + idempotent (doar unde _bolt inca NULL).
+            # Valorile existente sunt deja BOLT_* (capturate la #3 sub-pas E).
+            """
+            UPDATE users
+            SET regim_nerezident_bolt = regim_nerezident
+            WHERE regim_nerezident_bolt IS NULL
+              AND regim_nerezident IS NOT NULL
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

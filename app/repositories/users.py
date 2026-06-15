@@ -64,7 +64,9 @@ def update_profile(
     cnp: Optional[str] = None,
     regim_tva: Optional[str] = None,
     regim_impunere: Optional[str] = None,
-    regim_nerezident: Optional[str] = None,
+    regim_nerezident: Optional[str] = None,           # DEPRECAT (fallback) — vezi _bolt
+    regim_nerezident_bolt: Optional[str] = None,
+    regim_nerezident_uber: Optional[str] = None,
     caen_principal: Optional[str] = None,
     activity_code: Optional[str] = None,
     judet: Optional[str] = None,
@@ -102,6 +104,10 @@ def update_profile(
         user.regim_impunere = regim_impunere
     if regim_nerezident is not None:
         user.regim_nerezident = regim_nerezident
+    if regim_nerezident_bolt is not None:
+        user.regim_nerezident_bolt = regim_nerezident_bolt
+    if regim_nerezident_uber is not None:
+        user.regim_nerezident_uber = regim_nerezident_uber
     if caen_principal is not None:
         user.caen_principal = caen_principal
     if activity_code is not None:
@@ -234,7 +240,9 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "cnp": user.cnp,
         "regim_tva": user.regim_tva,
         "regim_impunere": user.regim_impunere,
-        "regim_nerezident": user.regim_nerezident,
+        "regim_nerezident": user.regim_nerezident,           # DEPRECAT (fallback)
+        "regim_nerezident_bolt": user.regim_nerezident_bolt,
+        "regim_nerezident_uber": user.regim_nerezident_uber,
         "caen_principal": user.caen_principal,
         "activity_code": user.activity_code,
         "judet": user.judet,
@@ -310,14 +318,15 @@ VALID_REGIMURI_IMPUNERE = {
     "SISTEM_REAL", "NORMA_VENIT", "MICRO_1", "MICRO_3"
 }
 
-# Regim impozit nerezident — DOAR codurile ACTIVE in UI (Bolt). Codurile Uber
-# (0% / 16%) sunt definite in enum RegimNerezident pentru extensibilitate, dar NU
-# se accepta inca la input (nu exista UI Uber) — altfel un request ar putea seta
-# 0% pe un user Bolt (subdeclarare). Cand adaugam Uber, le mutam aici.
-# NU include o valoare "default": absenta (None) = neconfigurat, nu o rata presupusa.
-VALID_REGIMURI_NEREZIDENT = {
-    "BOLT_CU_CRF", "BOLT_FARA_CRF"
-}
+# Regim impozit nerezident PER-PLATFORMA — seturi SEPARATE (anti-cross-contaminare):
+# captarea Bolt accepta DOAR codurile Bolt, captarea Uber DOAR Uber → un user Bolt
+# nu poate ajunge la 0% (subdeclarare), un user Uber nu poate ajunge fals la 2%.
+# Enum RegimNerezident = sursa unica (4 valori + COTA_NEREZIDENT); seturile gateuiesc
+# per camp. NU include "default": absenta (None) = neconfigurat, nu o rata presupusa.
+VALID_REGIMURI_NEREZIDENT_BOLT = {"BOLT_CU_CRF", "BOLT_FARA_CRF"}
+VALID_REGIMURI_NEREZIDENT_UBER = {"UBER_CU_CRF", "UBER_FARA_CRF"}
+# Alias backward-compat (= Bolt) pentru is_valid_regim_nerezident existent.
+VALID_REGIMURI_NEREZIDENT = VALID_REGIMURI_NEREZIDENT_BOLT
 
 VALID_ACTIVITY_CODES = {
     "ridesharing", "it_freelance", "ecommerce", "consulting",
@@ -339,7 +348,16 @@ def is_valid_regim_impunere(value: str) -> bool:
 
 
 def is_valid_regim_nerezident(value: str) -> bool:
+    # Backward-compat (= Bolt). Capturile noi folosesc _bolt / _uber explicit.
     return value in VALID_REGIMURI_NEREZIDENT
+
+
+def is_valid_regim_nerezident_bolt(value: str) -> bool:
+    return value in VALID_REGIMURI_NEREZIDENT_BOLT
+
+
+def is_valid_regim_nerezident_uber(value: str) -> bool:
+    return value in VALID_REGIMURI_NEREZIDENT_UBER
 
 
 def is_valid_activity_code(value: str) -> bool:

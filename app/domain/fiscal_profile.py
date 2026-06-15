@@ -185,8 +185,11 @@ class FiscalProfile:
     regim_tva: RegimTVA
     activity_code: str
 
-    # Regim nerezident D100 — Optional: None = neconfigurat (NU presupunem rată)
-    regim_nerezident: Optional[RegimNerezident] = None
+    # Regim nerezident D100 PER-PLATFORMĂ (suport Uber). None = neconfigurat
+    # (NU presupunem rată). Bolt: 2%/16%; Uber: 0%/16%. Proprietatea de
+    # backward-compat `regim_nerezident` (= _bolt) e definită mai jos.
+    regim_nerezident_bolt: Optional[RegimNerezident] = None
+    regim_nerezident_uber: Optional[RegimNerezident] = None
 
     # === Date derivate (computed la __post_init__) ===
     income_tax_rate: int = 0           # 10% / 16% / 1% / 3%
@@ -205,10 +208,12 @@ class FiscalProfile:
     is_vat_payer: bool = False
     vat_standard_pct: int = 0          # 0 dacă neplătitor, 21 dacă plătitor
 
-    # === Nerezident D100 (derivat din regim_nerezident) ===
-    # None = neconfigurat → consumatorii afișează un prompt de configurare,
-    # NU o cifră (vezi #3). 0.0 / 0.02 / 0.16 dacă e setat.
-    cota_nerezident: Optional[float] = None
+    # === Nerezident D100 (derivat, per-platformă) ===
+    # None = neconfigurat → consumatorii afișează prompt de configurare, NU o
+    # cifră (vezi #3). 0.0 / 0.02 / 0.16 dacă e setat. Aliasul `cota_nerezident`
+    # (= _bolt, backward-compat pentru D100 single) e proprietate, mai jos.
+    cota_nerezident_bolt: Optional[float] = None
+    cota_nerezident_uber: Optional[float] = None
 
     def __post_init__(self):
         """Calculează atributele derivate din intrările date."""
@@ -328,17 +333,43 @@ class FiscalProfile:
 
     def _compute_nerezident(self):
         """
-        Derivă cota impozitului nerezident din regim_nerezident.
+        Derivă cota impozitului nerezident PER-PLATFORMĂ din regim_nerezident_*.
 
-        IMPORTANT: NU există fallback la o rată. Dacă regim_nerezident e None
-        (neconfigurat) → cota_nerezident rămâne None, iar consumatorii (banner,
-        web, fisa D100) afișează un prompt de configurare în loc de o cifră
+        IMPORTANT: NU există fallback la o rată. Regim None (neconfigurat) → cotă
+        None, iar consumatorii afișează prompt de configurare în loc de o cifră
         posibil greșită (date la ANAF — vezi fiscal #3).
         """
-        if self.regim_nerezident is None:
-            self.cota_nerezident = None
-        else:
-            self.cota_nerezident = COTA_NEREZIDENT.get(self.regim_nerezident)
+        self.cota_nerezident_bolt = (
+            COTA_NEREZIDENT.get(self.regim_nerezident_bolt)
+            if self.regim_nerezident_bolt is not None else None
+        )
+        self.cota_nerezident_uber = (
+            COTA_NEREZIDENT.get(self.regim_nerezident_uber)
+            if self.regim_nerezident_uber is not None else None
+        )
+
+    # === Backward-compat: `regim_nerezident` / `cota_nerezident` = Bolt ===
+    # D100 single (pre-Uber) consumă `cota_nerezident`; rămâne identic = Bolt.
+    @property
+    def regim_nerezident(self) -> Optional[RegimNerezident]:
+        return self.regim_nerezident_bolt
+
+    @property
+    def cota_nerezident(self) -> Optional[float]:
+        return self.cota_nerezident_bolt
+
+    def cota_nerezident_for(self, brand: Optional[str]) -> Optional[float]:
+        """
+        Cota nerezident pentru platforma detectată (`vat_engine.detect_brand` →
+        'Bolt' / 'Uber' / 'Uber Eats'). Platformă necunoscută → None (fără cotă
+        presupusă). Folosit de split-ul D100 per-platformă (sub-pas B).
+        """
+        b = (brand or "").strip().lower()
+        if b.startswith("uber"):
+            return self.cota_nerezident_uber
+        if b == "bolt":
+            return self.cota_nerezident_bolt
+        return None
 
     # ========================================================
     #          API PUBLICĂ — Întrebări care primesc răspuns
@@ -485,10 +516,19 @@ class FiscalProfile:
             "cass_threshold_ron": self.cass_threshold_ron,
             "is_vat_payer": self.is_vat_payer,
             "vat_standard_pct": self.vat_standard_pct,
+            # Backward-compat (= Bolt) + per-platformă explicit (suport Uber).
             "regim_nerezident": (
                 self.regim_nerezident.value if self.regim_nerezident else None
             ),
             "cota_nerezident": self.cota_nerezident,
+            "regim_nerezident_bolt": (
+                self.regim_nerezident_bolt.value if self.regim_nerezident_bolt else None
+            ),
+            "cota_nerezident_bolt": self.cota_nerezident_bolt,
+            "regim_nerezident_uber": (
+                self.regim_nerezident_uber.value if self.regim_nerezident_uber else None
+            ),
+            "cota_nerezident_uber": self.cota_nerezident_uber,
         }
 
 
@@ -539,26 +579,32 @@ def from_user_dict(profile_dict: Optional[Dict[str, Any]]) -> FiscalProfile:
     # Activity code (string, nu enum)
     activity_code = profile_dict.get("activity_code") or "generic"
 
-    # Regim nerezident — FĂRĂ fallback la o rată. Absent/invalid → None
-    # (neconfigurat), NU o cotă presupusă. Asta e miezul fixului #3.
-    regim_nerez_str = profile_dict.get("regim_nerezident")
-    regim_nerezident = None
-    if regim_nerez_str:
+    # Regim nerezident PER-PLATFORMĂ — FĂRĂ fallback la o rată (absent/invalid →
+    # None, miezul #3). Bolt citește câmpul nou `_bolt`, cu fallback la vechiul
+    # `regim_nerezident` (deprecat) pentru userii dinainte de backfill / capturați
+    # pe câmpul vechi → nu-și pierd alegerea D100.
+    def _parse_regim(s):
+        if not s:
+            return None
         try:
-            regim_nerezident = RegimNerezident(regim_nerez_str)
+            return RegimNerezident(s)
         except ValueError:
-            logger.warning(
-                f"Regim nerezident invalid '{regim_nerez_str}' — None "
-                f"(neconfigurat, FĂRĂ rată presupusă)"
-            )
-            regim_nerezident = None
+            logger.warning(f"Regim nerezident invalid '{s}' — None (FĂRĂ rată)")
+            return None
+
+    regim_bolt = _parse_regim(
+        profile_dict.get("regim_nerezident_bolt")
+        or profile_dict.get("regim_nerezident")
+    )
+    regim_uber = _parse_regim(profile_dict.get("regim_nerezident_uber"))
 
     return FiscalProfile(
         forma_juridica=forma,
         regim_impunere=regim_impunere,
         regim_tva=regim_tva,
         activity_code=activity_code,
-        regim_nerezident=regim_nerezident,
+        regim_nerezident_bolt=regim_bolt,
+        regim_nerezident_uber=regim_uber,
     )
 
 
