@@ -918,14 +918,26 @@ SPECIAL_NOTES = [
 
 
 def get_monthly_alerts(
-    year: int, month: int, has_bolt_invoice: bool = False
+    year: int, month: int, has_bolt_invoice: bool = False,
+    cota_nerezident: Optional[float] = None,
 ) -> List[dict]:
-    """[Backward-compat] Returnează alertele pentru luna dată."""
+    """[Backward-compat] Returnează alertele pentru luna dată.
+
+    D100 (impozit nerezident) depinde de regimul nerezident (CRF — fiscal #3):
+      - cota > 0 (CRF_2PCT/FARA_CRF) → D100 de depus, procent DINAMIC;
+      - cota == 0 (CRF_SCUTIT)       → D100 OMIS (nu se depune; D207 anual acoperă);
+      - cota None (neconfigurat)     → D100 ca nudge de configurare, FĂRĂ 2% presupus.
+    """
     alerts = []
     today = date.today()
 
     for decl in MONTHLY_DEADLINES:
         if not has_bolt_invoice:
+            continue
+
+        is_d100 = decl["code"] == "D100 poz. 634"
+        # Scutit (CRF 0%): D100 nu se depune lunar — îl omitem (D207 anual rămâne).
+        if is_d100 and cota_nerezident is not None and cota_nerezident <= 0:
             continue
 
         # Termen e în luna URMĂTOARE (deadline 25)
@@ -948,14 +960,34 @@ def get_monthly_alerts(
         else:
             status = "ok"
 
-        alerts.append({
+        entry = {
             **decl,
             "deadline": deadline.strftime("%d.%m.%Y"),
             "days_left": days_left,
             "status": status,
             "year": year,
             "month": month,
-        })
+        }
+
+        # D100: nume/descriere reflectă cota din profil (sau prompt de setare).
+        if is_d100:
+            if cota_nerezident is None:
+                entry["name"] = "Impozit nerezident — regim nesetat"
+                entry["description"] = (
+                    "Setează regimul nerezident (Setări / /start) ca să calculăm "
+                    "D100 corect. Cu certificat de rezidență fiscală (CRF) → 0% "
+                    "(depui D207, nu D100); 2% interpretare conservatoare; fără "
+                    "CRF → 16%. Până atunci NU afișăm o sumă (ar putea fi greșită)."
+                )
+            else:
+                pct = round(cota_nerezident * 100)
+                entry["name"] = f"Impozit nerezidenți comisioane ({pct}% Bolt)"
+                entry["description"] = (
+                    f"Conform CDI România-Estonia, virezi {pct}% din comisionul "
+                    f"Bolt prin D100 poz. 634. Baza: valoarea facturilor Bolt × {pct}%."
+                )
+
+        alerts.append(entry)
 
     return alerts
 
@@ -996,9 +1028,13 @@ def format_fiscal_message(
     year: int,
     month: int,
     has_bolt_invoice: bool = False,
+    cota_nerezident: Optional[float] = None,
 ) -> str:
     """
     [Backward-compat] Formatează mesajul cu obligațiile fiscale (API vechi).
+
+    `cota_nerezident` (fiscal #3) controlează D100: >0 de depus (procent dinamic),
+    0 scutit (omis, D207 anual), None nesetat (nudge de configurare).
 
     NOTĂ: Pentru calendar personalizat per user, folosește
     format_calendar_telegram() (API nou v2).
@@ -1010,7 +1046,8 @@ def format_fiscal_message(
         "",
     ]
 
-    monthly = get_monthly_alerts(year, month, has_bolt_invoice=has_bolt_invoice)
+    monthly = get_monthly_alerts(year, month, has_bolt_invoice=has_bolt_invoice,
+                                 cota_nerezident=cota_nerezident)
     if monthly:
         lines.append("📋 *DECLARAȚII LUNARE (până pe 25 a lunii următoare):*")
         for a in monthly:

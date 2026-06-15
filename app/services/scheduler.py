@@ -134,6 +134,8 @@ def check_fiscal_deadlines(bot_token: str) -> None:
     from db import get_session
     from app.models import User, Transaction
     from app.domain.fiscal_calendar import format_fiscal_message
+    from app.domain.fiscal_profile import from_user_dict
+    from app.repositories import users as users_repo
 
     now = datetime.now(ROMANIA_TZ)
     year, month = now.year, now.month
@@ -155,7 +157,12 @@ def check_fiscal_deadlines(bot_token: str) -> None:
                 )
                 .count()
             ) > 0
-            msg = format_fiscal_message(year, month, has_bolt_invoice=has_bolt)
+            # Cota nerezident D100 din profil (None = neconfigurat → fără 2%
+            # presupus în reminder). #3 — nu trimitem „D100 2%" unui scutit/NULL.
+            profile = users_repo.get_profile_dict(session, user.id) or {}
+            cota_nerez = from_user_dict(profile).cota_nerezident
+            msg = format_fiscal_message(year, month, has_bolt_invoice=has_bolt,
+                                        cota_nerezident=cota_nerez)
             _send_telegram_message(bot_token, user.telegram_id, msg)
             logger.info(f"Fiscal deadline alert sent to user_id={user.id}")
     except Exception as e:

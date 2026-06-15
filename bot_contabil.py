@@ -1355,10 +1355,15 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
     'Nimic de depus' FĂRĂ butoane — nu oferim fise care ar răspunde 'nu se depune'.
     """
     session = get_session()
+    cota_nerez = None
     try:
         totals = tax_engine.compute_period(
             session, user_id=user_id, year=year, month=month
         )
+        # Cota nerezident D100 din profil (None = neconfigurat). #3.
+        from app.domain.fiscal_profile import from_user_dict
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        cota_nerez = from_user_dict(profile).cota_nerezident
     except Exception as e:
         logger.error(f"execute_tva_declaratii error: {e}")
         await query.edit_message_text("⚠️ N-am putut calcula TVA & Declarații. Încearcă din nou.")
@@ -1374,29 +1379,51 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         baza = vat_out / cota
         # format RO (oglindă fmt_ron din contai_banners; evită importul PIL în bot)
         baza_ro = f"{baza:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
-        data = {
-            "title": "De depus",
-            "subtitle": f"BAZĂ {baza_ro} LEI · TVA {tva_pct}%",
-            "rows": [
-                {"code": "D301", "name": "Decont special TVA"},
-                {"code": "D390", "name": "Declarație recapitulativă VIES"},
-                {"code": "D100", "name": "Impozit nerezident · 2%", "warn": True},
-            ],
-            "status": "de depus în SPV",
-        }
-        rm = InlineKeyboardMarkup([
+
+        # D100 — rând + buton + notă după regimul nerezident (#3). D301/D390
+        # depind doar de vat_out (neschimbate); doar D100 variază cu cota.
+        rows = [
+            {"code": "D301", "name": "Decont special TVA"},
+            {"code": "D390", "name": "Declarație recapitulativă VIES"},
+        ]
+        buttons = [
             [InlineKeyboardButton(
                 "📋 Fisa completare D301", callback_data=f"d301|{year}|{month}")],
             [InlineKeyboardButton(
                 "🇪🇺 Fisa D390 (VIES)", callback_data=f"d390|{year}|{month}")],
-            [InlineKeyboardButton(
-                "🌍 Fisa D100 (nerezident)", callback_data=f"d100|{year}|{month}")],
-        ])
+        ]
+        if cota_nerez is None:
+            # Neconfigurat → fără cifră presupusă; butonul duce la promptul de setare.
+            rows.append({"code": "D100", "name": "Nerezident · setează regim", "warn": True})
+            buttons.append([InlineKeyboardButton(
+                "⚙️ D100 — setează regim nerezident", callback_data=f"d100|{year}|{month}")])
+            d100_nota = ("⚙️ *D100*: regimul nerezident nu e setat — apasă fișa D100 "
+                         "ca să-l configurezi. Nu afișăm o sumă până nu alegi.")
+        elif cota_nerez <= 0:
+            # Scutit (CRF 0%) → D100 nu se depune; D207 anual. Fără buton D100.
+            rows.append({"code": "D100", "name": "Scutit (CRF) · declari D207"})
+            d100_nota = ("✅ *D100*: scutit (CRF, 0%) — nu se depune lunar. "
+                         "Venitul scutit se declară anual în *D207*.")
+        else:
+            nerez_pct = round(cota_nerez * 100)
+            rows.append({"code": "D100", "name": f"Impozit nerezident · {nerez_pct}%", "warn": True})
+            buttons.append([InlineKeyboardButton(
+                "🌍 Fisa D100 (nerezident)", callback_data=f"d100|{year}|{month}")])
+            d100_nota = None
+
+        data = {
+            "title": "De depus",
+            "subtitle": f"BAZĂ {baza_ro} LEI · TVA {tva_pct}%",
+            "rows": rows,
+            "status": "de depus în SPV",
+        }
+        rm = InlineKeyboardMarkup(buttons)
         text = (
             f"🧾 *TVA & Declarații · {luna_ro(month)} {year}*\n"
             f"Bază facturi Bolt: *{baza:.2f} RON* · TVA {tva_pct}%\n"
             f"TVA colectat D301: *{vat_out:.2f} RON*\n\n"
             f"Apasă o fișă pentru ghid de completare + XML (DUKIntegrator)."
+            + (f"\n\n{d100_nota}" if d100_nota else "")
         )
     else:
         data = {
@@ -1655,6 +1682,7 @@ def _calendar_banner_data(alerts, year, month):
 
 async def execute_fiscal(query, context, user_id, year, month):
     session = get_session()
+    cota_nerez = None
     try:
         from app.models import Transaction
         has_bolt = (
@@ -1668,15 +1696,21 @@ async def execute_fiscal(query, context, user_id, year, month):
             )
             .count()
         ) > 0
+        # Cota nerezident D100 din profil (None = neconfigurat). #3.
+        from app.domain.fiscal_profile import from_user_dict
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        cota_nerez = from_user_dict(profile).cota_nerezident
     except Exception:
         has_bolt = False
     finally:
         session.close()
 
-    msg = fiscal_calendar.format_fiscal_message(year, month, has_bolt_invoice=has_bolt)
+    msg = fiscal_calendar.format_fiscal_message(year, month, has_bolt_invoice=has_bolt,
+                                                cota_nerezident=cota_nerez)
     # Banner hero TOP-4 obligații urgente + textul complet dedesubt. Sursă = aceeași
     # ca textul (get_monthly_alerts + get_annual_alerts filtrate -30..60, ca format_*).
-    alerts = fiscal_calendar.get_monthly_alerts(year, month, has_bolt_invoice=has_bolt) + [
+    alerts = fiscal_calendar.get_monthly_alerts(year, month, has_bolt_invoice=has_bolt,
+                                                cota_nerezident=cota_nerez) + [
         a for a in fiscal_calendar.get_annual_alerts(year) if -30 <= a["days_left"] <= 60
     ]
     if alerts:
