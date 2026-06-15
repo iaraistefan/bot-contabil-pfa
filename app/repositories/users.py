@@ -310,10 +310,13 @@ VALID_REGIMURI_IMPUNERE = {
     "SISTEM_REAL", "NORMA_VENIT", "MICRO_1", "MICRO_3"
 }
 
-# Regim impozit nerezident D100 (comision Bolt). NU include o valoare "default":
-# absenta (None) inseamna neconfigurat, nu o rata presupusa.
+# Regim impozit nerezident — DOAR codurile ACTIVE in UI (Bolt). Codurile Uber
+# (0% / 16%) sunt definite in enum RegimNerezident pentru extensibilitate, dar NU
+# se accepta inca la input (nu exista UI Uber) — altfel un request ar putea seta
+# 0% pe un user Bolt (subdeclarare). Cand adaugam Uber, le mutam aici.
+# NU include o valoare "default": absenta (None) = neconfigurat, nu o rata presupusa.
 VALID_REGIMURI_NEREZIDENT = {
-    "CRF_SCUTIT", "CRF_2PCT", "FARA_CRF"
+    "BOLT_CU_CRF", "BOLT_FARA_CRF"
 }
 
 VALID_ACTIVITY_CODES = {

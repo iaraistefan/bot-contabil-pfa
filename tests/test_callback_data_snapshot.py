@@ -43,7 +43,8 @@ def _extract_callbacks():
     return cbs
 
 
-# Snapshot ÎNGHEȚAT (104 literali; +tvadecl = buton-poartă ecran TVA & Declarații).
+# Snapshot ÎNGHEȚAT (105 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
+# +onb|nerezident = captare regim nerezident D100, fiscal #3 sub-pas E).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -64,6 +65,7 @@ EXPECTED_CALLBACKS = {
     "onb|cui_save_raw", "onb|done", "onb|finalize|restart", "onb|finalize|yes",
     "onb|fix|activity", "onb|fix|back", "onb|fix|forma", "onb|fix|impunere",
     "onb|fix|menu", "onb|fix|tva", "onb|forma|{f['code']}", "onb|impunere|{r['code']}",
+    "onb|nerezident|{r['code']}",
     "onb|skip|{skip_target}", "onb|tva|{r['code']}",
     "parcurs|delok|{trip_id}", "parcurs|excel|{year}|{month}",
     "parcurs|jurnal|{year}|{month}", "parcurs|jurnal|{y}|{m}", "parcurs|luni",

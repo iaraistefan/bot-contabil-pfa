@@ -3,9 +3,9 @@ Fiscal #3 — SUB-PAS B: calcul D100 rate-aware (cota din profil, nu 2% fix).
 
 Acoperă cele 4 ramuri pe lanțul declaratii_service.genereaza("D100", ...,
 cota_nerezident=...) + garda dublă care face IMPOSIBIL un XML la cota 0/None:
-  - 0.02 (CRF_2PCT) → XML, suma = round(baza×0.02)  [round-trip cu vechiul 2%]
-  - 0.16 (FARA_CRF) → XML, suma = round(baza×0.16)
-  - 0.0  (CRF_SCUTIT) → generat=False, motiv "scutit", NICIUN XML (→ D207)
+  - 0.02 (Bolt cu certificat)   → XML, suma = round(baza×0.02)  [round-trip 2%]
+  - 0.16 (Bolt fără certificat) → XML, suma = round(baza×0.16)
+  - 0.0  (scutit, ex. Uber)     → generat=False, motiv "scutit", NICIUN XML (→ D207)
   - None (neconfigurat) → generat=False, motiv "neconfigurat", NICIUN XML
 
 ATENȚIE rotunjire: D100 e în lei întregi. 657×0.02 = 13,14 → 13;

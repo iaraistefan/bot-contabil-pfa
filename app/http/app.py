@@ -846,6 +846,8 @@ def setari_get():
             "firma_nume": profile.get("firma_nume") or "",
             "firma_cui": profile.get("firma_cui") or "",
             "cod_special_tva": profile.get("cod_special_tva") or "",
+            # Regim nerezident D100 (#3): "" = neconfigurat → fără preselecție în UI
+            "regim_nerezident": profile.get("regim_nerezident") or "",
             "integrari": integrari,
         })
     except Exception as e:
@@ -865,6 +867,7 @@ def setari_post():
     body = request.get_json(silent=True) or {}
     banca = body.get("banca")
     iban = body.get("iban")
+    regim_nerezident = body.get("regim_nerezident")
 
     # validare minimala IBAN (RO + 22 caractere alfanumerice = 24 total)
     if iban:
@@ -876,6 +879,18 @@ def setari_post():
                            "RO + 22 caractere (24 in total).",
             }), 400
 
+    # Regim nerezident D100 (#3): cod valid sau gol. Gol → nu schimbăm (None);
+    # un cod nevalid e respins (nu salvăm o valoare care ar da o rată greșită).
+    if regim_nerezident:
+        if not users_repo.is_valid_regim_nerezident(regim_nerezident):
+            return jsonify({
+                "error": "invalid_regim_nerezident",
+                "message": "Regim nerezident invalid. Alege una dintre cele 3 "
+                           "opțiuni (CRF 0% / CRF 2% / fără CRF 16%).",
+            }), 400
+    else:
+        regim_nerezident = None  # gol → lasă neschimbat
+
     session = get_session()
     try:
         user = users_repo.get_by_id(session, user_id)
@@ -885,6 +900,7 @@ def setari_post():
             session, user,
             banca=(banca if banca is not None else None),
             iban=(iban if iban is not None else None),
+            regim_nerezident=regim_nerezident,  # None → neschimbat (vezi update_profile)
         )
         session.commit()
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -892,6 +908,7 @@ def setari_post():
             "ok": True,
             "banca": profile.get("banca") or "",
             "iban": profile.get("iban") or "",
+            "regim_nerezident": profile.get("regim_nerezident") or "",
         })
     except Exception as e:
         session.rollback()

@@ -758,6 +758,16 @@
                 Salvează
               </button>
             </div>
+            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Regim impozit nerezident (Bolt)</div>
+              <div class="hint" style="margin-bottom:12px">Impozitul pe comisionul reținut de Bolt (Bolt Operations OÜ, Estonia). Conform Convenției RO-Estonia (Art. 12), cota depinde de certificatul de rezidență fiscală al Bolt. Certificatul e al firmei Bolt, valabil pe an — nu îl ai? Îl ceri de la suportul Bolt. Verifică anul înainte de depunere.</div>
+              <select class="set-inp" id="set-nerezident" onchange="salveazaRegimNerezident()">
+                <option value="">— alege regimul —</option>
+                <option value="BOLT_CU_CRF">Am certificatul Bolt → 2% (D100 lunar + D207 anual)</option>
+                <option value="BOLT_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
+              </select>
+              <div id="set-nerez-msg" class="hint" style="margin-top:8px;min-height:18px"></div>
+            </div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Integrări</div></div>
@@ -1636,9 +1646,36 @@
       const iban=document.getElementById("set-iban");
       if(banca) banca.value = s.banca||"";
       if(iban) iban.value = s.iban||"";
+      const nz=document.getElementById("set-nerezident");
+      if(nz) nz.value = s.regim_nerezident||"";   // "" = neconfigurat → fără preselecție
       renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
   }
+  async function salveazaRegimNerezident(){
+    const sel=document.getElementById("set-nerezident");
+    const msg=document.getElementById("set-nerez-msg");
+    const val=(sel||{}).value||"";
+    if(!val){ if(msg) msg.textContent=""; return; }   // placeholder → nu salvăm nimic
+    if(msg){ msg.style.color="var(--muted)"; msg.textContent="Se salvează…"; }
+    try{
+      const r=await authFetch("/api/v1/setari",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({regim_nerezident:val}),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){
+        if(msg){ msg.style.color="var(--pos-br)"; msg.textContent="✓ Salvat. D100 se calculează după acest regim."; }
+        // invalidează cache-urile ca D100 să se reîmprospăteze pe ecranul TVA
+        cache.setari=null; loaded.tva=false;
+        for(const k in cache){ if(k[0]==="p") delete cache[k]; }
+      }else{
+        if(msg){ msg.style.color="var(--red)"; msg.textContent=d.message||"Nu am putut salva. Încearcă din nou."; }
+      }
+    }catch(e){
+      if(msg){ msg.style.color="var(--red)"; msg.textContent="Conexiune pierdută. Încearcă din nou."; }
+    }
+  }
+  window.salveazaRegimNerezident=salveazaRegimNerezident;
   async function salveazaSetari(){
     const btn=document.getElementById("set-save");
     const msg=document.getElementById("set-msg");

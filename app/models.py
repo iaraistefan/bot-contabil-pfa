@@ -44,8 +44,9 @@ class User(Base):
     regim_impunere = Column(String(20), nullable=True)
     # Valori: SISTEM_REAL / NORMA_VENIT / MICRO_1 / MICRO_3
     regim_nerezident = Column(String(20), nullable=True)
-    # Impozit nerezident D100 (comision Bolt): CRF_SCUTIT (0%) / CRF_2PCT (2%) /
-    # FARA_CRF (16%). NULL = neconfigurat — NU presupunem nicio rata (vezi #3).
+    # Regim impozit nerezident, per-platforma (enum RegimNerezident):
+    # BOLT_CU_CRF (2%) / BOLT_FARA_CRF (16%) active; UBER_CU_CRF (0%) /
+    # UBER_FARA_CRF (16%) definite, nu in UI inca. NULL = neconfigurat (vezi #3).
 
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)

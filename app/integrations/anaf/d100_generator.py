@@ -47,7 +47,7 @@ D100_XSD = "D100.xsd"
 
 # Cota impozit nerezidenti NU se mai defineste aici. Sursa UNICA e
 # app.domain.fiscal_profile.COTA_NEREZIDENT (depinde de certificatul de
-# rezidenta fiscala: CRF_SCUTIT 0% / CRF_2PCT 2% / FARA_CRF 16%). `cota` se
+# rezidenta fiscala, per platforma: Bolt 2%/16%, Uber 0%/16%). `cota` se
 # paseaza explicit in fiecare functie — a presupune 2% pentru toti era bug #3.
 
 # Codul de creanta (pozitia din nomenclatorul ANAF) pentru impozit nerezidenti
@@ -114,7 +114,7 @@ def calcul_impozit_nerezident(baza_comision_lei: float, cota: float) -> float:
     0.0 / 0.02 / 0.16 dupa CRF). NU exista cota hardcodata aici.
 
     Ridica ValueError la cota None/<=0: impozitul nu se calculeaza pentru
-    CRF_SCUTIT (0% → se declara in D207) sau pentru un regim neconfigurat.
+    cota 0 (scutit, ex. Uber cu certificat → D207) sau regim neconfigurat.
     """
     if cota is None or cota <= 0:
         raise ValueError(
@@ -202,7 +202,7 @@ def genereaza_d100(
     if cota is None or cota <= 0:
         raise ValueError(
             f"genereaza_d100: cota {cota} → niciun XML. D100 se genereaza doar "
-            f"la cota > 0 (CRF_2PCT/FARA_CRF). Scutit/neconfigurat NU produc XML."
+            f"la cota > 0 (ex. Bolt 2%/16%). Scutit (0%)/neconfigurat NU produc XML."
         )
 
     cui = _curata_cui(identitate.cui)
@@ -339,15 +339,15 @@ if __name__ == "__main__":
         functie_declarant="TITULAR",
     )
 
-    # Ianuarie 2026: comision Bolt 657 lei. Cota din profil (ex. CRF_2PCT → 2%).
+    # Ianuarie 2026: comision Bolt 657 lei. Cota din profil (ex. BOLT_CU_CRF → 2%).
     print("=" * 60)
-    print("DRUMUL B — XML D100 (cota 2% = CRF_2PCT, suma datorata):")
+    print("DRUMUL B — XML D100 (cota 2% = BOLT_CU_CRF, suma datorata):")
     print("=" * 60)
     print(genereaza_d100(an=2026, luna=1, identitate=identitate,
                          baza_comision_lei=657, cota=0.02))
     print()
     print("=" * 60)
-    print("DRUMUL A — GHID D100 (cota 16% = FARA_CRF):")
+    print("DRUMUL A — GHID D100 (cota 16% = BOLT_FARA_CRF):")
     print("=" * 60)
     print(genereaza_ghid_d100(an=2026, luna=1, identitate=identitate,
                               baza_comision_lei=657, cota=0.16,

@@ -106,28 +106,44 @@ class RegimTVA(str, Enum):
 
 class RegimNerezident(str, Enum):
     """
-    Regim impozit nerezident D100 pe comisionul Bolt (firmă din Estonia).
+    Regim impozit nerezident pe comisionul platformelor de ridesharing.
 
-    Rata depinde de certificatul de rezidență fiscală (CRF) — Cod Fiscal
-    art. 223/224 + Convenția RO-Estonia:
-      - CRF_SCUTIT: are CRF și aplică scutirea din Convenție → 0%
-        (D100 NU se depune lunar; venitul scutit se declară anual în D207)
-      - CRF_2PCT: are CRF dar aplică 2% (interpretare conservatoare)
-      - FARA_CRF: nu are CRF → 16% (stopaj la sursă)
+    PER-PLATFORMĂ — Bolt și Uber au tratamente fiscale DIFERITE (convenții de
+    evitare a dublei impuneri diferite). Un șofer cu ambele are regim distinct
+    pe fiecare (ex. 2% pe Bolt ȘI 0% pe Uber în același D207).
+
+    BOLT (Bolt Operations OÜ, Estonia) — Convenția RO-Estonia ARE Art. 12
+    „Comisioane": cu certificatul de rezidență fiscală al Bolt → cota 2% (cota
+    LEGALĂ a Convenției, NU o interpretare). Fără certificat → 16% (art. 224
+    Cod Fiscal, stopaj la sursă). NU există 0% pentru Bolt.
+      - BOLT_CU_CRF   → 2%  → D100 lunar + D207 anual
+      - BOLT_FARA_CRF → 16% → D100 lunar + D207 anual
+
+    UBER (Uber B.V., Olanda) — Convenția RO-Olanda NU are articol de comisioane
+    → se aplică art. 7 „profituri": cu certificat → 0% (scutire), DOAR D207
+    (fără D100); fără certificat → 16%. [Definite pentru extensibilitate;
+    NU sunt activate în UI/validator încă — vezi VALID_REGIMURI_NEREZIDENT.]
+      - UBER_CU_CRF   → 0%  → DOAR D207 (fără D100)
+      - UBER_FARA_CRF → 16% → D100 + D207
 
     NU există o valoare implicită: absența (None) = neconfigurat. A presupune
     o cotă pentru toți era exact bug-ul fiscal #3.
     """
-    CRF_SCUTIT = "CRF_SCUTIT"
-    CRF_2PCT = "CRF_2PCT"
-    FARA_CRF = "FARA_CRF"
+    BOLT_CU_CRF = "BOLT_CU_CRF"
+    BOLT_FARA_CRF = "BOLT_FARA_CRF"
+    # Extensie Uber — definite pentru engine (cota 0%/16%), NU în UI încă:
+    UBER_CU_CRF = "UBER_CU_CRF"
+    UBER_FARA_CRF = "UBER_FARA_CRF"
 
 
 # Sursă UNICĂ a cotei nerezident (consumată și de bot, și de web). Cheie = enum.
+# Engine-ul gestionează toate cotele (inclusiv 0% pentru Uber); ce se poate SETA
+# din UI e restrâns separat de VALID_REGIMURI_NEREZIDENT (doar Bolt acum).
 COTA_NEREZIDENT = {
-    RegimNerezident.CRF_SCUTIT: 0.0,
-    RegimNerezident.CRF_2PCT: 0.02,
-    RegimNerezident.FARA_CRF: 0.16,
+    RegimNerezident.BOLT_CU_CRF: 0.02,
+    RegimNerezident.BOLT_FARA_CRF: 0.16,
+    RegimNerezident.UBER_CU_CRF: 0.0,
+    RegimNerezident.UBER_FARA_CRF: 0.16,
 }
 
 

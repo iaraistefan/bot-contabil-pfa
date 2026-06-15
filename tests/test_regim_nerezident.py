@@ -5,7 +5,7 @@ Acoperă DOAR maparea (regim → cotă) + None-safety. NU atinge calculul D100
 sau afișarea — acelea vin în sub-pașii B-E. După sub-pas A comportamentul
 vizibil e neschimbat (D100 încă pe 2% vechi); aici blocăm doar fundația:
 
-  - cele 3 regimuri (CRF_SCUTIT/CRF_2PCT/FARA_CRF) → 0.0 / 0.02 / 0.16;
+  - cele 4 regimuri (Bolt 2%/16%, Uber 0%/16%) → cotă corectă;
   - NULL (neconfigurat) → None, NU o rată presupusă;
   - valoare invalidă → None, NU o rată presupusă (a presupune = bug-ul #3);
   - migrarea 013 e idempotentă (formă ADD COLUMN IF NOT EXISTS + tracking).
@@ -35,17 +35,21 @@ _ABSENT = object()  # marcaj „cheia lipsește complet din dict"
 
 def test_cota_mapping_acopera_toate_regimurile():
     assert set(COTA_NEREZIDENT) == set(RegimNerezident)
-    assert COTA_NEREZIDENT[RegimNerezident.CRF_SCUTIT] == 0.0
-    assert COTA_NEREZIDENT[RegimNerezident.CRF_2PCT] == 0.02
-    assert COTA_NEREZIDENT[RegimNerezident.FARA_CRF] == 0.16
+    # Bolt (Estonia, Art. 12): 2% cu certificat / 16% fără — NU există 0%.
+    assert COTA_NEREZIDENT[RegimNerezident.BOLT_CU_CRF] == 0.02
+    assert COTA_NEREZIDENT[RegimNerezident.BOLT_FARA_CRF] == 0.16
+    # Uber (Olanda, art. 7): 0% cu certificat / 16% fără (extensie engine).
+    assert COTA_NEREZIDENT[RegimNerezident.UBER_CU_CRF] == 0.0
+    assert COTA_NEREZIDENT[RegimNerezident.UBER_FARA_CRF] == 0.16
 
 
-# ── from_user_dict: cele 3 valori → cotă corectă ────────────────────
+# ── from_user_dict: fiecare cod → cotă corectă (engine acceptă toate) ─
 
 @pytest.mark.parametrize("regim,cota_asteptata", [
-    ("CRF_SCUTIT", 0.0),
-    ("CRF_2PCT", 0.02),
-    ("FARA_CRF", 0.16),
+    ("BOLT_CU_CRF", 0.02),
+    ("BOLT_FARA_CRF", 0.16),
+    ("UBER_CU_CRF", 0.0),
+    ("UBER_FARA_CRF", 0.16),
 ])
 def test_from_user_dict_mapeaza_cota(regim, cota_asteptata):
     p = _profile(regim)
@@ -84,8 +88,8 @@ def test_valoare_invalida_da_none_nu_rata():
 # ── to_summary expune ambele câmpuri (pt /anafdebug) ────────────────
 
 def test_to_summary_include_nerezident():
-    s = _profile("CRF_2PCT").to_summary()
-    assert s["regim_nerezident"] == "CRF_2PCT"
+    s = _profile("BOLT_CU_CRF").to_summary()
+    assert s["regim_nerezident"] == "BOLT_CU_CRF"
     assert s["cota_nerezident"] == 0.02
 
     s_null = _profile(_ABSENT).to_summary()

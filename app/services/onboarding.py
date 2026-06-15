@@ -42,7 +42,37 @@ STEP_ACTIVITATE = 4
 STEP_REGIM_TVA = 5
 STEP_REGIM_IMPUNERE = 6
 STEP_CONFIRMARE = 7
+# Pas CONDIȚIONAT (doar ridesharing/Bolt) — inserat între IMPUNERE și CONFIRMARE.
+# Valoare 8: tranzițiile sunt explicite (set_onboarding_step), nu secvențiale,
+# deci CONFIRMARE rămâne 7. Vezi fiscal #3.
+STEP_REGIM_NEREZIDENT = 8
 STEP_COMPLETED = 99
+
+
+# Regim impozit nerezident — comision Bolt (fiscal #3). DOAR 2 opțiuni reale:
+# Bolt (Estonia, Art. 12 Convenție) e 2% cu certificat / 16% fără — NU există 0%
+# pentru Bolt (acela e exclusiv Uber/Olanda, vine ca extensie). NICIUNA
+# preselectată. Codurile = subsetul activ din VALID_REGIMURI_NEREZIDENT.
+REGIMURI_NEREZIDENT = [
+    {"code": "BOLT_CU_CRF",   "label": "✅ Am certificatul Bolt — 2% (D100 + D207)"},
+    {"code": "BOLT_FARA_CRF", "label": "⚠️ Nu am certificatul — 16% (stopaj)"},
+]
+REGIM_NEREZIDENT_BY_CODE = {r["code"]: r for r in REGIMURI_NEREZIDENT}
+
+
+def nerezident_label(code: str) -> str:
+    return REGIM_NEREZIDENT_BY_CODE.get(code or "", {}).get("label", "—")
+
+
+def next_step_after_impunere(activity_code: str) -> int:
+    """
+    Pasul de după REGIM_IMPUNERE: doar ridesharing/Bolt primește întrebarea
+    despre regimul nerezident D100; ceilalți merg direct la confirmare (nu-i
+    întrebăm irelevant — comisionul nerezident e specific Bolt/Uber).
+    """
+    if (activity_code or "") == "ridesharing":
+        return STEP_REGIM_NEREZIDENT
+    return STEP_CONFIRMARE
 
 
 # === Cele 10 activitati ===
@@ -212,6 +242,15 @@ def _kb_regim_impunere(forma: str):
         rows.append([InlineKeyboardButton(
             r["label"], callback_data=f"onb|impunere|{r['code']}"
         )])
+    return InlineKeyboardMarkup(rows)
+
+
+def _kb_regim_nerezident():
+    """2 opțiuni regim nerezident Bolt (2%/16%) — NICIUNA preselectată."""
+    rows = [
+        [InlineKeyboardButton(r["label"], callback_data=f"onb|nerezident|{r['code']}")]
+        for r in REGIMURI_NEREZIDENT
+    ]
     return InlineKeyboardMarkup(rows)
 
 
@@ -403,6 +442,25 @@ async def send_step_question(
             reply_markup=_kb_regim_impunere(forma),
         )
 
+    elif step == STEP_REGIM_NEREZIDENT:
+        msg = (
+            "*🌍 Impozit nerezident — comision Bolt*\n\n"
+            "Comisionul reținut de Bolt (Bolt Operations OÜ, Estonia) se "
+            "impozitează în România. Conform Convenției RO-Estonia (Art. 12 "
+            "„Comisioane”), cota depinde de certificatul de rezidență fiscală "
+            "al Bolt.\n\n"
+            "*Ai certificatul de rezidență fiscală al Bolt (Estonia)?*\n\n"
+            "• *Da, am certificatul* → impozit *2%* (D100 lunar + D207 anual)\n"
+            "• *Nu am certificatul* → impozit *16%* (stopaj la sursă)\n\n"
+            "_Certificatul e al firmei Bolt (Bolt Operations OÜ), valabil pe an. "
+            "Nu îl ai? Îl ceri de la suportul Bolt. Verifică anul înainte de "
+            "depunere. Alegerea îți aparține — nu alegem noi._"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id, text=msg, parse_mode="Markdown",
+            reply_markup=_kb_regim_nerezident(),
+        )
+
     elif step == STEP_CONFIRMARE:
         await _show_summary(update, context, user_id)
 
@@ -458,6 +516,11 @@ async def _show_anaf_summary(
 
     lines.append(f"💰 TVA: *{regim_tva_label}*")
     lines.append(f"📈 Impunere: *{regim_imp}* _(presupus)_")
+
+    # Regim nerezident D100 — afișat doar dacă e setat (ridesharing). #3
+    regim_nerez = profile.get("regim_nerezident")
+    if regim_nerez:
+        lines.append(f"🌍 Nerezident (Bolt): *{nerezident_label(regim_nerez)}*")
 
     judet = profile.get("judet") or ""
     localitate = profile.get("localitate") or ""
@@ -521,6 +584,13 @@ async def _show_summary(
     )
     regim_imp = regim_impunere_label(profile.get("regim_impunere") or "")
 
+    # Regim nerezident D100 — afișat doar dacă e setat (ridesharing). #3
+    regim_nerez = profile.get("regim_nerezident")
+    nerez_line = (
+        f"🌍 *Nerezident (Bolt):* {nerezident_label(regim_nerez)}\n"
+        if regim_nerez else ""
+    )
+
     msg = (
         "*📋 Rezumat profil*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -532,6 +602,7 @@ async def _show_summary(
         f"📊 *Activitate:* {activitate_label}\n"
         f"💰 *Regim TVA:* {regim_tva_label}\n"
         f"📈 *Regim impunere:* {regim_imp}\n"
+        f"{nerez_line}"
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
         "Confirmi datele?"
@@ -865,10 +936,28 @@ async def handle_onboarding_callback(
             if context.user_data.pop("onb_fixing", None):
                 await _show_anaf_summary(update, context, user_id, via_callback=True)
             else:
-                users_repo.set_onboarding_step(session, user, STEP_CONFIRMARE)
+                # Ridesharing → întrebăm regimul nerezident D100; altfel confirmare.
+                profile = users_repo.get_profile_dict(session, user_id) or {}
+                next_step = next_step_after_impunere(profile.get("activity_code"))
+                users_repo.set_onboarding_step(session, user, next_step)
                 session.commit()
                 await query.edit_message_text(
                     f"✅ Regim impunere: {regim_impunere_label(sub)}"
+                )
+                await send_step_question(update, context, next_step, user_id)
+            return
+
+        # === REGIM NEREZIDENT (D100 — comision Bolt, doar ridesharing) ===
+        if action == "nerezident" and sub in REGIM_NEREZIDENT_BY_CODE:
+            users_repo.update_profile(session, user, regim_nerezident=sub)
+            session.commit()
+            if context.user_data.pop("onb_fixing", None):
+                await _show_anaf_summary(update, context, user_id, via_callback=True)
+            else:
+                users_repo.set_onboarding_step(session, user, STEP_CONFIRMARE)
+                session.commit()
+                await query.edit_message_text(
+                    f"✅ Regim nerezident: {nerezident_label(sub)}"
                 )
                 await send_step_question(update, context, STEP_CONFIRMARE, user_id)
             return

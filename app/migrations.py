@@ -337,8 +337,8 @@ MIGRATIONS = [
     {
         "id": "013_user_regim_nerezident",
         "description": (
-            "Fiscal #3 (sub-pas A): regim impozit nerezident D100 pentru "
-            "comisionul Bolt (CRF: 0% scutit / 2% conservator / 16% fara CRF). "
+            "Fiscal #3 (sub-pas A): regim impozit nerezident pe comisionul "
+            "platformelor (per-platforma). Bolt: 2% cu certificat / 16% fara. "
             "Nullable FARA default — NULL = neintrebat/neconfigurat, NU o rata "
             "presupusa (a presupune o cota e exact bug-ul pe care il reparam)."
         ),

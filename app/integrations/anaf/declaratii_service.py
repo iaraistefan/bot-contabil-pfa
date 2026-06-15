@@ -225,8 +225,8 @@ def genereaza(
                           impozitul nerezident se plateste de PFA din buzunar;
                           suma de plata D100 = suma datorata intotdeauna.
         cota_nerezident: (DOAR D100) cota din profil dupa regimul nerezident:
-                          0.02 (CRF_2PCT) / 0.16 (FARA_CRF) → genereaza XML;
-                          0.0 (CRF_SCUTIT) → negenerat, motiv "scutit" (D207);
+                          0.02 / 0.16 (Bolt cu/fara certificat) → genereaza XML;
+                          0.0 (scutit, ex. Uber cu certificat) → negenerat "scutit" (D207);
                           None (neconfigurat) → negenerat, motiv "neconfigurat".
                           Verifica rez.generat inainte de a trimite XML-ul.
 
@@ -333,7 +333,7 @@ def genereaza(
             )
 
         if cota <= 0:
-            # CRF_SCUTIT (0%) → D100 NU se depune; obligatia e D207 anual.
+            # cota 0 (scutit, ex. Uber cu certificat) → D100 NU se depune; D207 anual.
             return _d100_negenerat(
                 an, luna, motiv="scutit",
                 ghid=(
@@ -346,7 +346,7 @@ def genereaza(
                 ),
             )
 
-        # cota > 0 (CRF_2PCT / FARA_CRF) → generam XML normal, cu cota din profil.
+        # cota > 0 (Bolt 2%/16%) → generam XML normal, cu cota din profil.
         identitate = d100.IdentitateD100(
             cui=firma.cui_pfa,  # CUI PFA, NU codul special!
             denumire=firma.denumire,

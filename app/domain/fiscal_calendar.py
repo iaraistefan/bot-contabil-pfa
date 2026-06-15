@@ -924,8 +924,8 @@ def get_monthly_alerts(
     """[Backward-compat] Returnează alertele pentru luna dată.
 
     D100 (impozit nerezident) depinde de regimul nerezident (CRF — fiscal #3):
-      - cota > 0 (CRF_2PCT/FARA_CRF) → D100 de depus, procent DINAMIC;
-      - cota == 0 (CRF_SCUTIT)       → D100 OMIS (nu se depune; D207 anual acoperă);
+      - cota > 0 (Bolt 2%/16%)        → D100 de depus, procent DINAMIC;
+      - cota == 0 (scutit, ex. Uber)  → D100 OMIS (nu se depune; D207 anual acoperă);
       - cota None (neconfigurat)     → D100 ca nudge de configurare, FĂRĂ 2% presupus.
     """
     alerts = []

@@ -2,8 +2,8 @@
 Fiscal #3 — SUB-PAS C: calendarul fiscal (get_monthly_alerts / format_fiscal_message)
 reflectă regimul nerezident pentru D100, aliniat la calculul corect din B.
 
-  - cota > 0 (CRF_2PCT/FARA_CRF) → D100 prezent, procent DINAMIC în nume;
-  - cota == 0 (CRF_SCUTIT)       → D100 OMIS (nu se depune; D207 anual acoperă);
+  - cota > 0 (Bolt 2%/16%)        → D100 prezent, procent DINAMIC în nume;
+  - cota == 0 (scutit, ex. Uber)  → D100 OMIS (nu se depune; D207 anual acoperă);
   - cota None (neconfigurat)     → D100 prezent ca nudge „regim nesetat", FĂRĂ 2%;
   - D301/D390 NU depind de cotă (rămân neschimbate, gated doar pe has_bolt).
 """

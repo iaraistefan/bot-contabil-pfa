@@ -26,21 +26,22 @@ VAT_OUT_657 = 137.97
 
 
 def test_de_depus_2pct(monkeypatch):
-    b = _block(monkeypatch, "CRF_2PCT", VAT_OUT_657)
+    b = _block(monkeypatch, "BOLT_CU_CRF", VAT_OUT_657)   # Bolt cu certificat → 2%
     assert b["status"] == "de_depus"
     assert b["cota"] == 0.02
     assert b["suma"] == 13.0                      # round(657×0.02), ca botul
 
 
 def test_de_depus_16pct(monkeypatch):
-    b = _block(monkeypatch, "FARA_CRF", VAT_OUT_657)
+    b = _block(monkeypatch, "BOLT_FARA_CRF", VAT_OUT_657)  # Bolt fără certificat → 16%
     assert b["status"] == "de_depus"
     assert b["cota"] == 0.16
     assert b["suma"] == 105.0                     # round(657×0.16)
 
 
 def test_scutit(monkeypatch):
-    b = _block(monkeypatch, "CRF_SCUTIT", VAT_OUT_657)
+    # 0% = scutit: NU Bolt (Bolt n-are 0%), ci Uber cu certificat (engine).
+    b = _block(monkeypatch, "UBER_CU_CRF", VAT_OUT_657)
     assert b["status"] == "scutit"
     assert b["suma"] == 0.0
     assert b["cota"] == 0.0
@@ -61,7 +62,7 @@ def test_neconfigurat_si_la_regim_invalid(monkeypatch):
 
 def test_fara_baza_indiferent_de_regim(monkeypatch):
     # nicio factură Bolt → fara_baza chiar dacă regimul ar fi setat
-    for regim in ("CRF_2PCT", "FARA_CRF", "CRF_SCUTIT", None):
+    for regim in ("BOLT_CU_CRF", "BOLT_FARA_CRF", "UBER_CU_CRF", None):
         b = _block(monkeypatch, regim, vat_out=0.0)
         assert b["status"] == "fara_baza"
         assert b["suma"] is None
