@@ -334,6 +334,18 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "013_user_regim_nerezident",
+        "description": (
+            "Fiscal #3 (sub-pas A): regim impozit nerezident D100 pentru "
+            "comisionul Bolt (CRF: 0% scutit / 2% conservator / 16% fara CRF). "
+            "Nullable FARA default — NULL = neintrebat/neconfigurat, NU o rata "
+            "presupusa (a presupune o cota e exact bug-ul pe care il reparam)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS regim_nerezident VARCHAR(20)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

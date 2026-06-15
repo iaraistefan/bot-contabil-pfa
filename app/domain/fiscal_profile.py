@@ -104,6 +104,33 @@ class RegimTVA(str, Enum):
     SPECIAL_INTRACOM = "SPECIAL_INTRACOM"
 
 
+class RegimNerezident(str, Enum):
+    """
+    Regim impozit nerezident D100 pe comisionul Bolt (firmă din Estonia).
+
+    Rata depinde de certificatul de rezidență fiscală (CRF) — Cod Fiscal
+    art. 223/224 + Convenția RO-Estonia:
+      - CRF_SCUTIT: are CRF și aplică scutirea din Convenție → 0%
+        (D100 NU se depune lunar; venitul scutit se declară anual în D207)
+      - CRF_2PCT: are CRF dar aplică 2% (interpretare conservatoare)
+      - FARA_CRF: nu are CRF → 16% (stopaj la sursă)
+
+    NU există o valoare implicită: absența (None) = neconfigurat. A presupune
+    o cotă pentru toți era exact bug-ul fiscal #3.
+    """
+    CRF_SCUTIT = "CRF_SCUTIT"
+    CRF_2PCT = "CRF_2PCT"
+    FARA_CRF = "FARA_CRF"
+
+
+# Sursă UNICĂ a cotei nerezident (consumată și de bot, și de web). Cheie = enum.
+COTA_NEREZIDENT = {
+    RegimNerezident.CRF_SCUTIT: 0.0,
+    RegimNerezident.CRF_2PCT: 0.02,
+    RegimNerezident.FARA_CRF: 0.16,
+}
+
+
 class TaxBase(str, Enum):
     """Pe ce se calculează impozitul."""
     VENIT_NET = "VENIT_NET"            # PFA sistem real: venit - cheltuieli deductibile
@@ -142,6 +169,9 @@ class FiscalProfile:
     regim_tva: RegimTVA
     activity_code: str
 
+    # Regim nerezident D100 — Optional: None = neconfigurat (NU presupunem rată)
+    regim_nerezident: Optional[RegimNerezident] = None
+
     # === Date derivate (computed la __post_init__) ===
     income_tax_rate: int = 0           # 10% / 16% / 1% / 3%
     income_tax_base: TaxBase = TaxBase.VENIT_NET
@@ -159,11 +189,17 @@ class FiscalProfile:
     is_vat_payer: bool = False
     vat_standard_pct: int = 0          # 0 dacă neplătitor, 21 dacă plătitor
 
+    # === Nerezident D100 (derivat din regim_nerezident) ===
+    # None = neconfigurat → consumatorii afișează un prompt de configurare,
+    # NU o cifră (vezi #3). 0.0 / 0.02 / 0.16 dacă e setat.
+    cota_nerezident: Optional[float] = None
+
     def __post_init__(self):
         """Calculează atributele derivate din intrările date."""
         self._compute_income_tax()
         self._compute_contributions()
         self._compute_vat()
+        self._compute_nerezident()
 
     # ========================================================
     #          DECIZII FISCALE — IMPOZIT VENIT
@@ -269,6 +305,24 @@ class FiscalProfile:
         else:
             self.is_vat_payer = False
             self.vat_standard_pct = 0
+
+    # ========================================================
+    #          DECIZII FISCALE — IMPOZIT NEREZIDENT (D100)
+    # ========================================================
+
+    def _compute_nerezident(self):
+        """
+        Derivă cota impozitului nerezident din regim_nerezident.
+
+        IMPORTANT: NU există fallback la o rată. Dacă regim_nerezident e None
+        (neconfigurat) → cota_nerezident rămâne None, iar consumatorii (banner,
+        web, fisa D100) afișează un prompt de configurare în loc de o cifră
+        posibil greșită (date la ANAF — vezi fiscal #3).
+        """
+        if self.regim_nerezident is None:
+            self.cota_nerezident = None
+        else:
+            self.cota_nerezident = COTA_NEREZIDENT.get(self.regim_nerezident)
 
     # ========================================================
     #          API PUBLICĂ — Întrebări care primesc răspuns
@@ -415,6 +469,10 @@ class FiscalProfile:
             "cass_threshold_ron": self.cass_threshold_ron,
             "is_vat_payer": self.is_vat_payer,
             "vat_standard_pct": self.vat_standard_pct,
+            "regim_nerezident": (
+                self.regim_nerezident.value if self.regim_nerezident else None
+            ),
+            "cota_nerezident": self.cota_nerezident,
         }
 
 
@@ -465,11 +523,26 @@ def from_user_dict(profile_dict: Optional[Dict[str, Any]]) -> FiscalProfile:
     # Activity code (string, nu enum)
     activity_code = profile_dict.get("activity_code") or "generic"
 
+    # Regim nerezident — FĂRĂ fallback la o rată. Absent/invalid → None
+    # (neconfigurat), NU o cotă presupusă. Asta e miezul fixului #3.
+    regim_nerez_str = profile_dict.get("regim_nerezident")
+    regim_nerezident = None
+    if regim_nerez_str:
+        try:
+            regim_nerezident = RegimNerezident(regim_nerez_str)
+        except ValueError:
+            logger.warning(
+                f"Regim nerezident invalid '{regim_nerez_str}' — None "
+                f"(neconfigurat, FĂRĂ rată presupusă)"
+            )
+            regim_nerezident = None
+
     return FiscalProfile(
         forma_juridica=forma,
         regim_impunere=regim_impunere,
         regim_tva=regim_tva,
         activity_code=activity_code,
+        regim_nerezident=regim_nerezident,
     )
 
 

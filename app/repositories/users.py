@@ -64,6 +64,7 @@ def update_profile(
     cnp: Optional[str] = None,
     regim_tva: Optional[str] = None,
     regim_impunere: Optional[str] = None,
+    regim_nerezident: Optional[str] = None,
     caen_principal: Optional[str] = None,
     activity_code: Optional[str] = None,
     judet: Optional[str] = None,
@@ -99,6 +100,8 @@ def update_profile(
         user.regim_tva = regim_tva
     if regim_impunere is not None:
         user.regim_impunere = regim_impunere
+    if regim_nerezident is not None:
+        user.regim_nerezident = regim_nerezident
     if caen_principal is not None:
         user.caen_principal = caen_principal
     if activity_code is not None:
@@ -231,6 +234,7 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "cnp": user.cnp,
         "regim_tva": user.regim_tva,
         "regim_impunere": user.regim_impunere,
+        "regim_nerezident": user.regim_nerezident,
         "caen_principal": user.caen_principal,
         "activity_code": user.activity_code,
         "judet": user.judet,
@@ -306,6 +310,12 @@ VALID_REGIMURI_IMPUNERE = {
     "SISTEM_REAL", "NORMA_VENIT", "MICRO_1", "MICRO_3"
 }
 
+# Regim impozit nerezident D100 (comision Bolt). NU include o valoare "default":
+# absenta (None) inseamna neconfigurat, nu o rata presupusa.
+VALID_REGIMURI_NEREZIDENT = {
+    "CRF_SCUTIT", "CRF_2PCT", "FARA_CRF"
+}
+
 VALID_ACTIVITY_CODES = {
     "ridesharing", "it_freelance", "ecommerce", "consulting",
     "construction", "medical", "transport", "real_estate",
@@ -323,6 +333,10 @@ def is_valid_regim_tva(value: str) -> bool:
 
 def is_valid_regim_impunere(value: str) -> bool:
     return value in VALID_REGIMURI_IMPUNERE
+
+
+def is_valid_regim_nerezident(value: str) -> bool:
+    return value in VALID_REGIMURI_NEREZIDENT
 
 
 def is_valid_activity_code(value: str) -> bool:

@@ -43,6 +43,9 @@ class User(Base):
     # Valori: NEPLATITOR / PLATITOR_21 / SPECIAL_INTRACOM
     regim_impunere = Column(String(20), nullable=True)
     # Valori: SISTEM_REAL / NORMA_VENIT / MICRO_1 / MICRO_3
+    regim_nerezident = Column(String(20), nullable=True)
+    # Impozit nerezident D100 (comision Bolt): CRF_SCUTIT (0%) / CRF_2PCT (2%) /
+    # FARA_CRF (16%). NULL = neconfigurat — NU presupunem nicio rata (vezi #3).
 
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)
