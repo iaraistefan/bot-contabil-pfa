@@ -49,7 +49,7 @@ def test_precheck_skip_nu_cheama_compute(monkeypatch):
 
 
 def test_tva_aproape(monkeypatch):
-    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=30_000)
+    sent, logged = _setup(monkeypatch, ca=330_000, venit_brut=330_000, venit_net=30_000)  # 84% din 395k
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 1                                        # doar TVA (CAS sub prag)
     msg = sent[0][1]
@@ -59,7 +59,7 @@ def test_tva_aproape(monkeypatch):
 
 
 def test_tva_depasit(monkeypatch):
-    sent, logged = _setup(monkeypatch, ca=310_000, venit_brut=310_000, venit_net=30_000)
+    sent, logged = _setup(monkeypatch, ca=400_000, venit_brut=400_000, venit_net=30_000)  # 101% din 395k
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 1
     assert "depășit" in sent[0][1].lower()
@@ -69,21 +69,21 @@ def test_tva_depasit(monkeypatch):
 def test_cas_aproape(monkeypatch):
     sent, logged = _setup(monkeypatch, ca=45_000, venit_brut=45_000, venit_net=45_000)
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
-    assert n == 1                                        # doar CAS (TVA 15% OK)
+    assert n == 1                                        # doar CAS (TVA 11% OK, sub 80%)
     assert "CAS" in sent[0][1]
     assert any("PLAFON_CAS" in str(a) for a in logged)
 
 
 def test_ambele_praguri(monkeypatch):
     # venit mare: TVA aproape + CAS depășit -> 2 alerte
-    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=60_000)
+    sent, logged = _setup(monkeypatch, ca=330_000, venit_brut=330_000, venit_net=60_000)  # TVA 84% aproape
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 2
 
 
 def test_anti_spam(monkeypatch):
-    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000,
-                          venit_net=45_000, already=True)
+    sent, logged = _setup(monkeypatch, ca=330_000, venit_brut=330_000,
+                          venit_net=45_000, already=True)  # TVA 84% aproape (anti-spam)
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 0 and sent == []
 
@@ -97,10 +97,10 @@ def test_vat_payer_skip_tva(monkeypatch):
 
 def test_escaladare_prag_80_apoi_depasit(monkeypatch):
     # prag_80 deja marcat; la depășire (alt alert_type prag_depasit) → alertă nouă
-    monkeypatch.setattr(pa, "_ytd_income_brut", lambda s, u, y: 310_000)
+    monkeypatch.setattr(pa, "_ytd_income_brut", lambda s, u, y: 400_000)  # 101% → depășit
     monkeypatch.setattr(tax_engine, "compute_d212_anual",
                         lambda s, *, user_id, an: SimpleNamespace(
-                            venit_brut=310_000, venit_net=30_000, total_plata=0.0))
+                            venit_brut=400_000, venit_net=30_000, total_plata=0.0))
     monkeypatch.setattr(pa, "_was_alert_sent",
                         lambda s, uid, code, y, m, at: at == "prag_80")  # doar 80%
     sent, logged = [], []
@@ -116,10 +116,10 @@ def test_escaladare_prag_80_apoi_depasit(monkeypatch):
 
 def test_send_esuat_nu_marcheaza(monkeypatch):
     sent, logged = [], []
-    monkeypatch.setattr(pa, "_ytd_income_brut", lambda s, u, y: 250_000)
+    monkeypatch.setattr(pa, "_ytd_income_brut", lambda s, u, y: 330_000)  # 84% → aproape
     monkeypatch.setattr(tax_engine, "compute_d212_anual",
                         lambda s, *, user_id, an: SimpleNamespace(
-                            venit_brut=250_000, venit_net=30_000, total_plata=0.0))
+                            venit_brut=330_000, venit_net=30_000, total_plata=0.0))
     monkeypatch.setattr(pa, "_was_alert_sent", lambda *a, **k: False)
     monkeypatch.setattr(pa, "_send_telegram_message", lambda *a: False)  # eșuat
     monkeypatch.setattr(pa, "_log_alert_sent", lambda *a, **k: logged.append(a))
@@ -154,7 +154,7 @@ def test_cass60_plafonare(monkeypatch):
 
 def test_toate_4_pragurile(monkeypatch):
     # high earner: TVA depășit + CAS 12 + CAS 24 + CASS 60 → 4 alerte, coduri distincte.
-    sent, logged = _setup(monkeypatch, ca=310_000, venit_brut=310_000, venit_net=250_000)
+    sent, logged = _setup(monkeypatch, ca=400_000, venit_brut=400_000, venit_net=250_000)  # TVA 101% depășit
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 4
     coduri = {c for a in logged for c in
@@ -165,7 +165,7 @@ def test_toate_4_pragurile(monkeypatch):
 def test_praguri_noi_nu_afecteaza_cele_vechi(monkeypatch):
     # venit sub pragurile noi (CAS24 80%=77.760, CASS60 80%=194.400): doar TVA+CAS12,
     # noile praguri tac (OK) → comportament identic cu înainte.
-    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=50_000)
+    sent, logged = _setup(monkeypatch, ca=330_000, venit_brut=330_000, venit_net=50_000)  # TVA 84% aproape
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 2                                        # TVA aproape + CAS 12 depășit
     assert not any("PLAFON_CAS24" in str(a) for a in logged)
