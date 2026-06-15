@@ -727,10 +727,26 @@ def genereaza_declaratie(tip: str, year: int, month: int):
 
     try:
         firma = decl.date_firma_din_profil(profile)
-        rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma)
+        # Cota nerezident D100 din profil (None = neconfigurat → fără cifră
+        # presupusă). Ignorată pentru D390/D301. Sursă unică: from_user_dict.
+        from app.domain.fiscal_profile import from_user_dict
+        cota_nerez = from_user_dict(profile).cota_nerezident
+        rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma,
+                             cota_nerezident=cota_nerez)
     except Exception as e:
         logger.error(f"API declaratie gen error {tip} {year}/{month} user={user_id}: {e}")
         return jsonify({"error": "internal error", "message": str(e)}), 500
+
+    # D100 la cota 0 (scutit) / None (neconfigurat): rez.generat=False → NU
+    # servim XML (ar fi gol). Întoarcem motivul + ghidul ca JSON (date la ANAF).
+    if not rez.generat:
+        return jsonify({
+            "error": "negenerat",
+            "motiv": rez.motiv_negenerat,        # "scutit" / "neconfigurat"
+            "tip": rez.tip, "year": rez.an, "month": rez.luna,
+            "ghid": rez.ghid_telegram,
+            "ghid_plain": rez.ghid_plain,
+        }), 400
 
     if fmt == "xml":
         return Response(

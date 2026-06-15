@@ -1460,7 +1460,12 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
 
     try:
         firma = decl_nou.date_firma_din_profil(profile)
-        rez = decl_nou.genereaza(tip, year, month, baza, firma=firma)
+        # Cota nerezident D100 din profil (None = neconfigurat → fără cifră
+        # presupusă). Ignorată pentru D390/D301. Sursă unică: from_user_dict.
+        from app.domain.fiscal_profile import from_user_dict
+        cota_nerez = from_user_dict(profile).cota_nerezident
+        rez = decl_nou.genereaza(tip, year, month, baza, firma=firma,
+                                 cota_nerezident=cota_nerez)
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua gen error {tip}: {e}")
         await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut genera {tip}. Încearcă din nou.")
@@ -1487,7 +1492,12 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
     if warns:
         await context.bot.send_message(chat_id=chat_id, text="\n\n".join(warns))
 
-    # 3. Fisierul XML (document atasat)
+    # 3. Fisierul XML (document atasat) — DOAR daca s-a generat.
+    # La D100 cu cota 0 (scutit) / None (neconfigurat) rez.generat=False:
+    # NU trimitem niciun fisier (ghidul de la pasul 1 explica de ce). Astfel e
+    # imposibil sa iasa un XML D100 cu suma 0 / cota presupusa (date la ANAF).
+    if not rez.generat:
+        return
     try:
         await context.bot.send_document(
             chat_id=chat_id,

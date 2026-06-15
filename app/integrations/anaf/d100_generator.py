@@ -45,8 +45,10 @@ D100_NS_VERSION = "v2"  # CONFIRMAT empiric cu DUKIntegrator (01.06.2026)
 D100_NAMESPACE = f"mfp:anaf:dgti:d100:declaratie:{D100_NS_VERSION}"
 D100_XSD = "D100.xsd"
 
-# Cota impozit nerezidenti pentru comisioane (CDI Romania-Estonia)
-COTA_NEREZIDENT_EE = 0.02  # 2%
+# Cota impozit nerezidenti NU se mai defineste aici. Sursa UNICA e
+# app.domain.fiscal_profile.COTA_NEREZIDENT (depinde de certificatul de
+# rezidenta fiscala: CRF_SCUTIT 0% / CRF_2PCT 2% / FARA_CRF 16%). `cota` se
+# paseaza explicit in fiecare functie — a presupune 2% pentru toti era bug #3.
 
 # Codul de creanta (pozitia din nomenclatorul ANAF) pentru impozit nerezidenti
 COD_CREANTA_NEREZIDENTI = "634"
@@ -104,9 +106,23 @@ def _attr_opt(name: str, value) -> str:
     return _attr(name, value)
 
 
-def calcul_impozit_nerezident(baza_comision_lei: float) -> float:
-    """Impozit nerezident = 2% × baza comision, rotunjit la intreg (lei)."""
-    return round(baza_comision_lei * COTA_NEREZIDENT_EE, 0)
+def calcul_impozit_nerezident(baza_comision_lei: float, cota: float) -> float:
+    """
+    Impozit nerezident = cota × baza comision, rotunjit la intreg (lei).
+
+    `cota` vine din profilul user-ului (sursa unica fiscal_profile.COTA_NEREZIDENT:
+    0.0 / 0.02 / 0.16 dupa CRF). NU exista cota hardcodata aici.
+
+    Ridica ValueError la cota None/<=0: impozitul nu se calculeaza pentru
+    CRF_SCUTIT (0% → se declara in D207) sau pentru un regim neconfigurat.
+    """
+    if cota is None or cota <= 0:
+        raise ValueError(
+            f"Cota nerezident invalida ({cota}). D100 nu se calculeaza la cota "
+            f"0/neconfigurat — scutit (CRF) se declara in D207; neconfigurat "
+            f"necesita setarea regimului nerezident."
+        )
+    return round(baza_comision_lei * cota, 0)
 
 
 def calcul_scadenta(an: int, luna: int) -> str:
@@ -158,6 +174,8 @@ def genereaza_d100(
     luna: int,
     identitate: IdentitateD100,
     baza_comision_lei: float,
+    *,
+    cota: float,
     d_rec: int = 0,
     suportat_de_bolt: bool = False,
 ) -> str:
@@ -165,10 +183,15 @@ def genereaza_d100(
     Genereaza XML-ul D100 pentru impozitul nerezidenti (poz. 634).
 
     Args:
-        baza_comision_lei: baza (comisionul Bolt) pe care se aplica 2%
+        baza_comision_lei: baza (comisionul Bolt) pe care se aplica `cota`
+        cota: cota nerezident din profil (0.02 / 0.16). OBLIGATORIE si > 0.
         suportat_de_bolt: DEPRECATED — fara efect. Cu certificat de rezidenta,
-                          impozitul 2% se plateste de PFA din buzunar; deci
+                          impozitul se plateste de PFA din buzunar; deci
                           suma_de_plata = suma_datorata intotdeauna.
+
+    ⚠️ GARDA (Strat 2 — date la ANAF): la cota None/<=0 ridica ValueError, deci
+    e IMPOSIBIL sa iasa un XML D100 cu suma 0 sau cu o cota presupusa. Scutit
+    (CRF→0%) se declara in D207; neconfigurat necesita setarea regimului.
 
     ⚠️ Verifica D100_NS_VERSION inainte de productie.
     """
@@ -176,9 +199,14 @@ def genereaza_d100(
         raise ValueError(f"An invalid: {an}")
     if not (1 <= luna <= 12):
         raise ValueError(f"Luna invalida: {luna}")
+    if cota is None or cota <= 0:
+        raise ValueError(
+            f"genereaza_d100: cota {cota} → niciun XML. D100 se genereaza doar "
+            f"la cota > 0 (CRF_2PCT/FARA_CRF). Scutit/neconfigurat NU produc XML."
+        )
 
     cui = _curata_cui(identitate.cui)
-    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei))
+    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei, cota))
     # Regula ANAF R17-20.1 (model 1): suma_plata = suma_dat - suma_redu.
     # Fara reducere, suma_plata = suma_dat. suma_ded si suma_rest NU se completeaza.
     suma_de_plata = suma_datorata
@@ -237,14 +265,21 @@ def genereaza_ghid_d100(
     luna: int,
     identitate: IdentitateD100,
     baza_comision_lei: float,
+    *,
+    cota: float,
     d_rec: int = 0,
     suportat_de_bolt: bool = False,
     plain: bool = False,
 ) -> str:
-    """Ghid de completare D100 — valorile exacte pentru formular."""
+    """Ghid de completare D100 — valorile exacte pentru formular.
+
+    `cota` (din profil) e folosita atat la suma cat si la afisarea cotei.
+    Chemat doar pe calea generata (cota > 0); calcul_impozit_nerezident ridica
+    ValueError la cota 0/None.
+    """
     cui = _curata_cui(identitate.cui)
     luna_nume = _LUNI.get(luna, str(luna))
-    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei))
+    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei, cota))
     # suportat_de_bolt e DEPRECATED si nu mai are efect: cu certificat de
     # rezidenta, impozitul 2% se plateste de PFA -> suma_de_plata = suma_datorata.
     suma_de_plata = suma_datorata
@@ -268,14 +303,14 @@ def genereaza_ghid_d100(
     L.append("")
     L.append(f"{'' if plain else '📝 '}{b('Creanta (poz. 634 — impozit nerezidenti)')}")
     L.append(f"   Baza (comision Bolt): {baza_comision_lei:.0f} lei")
-    L.append(f"   Cota: 2% (CDI Romania-Estonia)")
+    L.append(f"   Cota: {cota * 100:.0f}% (CDI Romania-Estonia)")
     L.append(f"   Suma datorata: {b(suma_datorata)} lei")
     L.append(f"   {b(f'SUMA DE PLATA: {suma_de_plata} lei')}")
     L.append("")
-    warn = ("D100 e OBLIGATORIU lunar pentru comisionul Bolt "
-            "(impozit nerezident 2%, cu certificat de rezidenta fiscala). "
-            "Se depune pana pe 25 a lunii urmatoare. Impozitul se plateste "
-            "din buzunar, suplimentar fata de comisionul Bolt.")
+    warn = (f"D100 e OBLIGATORIU lunar pentru comisionul Bolt "
+            f"(impozit nerezident {cota * 100:.0f}%). Se depune pana pe 25 a "
+            f"lunii urmatoare. Impozitul se plateste din buzunar, suplimentar "
+            f"fata de comisionul Bolt.")
     L.append(warn if plain else f"⚠️ _{warn}_")
     L.append("")
     L.append(f"{'' if plain else '✍️ '}Declarant: {_curata_text(identitate.nume_declarant)} "
@@ -304,16 +339,16 @@ if __name__ == "__main__":
         functie_declarant="TITULAR",
     )
 
-    # Ianuarie 2026: comision Bolt 657 lei. Impozit 2% = 13 lei.
+    # Ianuarie 2026: comision Bolt 657 lei. Cota din profil (ex. CRF_2PCT → 2%).
     print("=" * 60)
-    print("DRUMUL B — XML D100 (suma datorata, daca NU e suportat de Bolt):")
+    print("DRUMUL B — XML D100 (cota 2% = CRF_2PCT, suma datorata):")
     print("=" * 60)
     print(genereaza_d100(an=2026, luna=1, identitate=identitate,
-                         baza_comision_lei=657, suportat_de_bolt=False))
+                         baza_comision_lei=657, cota=0.02))
     print()
     print("=" * 60)
-    print("DRUMUL A — GHID D100 (cazul real: suportat de Bolt -> 0):")
+    print("DRUMUL A — GHID D100 (cota 16% = FARA_CRF):")
     print("=" * 60)
     print(genereaza_ghid_d100(an=2026, luna=1, identitate=identitate,
-                              baza_comision_lei=657, suportat_de_bolt=True,
+                              baza_comision_lei=657, cota=0.16,
                               plain=True))

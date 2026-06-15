@@ -164,6 +164,11 @@ class RezultatDeclaratie:
     suma_plata: float = 0.0        # suma de plata (lei), daca e cazul
     namespace_de_confirmat: bool = False  # True pt D301/D100 (XML neconfirmat)
     avertismente: List[str] = field(default_factory=list)
+    # Generare conditionata (D100): la cota nerezident 0/None NU se produce XML.
+    # generat=False → xml gol, nume_fisier gol; apelantul NU trimite fisier, ci
+    # afiseaza ghidul (motivul). Vezi fiscal #3 — date la ANAF, grija maxima.
+    generat: bool = True
+    motiv_negenerat: Optional[str] = None  # "scutit" / "neconfigurat"
 
 
 # ============================================================
@@ -172,6 +177,25 @@ class RezultatDeclaratie:
 
 def _ultima_zi_luna(an: int, luna: int) -> date:
     return date(an, luna, calendar.monthrange(an, luna)[1])
+
+
+def _d100_negenerat(an: int, luna: int, *, motiv: str, ghid: str) -> RezultatDeclaratie:
+    """
+    Rezultat D100 NEGENERAT (cota 0/None) — fara XML, doar ghidul/motivul.
+
+    Garda Strat 1: la scutit (CRF→0%) sau neconfigurat NU producem XML
+    (xml gol, nume_fisier gol). Apelantul verifica `generat` si NU trimite
+    fisier — afiseaza ghidul. Astfel e imposibil sa iasa un XML cu suma 0
+    sau cu o cota presupusa (date la ANAF — vezi #3).
+    """
+    return RezultatDeclaratie(
+        tip="D100", an=an, luna=luna,
+        ghid_telegram=ghid, ghid_plain=ghid,
+        xml="", nume_fisier_xml="",
+        are_plata=False, suma_plata=0.0,
+        namespace_de_confirmat=False,
+        generat=False, motiv_negenerat=motiv,
+    )
 
 
 def genereaza(
@@ -185,6 +209,7 @@ def genereaza(
     factura_nr: Optional[str] = None,
     factura_data: Optional[date] = None,
     suportat_de_bolt: bool = False,  # DEPRECATED — fara efect (vezi mai jos)
+    cota_nerezident: Optional[float] = None,  # D100: cota din profil (0.0/0.02/0.16/None)
 ) -> RezultatDeclaratie:
     """
     Genereaza o declaratie ANAF pe luna data, pe baza comisionului Bolt.
@@ -197,11 +222,17 @@ def genereaza(
         d_rec: 0 = initiala, 1 = rectificativa
         factura_nr, factura_data: pt D301 (default: nr generic + ultima zi)
         suportat_de_bolt: DEPRECATED — fara efect. Cu certificat de rezidenta,
-                          impozitul nerezident 2% se plateste de PFA din buzunar;
+                          impozitul nerezident se plateste de PFA din buzunar;
                           suma de plata D100 = suma datorata intotdeauna.
+        cota_nerezident: (DOAR D100) cota din profil dupa regimul nerezident:
+                          0.02 (CRF_2PCT) / 0.16 (FARA_CRF) → genereaza XML;
+                          0.0 (CRF_SCUTIT) → negenerat, motiv "scutit" (D207);
+                          None (neconfigurat) → negenerat, motiv "neconfigurat".
+                          Verifica rez.generat inainte de a trimite XML-ul.
 
     Returns:
         RezultatDeclaratie cu ghid + XML + eventuala suma de plata.
+        Pentru D100 la cota 0/None: rez.generat=False, xml gol (NU trimite fisier).
 
     Raises:
         ValueError: tip necunoscut sau baza invalida.
@@ -279,6 +310,43 @@ def genereaza(
         )
 
     if tip == "D100":
+        # Rata D100 depinde de regimul nerezident (CRF) — sursa unica, din profil.
+        # 4 ramuri; XML se produce DOAR la cota > 0 (Strat 1 al garzii — vezi #3).
+        cota = cota_nerezident
+
+        if cota is None:
+            # Neconfigurat → NU presupunem o rata, NU generam XML. Prompt de setare.
+            return _d100_negenerat(
+                an, luna, motiv="neconfigurat",
+                ghid=(
+                    "⚙️ *D100 — regim nerezident nesetat*\n\n"
+                    "Ca să calculăm corect impozitul pe comisionul Bolt, "
+                    "spune-ne ce regim ai (depinde de certificatul de rezidență "
+                    "fiscală — CRF):\n"
+                    "• cu CRF, aplicând Convenția → *0%* (D100 nu se depune; "
+                    "declari anual în D207)\n"
+                    "• cu CRF, interpretare conservatoare → *2%*\n"
+                    "• fără CRF → *16%*\n\n"
+                    "Setează regimul în Setări (sau /start). NU afișăm o cifră "
+                    "până nu alegi — ar putea fi greșită la ANAF."
+                ),
+            )
+
+        if cota <= 0:
+            # CRF_SCUTIT (0%) → D100 NU se depune; obligatia e D207 anual.
+            return _d100_negenerat(
+                an, luna, motiv="scutit",
+                ghid=(
+                    "✅ *D100 — scutit (CRF, 0%)*\n\n"
+                    "Cu certificatul de rezidență fiscală și aplicarea Convenției "
+                    "RO-Estonia, impozitul pe comisionul Bolt este *0%* — D100 "
+                    "*nu se depune* lunar.\n\n"
+                    "⚠️ Venitul scutit se declară *anual în D207* (informativă, "
+                    "termen 28 februarie). D207 rămâne obligatorie."
+                ),
+            )
+
+        # cota > 0 (CRF_2PCT / FARA_CRF) → generam XML normal, cu cota din profil.
         identitate = d100.IdentitateD100(
             cui=firma.cui_pfa,  # CUI PFA, NU codul special!
             denumire=firma.denumire,
@@ -288,28 +356,30 @@ def genereaza(
             functie_declarant=firma.functie_declarant,
         )
         xml = d100.genereaza_d100(an, luna, identitate, baza,
-                                  d_rec=d_rec, suportat_de_bolt=suportat_de_bolt)
+                                  cota=cota, d_rec=d_rec,
+                                  suportat_de_bolt=suportat_de_bolt)
         ghid_tg = d100.genereaza_ghid_d100(an, luna, identitate, baza,
-                                           d_rec=d_rec,
+                                           cota=cota, d_rec=d_rec,
                                            suportat_de_bolt=suportat_de_bolt,
                                            plain=False)
         ghid_pl = d100.genereaza_ghid_d100(an, luna, identitate, baza,
-                                           d_rec=d_rec,
+                                           cota=cota, d_rec=d_rec,
                                            suportat_de_bolt=suportat_de_bolt,
                                            plain=True)
-        # Mereu suma reala: cu certificat de rezidenta, PFA plateste impozitul 2%
-        # din buzunar (suportat_de_bolt e DEPRECATED si ignorat intentionat).
-        suma = float(d100.calcul_impozit_nerezident(baza))
+        # Suma reala: PFA plateste impozitul din buzunar (suportat_de_bolt
+        # DEPRECATED si ignorat intentionat).
+        suma = float(d100.calcul_impozit_nerezident(baza, cota))
+        pct = f"{cota * 100:.0f}%"
         return RezultatDeclaratie(
             tip="D100", an=an, luna=luna,
             ghid_telegram=ghid_tg, ghid_plain=ghid_pl,
             xml=xml, nume_fisier_xml=f"D100_{an}_{luna:02d}.xml",
             are_plata=(suma > 0), suma_plata=suma,
             namespace_de_confirmat=True,
-            avertismente=["D100 e obligatoriu lunar pentru comisionul Bolt "
-                          "(impozit nerezident 2% cu certificat de rezidenta). "
-                          "Se depune pana pe 25 a lunii urmatoare. Impozitul se "
-                          "plateste din buzunar, suplimentar fata de comisionul Bolt."],
+            avertismente=[f"D100 e obligatoriu lunar pentru comisionul Bolt "
+                          f"(impozit nerezident {pct}). Se depune pana pe 25 a "
+                          f"lunii urmatoare. Impozitul se plateste din buzunar, "
+                          f"suplimentar fata de comisionul Bolt."],
         )
 
     raise ValueError(f"Tip declaratie necunoscut: {tip}. "
