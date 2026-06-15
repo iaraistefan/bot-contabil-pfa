@@ -48,7 +48,8 @@ from app.migrare_coduri import ensure_coduri_fiscale_columns
 import io as _io
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, date
+from app.domain.tax_rules import cota_tva  # sursă unică cotă TVA pe dată (fiscal #1)
 from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -1444,7 +1445,11 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
                      f"deci {tip} nu se depune pentru aceasta luna.",
             )
             return
-        baza = round(tva / 0.21, 2)
+        # Cotă din sursa unică (cota_tva pe data lunii), NU /0.21 hardcodat. Pe luni
+        # cu cotă ≠21% (ex. 19% înainte de 01.08.2025) baza ieșea prea mică → XML
+        # subdeclarat. cota_tva e deja în totals (compute_period); fallback defensiv.
+        cota = totals.get("cota_tva") or cota_tva(date(year, month, 1))
+        baza = round(tva / cota, 2)
         profile = users_repo.get_profile_dict(session, user_id) or {}
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua compute error {tip}: {e}")
