@@ -642,7 +642,7 @@
         <div class="grid g-3" style="margin-bottom:16px">
           <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">—</span> comision</div></div>
           <div class="panel hover"><div class="panel-h"><div class="t">D390 — raportare UE (VIES)</div><span class="badge-st warn">de depus</span></div><div class="hint" style="margin-top:4px">Raportezi la UE serviciile cumpărate de la Bolt (Estonia). Fără plată.</div></div>
-          <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): 2% din comision. Lunar, termen 25.</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span id="tva-d100-badge" class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span id="tva-d100-ron" style="font-size:.8rem;color:var(--muted)">RON</span></div><div id="tva-d100-hint" class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): după regimul nerezident. Lunar, termen 25.</div></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Generare declarații<span>format oficial ANAF</span></div></div>
@@ -1354,9 +1354,37 @@
       const baza = p.vat_out_total>0 ? p.vat_out_total/cota : 0;
       setTxt("tva-d301", RON(p.vat_out_total));
       setTxt("tva-baza", RON(baza));
-      // D100 = 2% × comision (cota retinere nerezident CDI RO-EE, fixa). Plata reala.
-      setTxt("tva-d100", RON(baza*0.02));
+      // D100 — backend calculează (bloc p.d100); JS DOAR afișează (regula de aur,
+      // zero recalcul). Rata depinde de regimul nerezident (CRF): 0/2/16%.
+      renderD100(p.d100||{status:"fara_baza"});
     }catch(e){console.error(e);}
+  }
+
+  function renderD100(d){
+    const val=document.getElementById("tva-d100");
+    const ron=document.getElementById("tva-d100-ron");
+    const badge=document.getElementById("tva-d100-badge");
+    const hint=document.getElementById("tva-d100-hint");
+    if(!val) return;
+    const pct = d.cota!=null ? Math.round(d.cota*100) : null;
+    const showRon = (s)=>{ if(ron) ron.style.display = s?"":"none"; };
+    if(d.status==="de_depus"){
+      val.textContent=RON(d.suma); showRon(true);
+      badge.className="badge-st warn"; badge.textContent="de depus";
+      hint.textContent=`Impozit nerezident pentru Bolt (firmă din afara RO): ${pct}% din comision. Lunar, termen 25.`;
+    }else if(d.status==="scutit"){
+      val.textContent="0"; showRon(true);
+      badge.className="badge-st ok"; badge.textContent="scutit";
+      hint.textContent="Scutit (certificat de rezidență fiscală, 0%) — D100 nu se depune. Venitul scutit se declară anual în D207.";
+    }else if(d.status==="neconfigurat"){
+      val.textContent="—"; showRon(false);
+      badge.className="badge-st neutral"; badge.textContent="setează regim";
+      hint.textContent="Setează regimul nerezident (în bot: /start sau Setări) ca să calculăm D100. Cu CRF → 0% (depui D207); 2% conservator; fără CRF → 16%. Nu afișăm o sumă până nu alegi.";
+    }else{ // fara_baza
+      val.textContent="—"; showRon(false);
+      badge.className="badge-st neutral"; badge.textContent="—";
+      hint.textContent="Nicio factură Bolt (comision) în această lună → D100 nu se depune.";
+    }
   }
 
   // ======================= REGISTRU =======================
@@ -1503,7 +1531,10 @@
       const d=await r.json().catch(()=>({}));
       if(!r.ok){
         titlu.textContent=`${tip} — ${MONTHS[M]} ${Y}`;
-        ghid.textContent = d.message || ("Nu am putut genera declarația pentru "+MONTHS[M]+". Încearcă din nou.");
+        // D100 scutit/neconfigurat (error="negenerat") NU e o eroare: backend
+        // trimite ghidul explicativ (scutit→D207 / setează regim). Îl arătăm ca
+        // atare; pentru restul (fara_baza/eroare) folosim message.
+        ghid.textContent = d.ghid_plain || d.ghid || d.message || ("Nu am putut genera declarația pentru "+MONTHS[M]+". Încearcă din nou.");
         xmlBtn.style.display="none";
         return;
       }

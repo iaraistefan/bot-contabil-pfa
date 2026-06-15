@@ -266,6 +266,40 @@ def dashboard():
 #                    API v1 — Date specifice user
 # ============================================================
 
+def _d100_block(session, user_id: int, year: int, month: int, totals: dict) -> dict:
+    """
+    Bloc D100 (impozit nerezident) pentru web — backend CALCULEAZĂ, JS DOAR afișează
+    (regula de aur: zero recalcul în JS). Sursă unică a sumei: calcul_impozit_nerezident.
+
+    status:
+      - "fara_baza"     → nicio factură Bolt (vat_out<=0) → D100 nu se depune
+      - "neconfigurat"  → regim nerezident nesetat (None) → NU afișăm sumă (prompt)
+      - "scutit"        → CRF 0% → suma 0, nu se depune lunar (D207 anual)
+      - "de_depus"      → cota>0 (2%/16%) → suma reală
+    """
+    from app.domain.fiscal_profile import from_user_dict
+    from app.integrations.anaf.d100_generator import calcul_impozit_nerezident
+
+    profile = users_repo.get_profile_dict(session, user_id) or {}
+    cota_nerez = from_user_dict(profile).cota_nerezident
+
+    vat_out = float(totals.get("vat_out_total") or 0.0)
+    cota_p = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))
+    baza = vat_out / cota_p if vat_out > 0 else 0.0
+
+    if vat_out <= 0:
+        return {"status": "fara_baza", "suma": None, "cota": cota_nerez}
+    if cota_nerez is None:
+        return {"status": "neconfigurat", "suma": None, "cota": None}
+    if cota_nerez <= 0:
+        return {"status": "scutit", "suma": 0.0, "cota": 0.0}
+    return {
+        "status": "de_depus",
+        "suma": float(calcul_impozit_nerezident(baza, cota_nerez)),
+        "cota": cota_nerez,
+    }
+
+
 @flask_app.route("/api/v1/period/<int:year>/<int:month>")
 def period_totals(year: int, month: int):
     if not (1 <= month <= 12 and 2020 <= year <= 2099):
@@ -280,6 +314,7 @@ def period_totals(year: int, month: int):
         totals = tax_engine.compute_period(
             session, user_id=user_id, year=year, month=month
         )
+        totals["d100"] = _d100_block(session, user_id, year, month, totals)
         return jsonify(totals)
     except Exception as e:
         logger.error(f"API period error {year}/{month} user={user_id}: {e}")
