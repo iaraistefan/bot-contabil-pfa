@@ -333,57 +333,146 @@ def register_source_file(user_id, file_bytes, telegram_file_id, kind="photo", mi
         session.close()
 
 
-def persist_document(user_id, source_file_id, item, banca, raw_response, prompt_version):
-    session = get_session()
-    try:
-        doc = documents_repo.create(
-            session, user_id=user_id, source_file_id=source_file_id,
-            data_doc=item.data, platforma=item.platforma, tip=item.tip,
-            brut=item.brut, comision=item.comision, tva=item.tva,
-            net=item.net, cash=item.cash, banca=banca,
-            detalii=item.detalii or "",
-            raw_json=raw_response[:10000] if raw_response else "",
-            prompt_version=prompt_version, status="posted", confidence=1.0,
-        )
-        # Pas R1.2: salvam numarul documentului direct pe obiect
-        # (setat inainte de commit -> intra in INSERT/UPDATE).
-        nr_doc = getattr(item, "numar_document", None)
-        if nr_doc:
-            doc.numar_document = str(nr_doc).strip()[:80]
-        doc_id = doc.id
-        audit_repo.write(
-            session, entity_type="document", entity_id=doc_id,
-            action="create", user_id=user_id, source="ai",
-            after=documents_repo.to_dict(doc),
-            note=f"posted via AI extraction (prompt={prompt_version})",
-        )
-        session.commit()
-        return doc_id
-    except Exception as e:
-        session.rollback()
-        logger.error(f"DB error in persist_document: {e}")
-        return None
-    finally:
-        session.close()
+def persist_document(session, user_id, source_file_id, item, banca, raw_response, prompt_version):
+    """
+    Crează documentul + audit ÎN SESIUNEA DATĂ. NU comite și NU înghite excepția
+    — apelantul deține tranzacția (atomicitate per batch; coada-bugs #1).
+    Întoarce doc_id (după flush, în aceeași tranzacție).
+    """
+    doc = documents_repo.create(
+        session, user_id=user_id, source_file_id=source_file_id,
+        data_doc=item.data, platforma=item.platforma, tip=item.tip,
+        brut=item.brut, comision=item.comision, tva=item.tva,
+        net=item.net, cash=item.cash, banca=banca,
+        detalii=item.detalii or "",
+        raw_json=raw_response[:10000] if raw_response else "",
+        prompt_version=prompt_version, status="posted", confidence=1.0,
+    )
+    # Pas R1.2: salvam numarul documentului direct pe obiect.
+    nr_doc = getattr(item, "numar_document", None)
+    if nr_doc:
+        doc.numar_document = str(nr_doc).strip()[:80]
+    session.flush()  # populează doc.id în aceeași tranzacție (FĂRĂ commit)
+    doc_id = doc.id
+    audit_repo.write(
+        session, entity_type="document", entity_id=doc_id,
+        action="create", user_id=user_id, source="ai",
+        after=documents_repo.to_dict(doc),
+        note=f"posted via AI extraction (prompt={prompt_version})",
+    )
+    return doc_id
 
 
-def persist_transactions(user_id, doc_id, item, banca):
-    session = get_session()
-    try:
-        tx_ids = posting.post_document(
-            session, user_id=user_id, document_id=doc_id,
-            tip=item.tip, platforma=item.platforma, detalii=item.detalii,
-            brut=item.brut, comision=item.comision, tva=item.tva,
-            net=item.net, cash=item.cash, banca=banca, data_doc=item.data,
-        )
-        session.commit()
-        return tx_ids
-    except Exception as e:
-        session.rollback()
-        logger.error(f"persist_transactions error: {e}")
-        return []
-    finally:
-        session.close()
+def persist_transactions(session, user_id, doc_id, item, banca):
+    """
+    Postează tranzacțiile ÎN SESIUNEA DATĂ. NU comite, NU înghite excepția
+    (apelantul deține tranzacția; coada-bugs #1). Întoarce tx_ids.
+    """
+    return posting.post_document(
+        session, user_id=user_id, document_id=doc_id,
+        tip=item.tip, platforma=item.platforma, detalii=item.detalii,
+        brut=item.brut, comision=item.comision, tva=item.tva,
+        net=item.net, cash=item.cash, banca=banca, data_doc=item.data,
+    )
+
+
+def _persist_all_items(session, *, items, user_id, source_file_id,
+                       raw_response, prompt_version):
+    """
+    Persistă TOȚI itemii ÎN ACEEAȘI sesiune (NU comite). Întoarce lista de
+    (item, doc_id, tx_ids) pentru construirea mesajului DUPĂ commit.
+
+    Apelantul face commit O SINGURĂ DATĂ (atomic) sau rollback la orice excepție
+    → ori toți itemii intră, ori niciunul. coada-bugs #1.
+    """
+    results = []
+    for item in items:
+        banca = 0.0
+        if item.tip == DocType.VENIT:
+            banca = item.net - item.cash
+
+        doc_id = None
+        if user_id:
+            doc_id = persist_document(
+                session, user_id=user_id, source_file_id=source_file_id,
+                item=item, banca=banca, raw_response=raw_response,
+                prompt_version=prompt_version,
+            )
+        tx_ids = []
+        if user_id and doc_id:
+            tx_ids = persist_transactions(
+                session, user_id=user_id, doc_id=doc_id, item=item, banca=banca,
+            )
+        results.append((item, doc_id, tx_ids))
+    return results
+
+
+def _build_confirm_message(results, activity) -> str:
+    """
+    Construiește mesajul „✅ Salvat" din (item, doc_id, tx_ids) — DUPĂ commit.
+    Doar formatare (zero I/O): un eșec aici nu poate pierde date deja salvate.
+    """
+    msg_confirm = "✅ *Salvat:*\n"
+    for item, doc_id, tx_ids in results:
+        data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
+        tip = item.tip
+        tva = item.tva
+        doc_tag = f" #{doc_id}" if doc_id else ""
+        tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
+
+        try:
+            d_obj = datetime.strptime(data_doc, "%d.%m.%Y")
+            folder_label = f"{LUNI_LONG.get(d_obj.month, '?')} {d_obj.year}"
+        except (ValueError, TypeError):
+            folder_label = "—"
+
+        if tip == DocType.FACTURA_COMISION:
+            msg_confirm += (
+                f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
+                f"📄 *FACTURA {item.platforma or 'comision'}*\n"
+                f"📅 Data: {data_doc}\n"
+                f"💵 Baza: {item.comision} RON\n"
+                f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
+            )
+        elif tip == DocType.CHELTUIALA:
+            cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(
+                activity, item.platforma, item.detalii
+            )
+            ded_amount = round(item.brut * ded_pct / 100.0, 2)
+
+            lines = [
+                f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}",
+                f"{cat_icon} *{item.detalii or cat_label}* — {item.brut:.2f} RON",
+                f"   📅 Data: {data_doc}",
+            ]
+            if ded_pct == 100:
+                lines.append(f"   💡 Deductibil: {ded_amount:.2f} RON (100%)")
+            elif ded_pct == 0:
+                lines.append(f"   ⚠️ Nedeductibil fiscal (0%)")
+            else:
+                lines.append(
+                    f"   💡 Deductibil: {ded_amount:.2f} RON "
+                    f"({ded_pct}% din {item.brut:.2f})"
+                )
+            if ded_note:
+                note_short = ded_note if len(ded_note) <= 90 else ded_note[:87] + "..."
+                lines.append(f"   ℹ️ _{note_short}_")
+            msg_confirm += "\n".join(lines) + "\n"
+        else:
+            net_display = item.net if item.net > 0 else item.brut
+            card_display = round(net_display - item.cash, 2)
+            platforma_tag = f" {item.platforma}" if item.platforma else ""
+            income_icon = "💰"
+            if activity and activity.income_categories:
+                income_icon = activity.income_categories[0].icon or "💰"
+            msg_confirm += (
+                f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
+                f"{income_icon} *Venit net{platforma_tag}: {net_display:.2f} RON*\n"
+                f"   💳 Card: {card_display:.2f} RON\n"
+                f"   💵 Cash: {item.cash:.2f} RON\n"
+                f"   📅 Data: {data_doc}\n"
+            )
+    return msg_confirm
 
 
 def _tx_count_label(n: int) -> str:
@@ -2195,107 +2284,53 @@ async def execute_confirmed_save(update, context, user_id):
 
     activity = get_activity_for_user(user_id) if user_id else None
 
+    await query.edit_message_text("💾 Salvez documentul...")
+
+    # === SALVARE ATOMICĂ (coada-bugs #1): o sesiune, UN commit, rollback TOTAL la
+    # orice eșec → ori toți itemii intră, ori niciunul. Înainte: commit per item →
+    # eșec mid-loop lăsa date parțiale + documente orfane raportate ca succes. ===
+    session = get_session()
+    committed = False
+    results = []
     try:
-        await query.edit_message_text("💾 Salvez documentul...")
-
-        msg_confirm = "✅ *Salvat:*\n"
-        for item in items:
-            data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
-            tip = item.tip
-            tva = item.tva
-            banca = 0.0
-            if tip == DocType.VENIT:
-                banca = item.net - item.cash
-
-            doc_id = None
-            if user_id:
-                doc_id = persist_document(
-                    user_id=user_id, source_file_id=source_file_id,
-                    item=item, banca=banca,
-                    raw_response=raw_response,
-                    prompt_version=prompt_version,
-                )
-
-            tx_ids = []
-            if user_id and doc_id:
-                tx_ids = persist_transactions(
-                    user_id=user_id, doc_id=doc_id, item=item, banca=banca,
-                )
-
-            doc_tag = f" #{doc_id}" if doc_id else ""
-            tx_tag = f" ({_tx_count_label(len(tx_ids))})" if tx_ids else ""
-
-            try:
-                d_obj = datetime.strptime(data_doc, "%d.%m.%Y")
-                folder_label = f"{LUNI_LONG.get(d_obj.month, '?')} {d_obj.year}"
-            except (ValueError, TypeError):
-                folder_label = "—"
-
-            if tip == DocType.FACTURA_COMISION:
-                msg_confirm += (
-                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
-                    f"📄 *FACTURA {item.platforma or 'comision'}*\n"
-                    f"📅 Data: {data_doc}\n"
-                    f"💵 Baza: {item.comision} RON\n"
-                    f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
-                )
-            elif tip == DocType.CHELTUIALA:
-                cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(
-                    activity, item.platforma, item.detalii
-                )
-                ded_amount = round(item.brut * ded_pct / 100.0, 2)
-
-                lines = [
-                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}",
-                    f"{cat_icon} *{item.detalii or cat_label}* — {item.brut:.2f} RON",
-                    f"   📅 Data: {data_doc}",
-                ]
-                if ded_pct == 100:
-                    lines.append(f"   💡 Deductibil: {ded_amount:.2f} RON (100%)")
-                elif ded_pct == 0:
-                    lines.append(f"   ⚠️ Nedeductibil fiscal (0%)")
-                else:
-                    lines.append(
-                        f"   💡 Deductibil: {ded_amount:.2f} RON "
-                        f"({ded_pct}% din {item.brut:.2f})"
-                    )
-                if ded_note:
-                    note_short = ded_note if len(ded_note) <= 90 else ded_note[:87] + "..."
-                    lines.append(f"   ℹ️ _{note_short}_")
-                msg_confirm += "\n".join(lines) + "\n"
-            else:
-                net_display = item.net if item.net > 0 else item.brut
-                card_display = round(net_display - item.cash, 2)
-                platforma_tag = f" {item.platforma}" if item.platforma else ""
-                income_icon = "💰"
-                if activity and activity.income_categories:
-                    income_icon = activity.income_categories[0].icon or "💰"
-                msg_confirm += (
-                    f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
-                    f"{income_icon} *Venit net{platforma_tag}: {net_display:.2f} RON*\n"
-                    f"   💳 Card: {card_display:.2f} RON\n"
-                    f"   💵 Cash: {item.cash:.2f} RON\n"
-                    f"   📅 Data: {data_doc}\n"
-                )
-
-        confirmare.clear_pending(context)
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=msg_confirm,
-            parse_mode="Markdown",
+        results = _persist_all_items(
+            session, items=items, user_id=user_id,
+            source_file_id=source_file_id, raw_response=raw_response,
+            prompt_version=prompt_version,
         )
+        session.commit()
+        committed = True
     except Exception as e:
-        logger.exception("Error in execute_confirmed_save")
+        session.rollback()
+        logger.exception("execute_confirmed_save: eșec la salvare → rollback TOTAL")
         monitoring.capture_exception(e, stage="execute_confirmed_save")
+    finally:
+        session.close()
+
+    if not committed:
         confirmare.clear_pending(context)
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "⚠️ N-am putut termina salvarea. O parte din date poate fi deja "
-                "înregistrată — verifică în *Registru* ce a intrat și retrimite "
-                "doar ce lipsește."
+                "⚠️ N-am salvat nimic — *ori toate, ori niciuna*. "
+                "Nicio modificare în registru. Reîncearcă liniștit."
             ),
             parse_mode="Markdown",
+        )
+        return
+
+    # === Commit reușit → efecte DOAR acum. Un eșec de MESAJ ≠ pierdere de date
+    # (datele sunt deja comise), deci nu raportăm fals „n-am salvat". ===
+    confirmare.clear_pending(context)
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_build_confirm_message(results, activity),
+            parse_mode="Markdown",
+        )
+    except Exception:
+        logger.exception(
+            "execute_confirmed_save: mesaj confirmare eșuat (datele SUNT salvate)"
         )
 
 
