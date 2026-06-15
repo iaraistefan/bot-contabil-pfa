@@ -1367,7 +1367,7 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         session.close()
 
     vat_out = totals.get("vat_out_total", 0) or 0
-    cota = totals.get("cota_tva", 0.21) or 0.21
+    cota = totals.get("cota_tva") or cota_tva(date(year, month, 1))  # sursă unică, fără 0.21
     tva_pct = round(cota * 100)
 
     if vat_out > 0:

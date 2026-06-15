@@ -16,7 +16,8 @@ import os as _os
 import hmac
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, date
+from app.domain.tax_rules import cota_tva  # sursă unică cotă TVA pe dată (fiscal #1)
 from threading import Thread
 from typing import Optional
 from urllib.parse import parse_qsl
@@ -486,7 +487,7 @@ def obligatii_fiscale(year: int, month: int):
             session, user_id=user_id, year=year, month=month
         )
         vat_out = float(totals.get("vat_out_total") or 0.0)
-        cota = float(totals.get("cota_tva") or 0.21)  # cota perioadei (sursă unică)
+        cota = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))  # cota perioadei (sursă unică)
         intracom_base = round(vat_out / cota, 2) if vat_out > 0 else 0.0
         has_intracom = vat_out > 0
     except Exception as e:
@@ -706,7 +707,7 @@ def genereaza_declaratie(tip: str, year: int, month: int):
             session, user_id=user_id, year=year, month=month
         )
         vat_out = float(totals.get("vat_out_total") or 0.0)
-        cota = float(totals.get("cota_tva") or 0.21)  # cota perioadei (sursă unică)
+        cota = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))  # cota perioadei (sursă unică)
         baza_intracom = round(vat_out / cota, 2) if vat_out > 0 else 0.0
     except Exception as e:
         logger.error(f"API declaratie profil error {tip} {year}/{month} user={user_id}: {e}")
