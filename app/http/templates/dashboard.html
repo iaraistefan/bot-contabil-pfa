@@ -532,7 +532,7 @@
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
-            <div class="lab">Venit net</div><div class="val g num" id="ov-net">—</div><div class="sub">RON · după comision Bolt</div>
+            <div class="lab">Venit net</div><div class="val g num" id="ov-net">—</div><div class="sub" id="ov-net-sub">RON · la zi</div>
           </div>
           <div class="kpi r">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round"/></svg></div></div>
@@ -919,7 +919,9 @@
       skelKpis(["ov-net","ov-chelt","ov-tva","ov-km"]);
       const _fh=document.getElementById("ov-fiscal"); if(_fh) _fh.innerHTML='<div class="skel skel-hero"></div>';
       const p=await getPeriod(Y,M);
-      setNum("ov-net", p.profit_estimated, RON);
+      // ov-net = venit net ANUAL YTD (din getD212, mai jos) — identic cu botul
+      // + hero-ul fiscal de pe aceeași pagină. NU profit_estimated lunar (care
+      // pe luna curentă incompletă ieșea fals-negativ = −cheltuieli). #6
       setNum("ov-chelt", p.expense_deductible_total, RON);
       setNum("ov-tva", p.vat_out_total, RON);
       // km cu pasager din parcurs (cache-only, nu lovește API Bolt)
@@ -933,7 +935,7 @@
       renderActivity(tx);
       // obligații fiscale (cache-uit) → cardul "cât plătesc" + termene reale
       // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
-      try{const fisc=await getD212(Y);renderFiscalHero(fisc);renderPraguri(fisc);}catch(e){console.error(e);const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";const pb=document.getElementById("ov-praguri");if(pb)pb.innerHTML="";}
+      try{const fisc=await getD212(Y);setNum("ov-net", fisc.venit_net, RON);setTxt("ov-net-sub", Y+" · la zi");renderFiscalHero(fisc);renderPraguri(fisc);}catch(e){console.error(e);setTxt("ov-net","—");const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";const pb=document.getElementById("ov-praguri");if(pb)pb.innerHTML="";}
       try{await renderOnboarding();}catch(e){console.error(e);}
       // A5: linie discretă "Date actualizate {relativ}" (cel mai recent sync: Bolt sau documente)
       try{const st=await getSetari();const ig=st.integrari||{};const ts=[ig.bolt&&ig.bolt.last_synced,ig.documente&&ig.documente.last_synced].filter(Boolean).sort();setTxt("ov-synced", ts.length?("Date actualizate "+relTime(ts[ts.length-1])):"");}catch(e){console.error(e);}

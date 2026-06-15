@@ -389,6 +389,24 @@ def _compute_termen_anual(
     return date(year, luna_termen, ziua)
 
 
+def _compute_termen_anual_rolling(
+    year: int, month: int, luna_termen: int, ziua: int
+) -> date:
+    """
+    Termen anual cu ROLL-FORWARD: dacă luna de referință (`month`) a trecut deja
+    de luna termenului (`luna_termen`), termenul e în anul URMĂTOR (declarăm pentru
+    anul care s-a încheiat).
+
+    SURSĂ UNICĂ a regulii de termen anual — folosită de `compute_obligation` (v2,
+    web) ȘI de `get_annual_alerts` (v1, Telegram), ca cele 2 suprafețe să NU poată
+    diverge (fiscal #7: înainte v1 arăta data trecută → fals „D212 depășit").
+    Mută anul DOAR după ce luna termenului trece.
+    """
+    if month <= luna_termen:
+        return date(year, luna_termen, ziua)
+    return date(year + 1, luna_termen, ziua)
+
+
 def _compute_termen_trimestrial(
     year: int, month: int, ziua: int
 ) -> date:
@@ -523,17 +541,12 @@ def compute_obligation(
             year, month, definitie.ziua_termenului
         )
     elif definitie.frecventa == FrecventaObligatie.ANUALA:
-        # Termenul e în anul URMĂTOR (declarăm pt anul anterior)
-        # Excepție: dacă suntem la începutul anului, termenul e în anul curent
+        # Roll-forward: după ce luna termenului trece, termenul e în anul următor
+        # (declarăm pt anul încheiat). SURSĂ UNICĂ cu get_annual_alerts (v1).
         luna_termen = definitie.luna_anuala_termen or 5
-        if month <= luna_termen:
-            termen = _compute_termen_anual(
-                year, luna_termen, definitie.ziua_termenului
-            )
-        else:
-            termen = _compute_termen_anual(
-                year + 1, luna_termen, definitie.ziua_termenului
-            )
+        termen = _compute_termen_anual_rolling(
+            year, month, luna_termen, definitie.ziua_termenului
+        )
     elif definitie.frecventa == FrecventaObligatie.UNICA:
         # Termenul "ASAP" — punem azi + 7 zile
         termen = today + timedelta(days=7)
@@ -992,14 +1005,24 @@ def get_monthly_alerts(
     return alerts
 
 
-def get_annual_alerts(year: int) -> List[dict]:
-    """[Backward-compat] Returnează alertele anuale."""
+def get_annual_alerts(year: int, today: Optional[date] = None) -> List[dict]:
+    """
+    [Backward-compat] Returnează alertele anuale.
+
+    Termenul folosește roll-forward (sursă unică `_compute_termen_anual_rolling`,
+    aceeași ca `compute_obligation` v2): după ce luna termenului trece, termenul e
+    în anul următor → Telegram nu mai arată un termen trecut ca „depășit" (#7).
+    `today` injectabil pentru testare.
+    """
     alerts = []
-    today = date.today()
+    if today is None:
+        today = date.today()
 
     for decl in ANNUAL_DEADLINES:
         try:
-            deadline = date(year, decl["month"], decl["day"])
+            deadline = _compute_termen_anual_rolling(
+                year, today.month, decl["month"], decl["day"]
+            )
         except ValueError:
             continue
 
