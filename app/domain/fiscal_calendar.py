@@ -310,8 +310,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         activitati=["*"],
         urgenta_default=UrgentaObligatie.CRITICA,
         bonus_info=(
-            "Plătești înainte de 15 aprilie → bonificație 3% "
-            "din impozitul pe venit."
+            "Achiți INTEGRAL (impozit + CAS + CASS) până pe 15 aprilie → "
+            "bonificație 3% DOAR din impozitul pe venit (CAS și CASS nu se reduc)."
         ),
         formula_suma="10% × venit_net + CAS(dacă > 12 sal.min.) + CASS(plafon)",
         portal_anaf="https://anaf.ro/duf",
@@ -824,13 +824,14 @@ ANNUAL_DEADLINES = [
         "description": (
             "Declari veniturile și cheltuielile PFA din anul anterior. "
             "Se calculează automat: impozit venit (10%), CAS (25%), CASS (10%). "
-            "Dacă plătești înainte de 15 aprilie → bonificație 3%."
+            "Dacă achiți integral (impozit + CAS + CASS) până pe 15 aprilie → "
+            "bonificație 3% din impozit."
         ),
         "where": "ANAF ePortal → Declarația Unică (D212) sau anaf.ro/duf",
         "urgency": "high",
         "bonus_tip": (
-            "Plătești înainte de 15 aprilie → economisești 3% "
-            "din impozitul pe venit!"
+            "Achiți INTEGRAL (impozit + CAS + CASS) până pe 15 aprilie → "
+            "economisești 3% din impozitul pe venit (CAS/CASS nu se reduc)!"
         ),
     },
     # ⭐ ADĂUGAT v2: D207 (FIX bug critic din v1)

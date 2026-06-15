@@ -177,8 +177,14 @@ def genereaza_ghid_d212(r: RezultatD212, plain: bool = False) -> str:
     L.append(sep)
     L.append(f"{'' if plain else '💰 '}{b(f'TOTAL DE PLATA: {r.total_plata:,.0f} lei')}".replace(",", "."))
     if r.bonificatie > 0:
-        L.append(f"   _cu plata la timp: {r.total_cu_bonificatie:,.0f} lei "
-                 f"(economisesti {r.bonificatie:,.0f} lei bonificatie 3%)_".replace(",", "."))
+        L.append(
+            f"   _Dacă depui și achiți INTEGRAL (impozit + CAS + CASS) până pe "
+            f"15 aprilie → plătești {r.total_cu_bonificatie:,.0f} lei._".replace(",", ".")
+        )
+        L.append(
+            f"   _Reducerea de 3% e DOAR pe impozit (−{r.bonificatie:,.0f} lei); "
+            f"CAS și CASS nu se reduc._".replace(",", ".")
+        )
     L.append("")
     for a in r.avertismente:
         L.append(("⚠️ " if not plain else "ATENTIE: ") + a)
