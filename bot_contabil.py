@@ -1811,17 +1811,28 @@ async def execute_fiscal(query, context, user_id, year, month):
         from app.domain.fiscal_profile import from_user_dict
         profile = users_repo.get_profile_dict(session, user_id) or {}
         cota_nerez = from_user_dict(profile).cota_nerezident
+        # D100 split per-platformă (Uber sub-pas D): planul → status + label multi-brand
+        # în calendar („Bolt 2% · Uber 16%"), nu „(X% Bolt)" legacy.
+        d100_status = d100_label = None
+        if has_bolt:
+            _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+            d100_status = _plan.status
+            d100_label = (" · ".join(f"{s.eticheta} {round(s.cota*100)}%" for s in _plan.segmente)
+                          or None)
     except Exception:
         has_bolt = False
+        d100_status = d100_label = None
     finally:
         session.close()
 
     msg = fiscal_calendar.format_fiscal_message(year, month, has_bolt_invoice=has_bolt,
-                                                cota_nerezident=cota_nerez)
+                                                cota_nerezident=cota_nerez,
+                                                d100_status=d100_status, d100_pct_label=d100_label)
     # Banner hero TOP-4 obligații urgente + textul complet dedesubt. Sursă = aceeași
     # ca textul (get_monthly_alerts + get_annual_alerts filtrate -30..60, ca format_*).
     alerts = fiscal_calendar.get_monthly_alerts(year, month, has_bolt_invoice=has_bolt,
-                                                cota_nerezident=cota_nerez) + [
+                                                cota_nerezident=cota_nerez,
+                                                d100_status=d100_status, d100_pct_label=d100_label) + [
         a for a in fiscal_calendar.get_annual_alerts(year) if -30 <= a["days_left"] <= 60
     ]
     if alerts:

@@ -230,6 +230,12 @@ def validate_payment(
     # Context tranzacție (pentru calcul sumă)
     has_intracom_invoice: bool = False,
     intracom_base_amount: float = 0.0,
+    # D100 split per-platformă (Uber sub-pas D): suma/status din compute_d100_plan.
+    # CRITIC — fără ele, D100 ar fi validat la 2% hardcodat → o plată corectă de
+    # 16% (Bolt fără cert) sau pe Uber ar fi RESPINSĂ ca „prea mare". Apelantul
+    # (cu sesiune) construiește planul și le pasează.
+    d100_suma: Optional[float] = None,
+    d100_status: Optional[str] = None,
     # Context temporal
     today: Optional[date] = None,
 ) -> PaymentValidationResult:
@@ -297,6 +303,8 @@ def validate_payment(
         is_vat_payer=is_vat_payer,
         judet=judet,
         today=today,
+        d100_suma=d100_suma,
+        d100_status=d100_status,
     )
 
     # ─── PAS 3: Verifică aplicabilitatea ──────────────────────
@@ -640,12 +648,15 @@ def get_compliance_status(
     is_vat_payer: bool = False,
     judet: Optional[str] = None,
     today: Optional[date] = None,
+    d100_suma: Optional[float] = None,
+    d100_status: Optional[str] = None,
 ) -> ComplianceStatus:
     """
     Returnează snapshot total al compliance-ului unui user.
 
     Combină toate obligațiile aplicabile + le clasifică pe urgență +
-    generează recomandări concrete.
+    generează recomandări concrete. `d100_suma`/`d100_status` (sub-pas D):
+    D100 din planul per-platformă (sursă unică), nu 2% hardcodat.
     """
     if today is None:
         today = date.today()
@@ -659,6 +670,8 @@ def get_compliance_status(
         judet=judet,
         only_applicable=True,
         today=today,
+        d100_suma=d100_suma,
+        d100_status=d100_status,
     )
 
     status = ComplianceStatus(

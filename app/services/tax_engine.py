@@ -357,6 +357,20 @@ def compute_d100_plan(by_brand: Dict[Optional[str], float], cota_tva: float, pro
     )
 
 
+def d100_plan_for(session: Session, *, user_id: int, year: int, month: int) -> "D100Plan":
+    """
+    Construiește `D100Plan` pentru (user, lună) direct din sesiune — SURSĂ UNICĂ
+    pentru toate suprafețele D100 (web _d100_block + obligatii, bot fișă + banner +
+    Plată Fiscală, calendar Telegram, guardian, alerte, scheduler). Wrapper subțire
+    peste `vat_out_by_brand` + `compute_d100_plan` ca cei ~6 apelanți să nu dubleze
+    lanțul (cota_tva pe data lunii + profil + grupare pe brand).
+    """
+    cota = cota_tva(date(year, month, 1))
+    profile = fiscal_profile_from_user_id(session, user_id)
+    by_brand = vat_out_by_brand(session, user_id=user_id, year=year, month=month)
+    return compute_d100_plan(by_brand, cota, profile)
+
+
 def has_taxable_bolt_invoice(
     session: Session, *, user_id: int, year: int, month: int
 ) -> bool:

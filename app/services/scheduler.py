@@ -380,9 +380,17 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             _build_user_context, _get_intracom_base_for_month,
         )
         from app.domain.fiscal_calendar import get_obligations_for_user
+        from app.services import tax_engine
 
         ctx = _build_user_context(session, user_id)
         intracom = _get_intracom_base_for_month(session, user_id, year, month)
+        # D100 split per-platformă (sub-pas D): suma/status din plan (nu 2%). Defensiv
+        # — un eșec la plan NU trebuie să suprime întreaga linie de plată (degradare grațioasă).
+        try:
+            _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+            _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+        except Exception:
+            _d100_suma = _d100_status = None
         obl = get_obligations_for_user(
             year, month,
             forma_juridica=ctx["forma_juridica"],
@@ -394,6 +402,8 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             judet=ctx["judet"],
             only_applicable=True,
             today=today,
+            d100_suma=_d100_suma,
+            d100_status=_d100_status,
         )
         plati = [o for o in obl if o.suma_estimata and o.suma_estimata > 0]
         # D212 (anual) — linie separată, doar când termenul e aproape

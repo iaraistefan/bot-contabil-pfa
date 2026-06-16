@@ -46,6 +46,7 @@ from app.domain.compliance_guardian import (
 )
 from app.integrations.anaf_iban_db import get_iban_for_obligation
 from app.services import banner_send  # Faza UI - banner Plată (cale-comandă)
+from app.services import tax_engine   # sub-pas D: D100 plan (sursă unică suma/status)
 from app.ro_dates import luna_ro  # Faza UI - luni RO
 
 logger = logging.getLogger(__name__)
@@ -359,6 +360,14 @@ def build_payment_detail_message(
         )
         has_intracom = intracom_base > 0
 
+    # D100 split per-platformă (Uber sub-pas D): suma/status din planul B (sursă unică),
+    # NU 2% hardcodat. Calculat doar pentru D100 (altele nu-l folosesc).
+    _d100_suma = _d100_status = None
+    if obligation_code == "D100_634":
+        _plan = tax_engine.d100_plan_for(
+            session, user_id=user_id, year=period_year, month=period_month)
+        _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+
     # Calculează obligația
     obligatie = compute_obligation(
         definitie,
@@ -369,6 +378,8 @@ def build_payment_detail_message(
         has_cod_special_tva=ctx["has_cod_special_tva"],
         is_vat_payer=ctx["is_vat_payer"],
         judet=ctx["judet"],
+        d100_suma=_d100_suma,
+        d100_status=_d100_status,
     )
 
     # Construim mesajul
@@ -488,6 +499,12 @@ def _plata_banner_items(session, user_id, ctx, applicable) -> list:
         intracom_base = _get_intracom_base_for_month(session, user_id, year, month)
     except Exception:
         intracom_base = 0.0
+    # D100 split per-platformă (sub-pas D): suma/status din plan (sursă unică, nu 2%).
+    try:
+        _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+        _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+    except Exception:
+        _d100_suma = _d100_status = None
     items = []
     for cod in applicable:
         definitie = DEFINITII_OBLIGATII.get(cod)
@@ -499,6 +516,7 @@ def _plata_banner_items(session, user_id, ctx, applicable) -> list:
                 has_intracom_invoice=intracom_base > 0, intracom_base_amount=intracom_base,
                 has_cod_special_tva=ctx["has_cod_special_tva"], is_vat_payer=ctx["is_vat_payer"],
                 judet=ctx["judet"], today=today,
+                d100_suma=_d100_suma, d100_status=_d100_status,
             )
         except Exception:
             continue
@@ -726,6 +744,8 @@ async def handle_callback(
             intracom_base = _get_intracom_base_for_month(
                 session, user_id, year, month
             )
+            # D100 split per-platformă (sub-pas D): suma/status din plan (nu 2%).
+            _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
 
             status = get_compliance_status(
                 year, month,
@@ -737,6 +757,8 @@ async def handle_callback(
                 is_vat_payer=ctx["is_vat_payer"],
                 judet=ctx["judet"],
                 today=today,
+                d100_suma=_plan.suma_declarata,
+                d100_status=_plan.status,
             )
 
             msg = format_compliance_status_telegram(status)

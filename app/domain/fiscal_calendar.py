@@ -169,13 +169,15 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
     # ─────────────────────────────────────────────────────────
     "D100_634": DefinitieObligatie(
         cod="D100 poz. 634",
-        nume="Impozit nerezidenți comisioane (2% Bolt)",
+        nume="Impozit nerezidenți comisioane (platforme din afara RO)",
         descriere=(
-            "Conform CDI România-Estonia (art. 12), comisioanele plătite "
-            "către Bolt Operations OÜ (rezident estonian) se impozitează "
-            "în România cu 2% (cu certificat de rezidență fiscală). "
-            "TU ești obligat să reții și să virezi acest impozit la "
-            "Trezorerie. NU îl reține Bolt automat."
+            "Comisioanele plătite platformelor nerezidente se impozitează în "
+            "România — cota depinde de platformă (convenții de evitare a dublei "
+            "impuneri DIFERITE): Bolt Operations OÜ (Estonia, art. 12 „Comisioane”) "
+            "→ 2% cu certificat / 16% fără; Uber B.V. (Olanda, art. 7 „profituri”) "
+            "→ 0% cu certificat (doar D207) / 16% fără. TU reții și virezi la "
+            "Trezorerie — NU îl reține platforma automat. D100 = O poziție agregată "
+            "(suma pe platformele cu cotă>0)."
         ),
         tip_iban=TipObligatie.D100_NEREZID_COMISIOANE,
         frecventa=FrecventaObligatie.LUNARA,
@@ -187,7 +189,7 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         ),
         urgenta_default=UrgentaObligatie.INALTA,
         nomenclator_anaf="634",
-        formula_suma="2% × baza_factura_Bolt_fara_TVA",
+        formula_suma="Σ pe platformă: cotă × baza_factură_fără_TVA (Bolt 2%/16%, Uber 0%/16%)",
         penalty_info=(
             "Nedepunerea / neplata atrage majorări de întârziere "
             "0.02%/zi + penalități."
@@ -202,9 +204,10 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         cod="D207",
         nume="Declarația informativă privind impozitul reținut la sursă",
         descriere=(
-            "Centralizează toate impozitele reținute la sursă în anul precedent "
-            "pentru veniturile plătite nerezidenților (Bolt etc.). "
-            "Se depune o dată pe an, până pe 28 februarie."
+            "Centralizează toate veniturile plătite nerezidenților în anul "
+            "precedent — AMBELE platforme se declară aici: Bolt (impozabil 2%/16%) "
+            "ȘI Uber (inclusiv partea scutită 0% cu certificat — scutirea se declară "
+            "TOT în D207, nu doar impozitul). Se depune o dată pe an, până pe 28 februarie."
         ),
         tip_iban=None,  # nu se plătește — e doar declarativă
         frecventa=FrecventaObligatie.ANUALA,
@@ -213,7 +216,9 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         forme_juridice=["PFA", "II", "IF", "SRL_MICRO", "SRL_NORMAL"],
         activitati=["ridesharing"],
         conditie_extra=(
-            "Doar dacă ai depus D100 pentru nerezidenți în anul precedent."
+            "Dacă ai avut venituri plătite nerezidenților — fie impozabile "
+            "(Bolt, ai depus D100), fie scutite (Uber cu certificat, 0%): "
+            "scutirea se declară TOT aici, chiar fără D100."
         ),
         urgenta_default=UrgentaObligatie.INALTA,
         formula_suma="N/A — doar declarație informativă",
@@ -254,8 +259,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         cod="D390",
         nume="Declarația recapitulativă VIES",
         descriere=(
-            "Centralizează achizițiile intracomunitare de servicii (Bolt EE). "
-            "Se depune odată cu D301, pentru aceleași luni."
+            "Centralizează achizițiile intracomunitare de servicii (Bolt EE "
+            "și/sau Uber NL). Se depune odată cu D301, pentru aceleași luni."
         ),
         tip_iban=None,  # doar declarativă
         frecventa=FrecventaObligatie.LUNARA,
@@ -514,6 +519,8 @@ def compute_obligation(
     is_vat_payer: bool = False,
     judet: Optional[str] = None,
     today: Optional[date] = None,
+    d100_suma: Optional[float] = None,
+    d100_status: Optional[str] = None,
 ) -> ObligatieCalculate:
     """
     Calculează contextul unei obligații pentru o lună specifică.
@@ -574,10 +581,19 @@ def compute_obligation(
             )
             baza_calcul = intracom_base_amount
         elif definitie.cod == "D100 poz. 634":
-            suma_estimata = round(
-                intracom_base_amount * COTA_RETINERE_NEREZIDENT_EE / 100, 2
-            )
-            baza_calcul = intracom_base_amount
+            # D100 = SURSĂ UNICĂ `compute_d100_plan` (split per-platformă Bolt/Uber,
+            # cota din profil — vezi tax_engine). NU mai hardcodăm 2% (relicvă pre-#3
+            # care ignora regimul + Uber → divergență față de _d100_block). Apelantul
+            # (cu sesiune) calculează planul și pasează suma + status; fără plan →
+            # None (NICIODATĂ o cifră presupusă, filosofia #3).
+            #   de_depus → suma reală; scutit → 0 (D207); neconfigurat/None → None.
+            if d100_status == "de_depus":
+                suma_estimata = d100_suma
+                baza_calcul = intracom_base_amount
+            elif d100_status == "scutit":
+                suma_estimata = 0.0
+            else:
+                suma_estimata = None  # neconfigurat / fara_baza / fără plan → fără cifră
 
     # Lookup IBAN dacă există județul
     iban_cont = None
@@ -612,9 +628,15 @@ def get_obligations_for_user(
     judet: Optional[str] = None,
     only_applicable: bool = True,
     today: Optional[date] = None,
+    d100_suma: Optional[float] = None,
+    d100_status: Optional[str] = None,
 ) -> List[ObligatieCalculate]:
     """
     Returnează TOATE obligațiile fiscale pentru un user în luna respectivă.
+
+    `d100_suma`/`d100_status` (Uber sub-pas D): suma + statusul D100 din
+    `tax_engine.compute_d100_plan` (split per-platformă). Pasate de apelantul cu
+    sesiune → D100 = sursă unică, nu 2% hardcodat. Vezi compute_obligation.
 
     Args:
         year, month: perioada de referință
@@ -641,6 +663,8 @@ def get_obligations_for_user(
             is_vat_payer=is_vat_payer,
             judet=judet,
             today=today,
+            d100_suma=d100_suma,
+            d100_status=d100_status,
         )
         if only_applicable and not obl.aplicabil_acum:
             continue
@@ -676,9 +700,12 @@ def format_calendar_telegram(
     has_cod_special_tva: bool = False,
     is_vat_payer: bool = False,
     judet: Optional[str] = None,
+    d100_suma: Optional[float] = None,
+    d100_status: Optional[str] = None,
 ) -> str:
     """
     Format Telegram complet pentru calendar fiscal personalizat.
+    `d100_suma`/`d100_status` (sub-pas D): D100 din planul per-platformă (nu 2%).
     """
     obligatii = get_obligations_for_user(
         year, month, forma_juridica, activity_code,
@@ -688,6 +715,8 @@ def format_calendar_telegram(
         is_vat_payer=is_vat_payer,
         judet=judet,
         only_applicable=True,
+        d100_suma=d100_suma,
+        d100_status=d100_status,
     )
 
     lines = [
@@ -804,25 +833,27 @@ MONTHLY_DEADLINES = [
         "day": 25,
         "description": (
             "Declari achizițiile intracomunitare de servicii. "
-            "Se completează cu valoarea netă a comisioanelor Bolt "
-            "Operations OÜ (Estonia, EE...)."
+            "Se completează cu valoarea netă a comisioanelor platformelor UE "
+            "(Bolt Operations OÜ — Estonia EE și/sau Uber B.V. — Olanda NL)."
         ),
         "condition": "doar dacă ai factură comision Bolt/Uber în luna respectivă",
         "where": "ANAF ePortal → Depunere declarații → D390",
         "urgency": "high",
     },
-    # ⭐ ADĂUGAT v2: D100 nerezidenți (FIX bug critic din v1)
+    # ⭐ ADĂUGAT v2: D100 nerezidenți (FIX bug critic din v1). NOTĂ: numele/descrierea
+    # sunt suprascrise de get_monthly_alerts când planul (d100_status) e dat — acesta
+    # e fallback-ul generic (fără rată presupusă) pentru calea legacy.
     {
         "code": "D100 poz. 634",
-        "name": "Impozit nerezidenți comisioane (2% Bolt)",
+        "name": "Impozit nerezidenți comisioane (platforme din afara RO)",
         "day": 25,
         "description": (
-            "Conform CDI România-Estonia, TU virezi 2% din comisionul Bolt "
-            "către Trezorerie. Bolt NU îl plătește automat — îl reține din "
-            "comision și îți face cunoscut ca obligație personală. "
-            "Baza: valoarea facturilor Bolt × 2%."
+            "Impozit pe comisioanele platformelor nerezidente, virat de TINE la "
+            "Trezorerie (platforma NU îl plătește automat). Cota depinde de platformă: "
+            "Bolt (Estonia) 2%/16%, Uber (Olanda) 0%/16% — după certificatul de "
+            "rezidență fiscală. D100 = sumă agregată pe platformele cu cotă>0."
         ),
-        "condition": "doar dacă ai factură comision Bolt în luna respectivă",
+        "condition": "doar dacă ai factură comision Bolt/Uber în luna respectivă",
         "where": "ANAF ePortal → Depunere declarații → D100 poz. 634",
         "urgency": "high",
     },
@@ -854,9 +885,9 @@ ANNUAL_DEADLINES = [
         "month": 2,
         "day": 28,
         "description": (
-            "Centralizează toate impozitele reținute la sursă în anul "
-            "anterior pentru veniturile plătite nerezidenților (Bolt etc.). "
-            "Obligatorie dacă ai depus D100 nerezidenți în anul precedent."
+            "Centralizează veniturile plătite nerezidenților în anul anterior — "
+            "AMBELE platforme: Bolt (impozabil 2%/16%) ȘI Uber (inclusiv partea "
+            "scutită 0% cu certificat — scutirea se declară TOT aici, chiar fără D100)."
         ),
         "where": "ANAF ePortal → Depunere declarații → D207",
         "urgency": "medium",

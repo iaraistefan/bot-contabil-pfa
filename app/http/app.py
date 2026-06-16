@@ -538,6 +538,9 @@ def obligatii_fiscale(year: int, month: int):
         cota = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))  # cota perioadei (sursă unică)
         intracom_base = round(vat_out / cota, 2) if vat_out > 0 else 0.0
         has_intracom = vat_out > 0
+        # D100 split per-platformă (Uber sub-pas D): planul = sursă unică suma+status,
+        # IDENTIC cu _d100_block → cele două ecrane web nu mai pot diverge.
+        d100_plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
     except Exception as e:
         logger.error(f"API obligatii profil error {year}/{month} user={user_id}: {e}")
         session.close()
@@ -554,6 +557,8 @@ def obligatii_fiscale(year: int, month: int):
             is_vat_payer=is_vat_payer,
             judet=judet,
             only_applicable=True,
+            d100_suma=d100_plan.suma_declarata,
+            d100_status=d100_plan.status,
         )
         data = [{
             "cod": o.definitie.cod,
