@@ -22,6 +22,7 @@ _FILES = [
     "app/services/bank_import_ui.py",
     "app/integrations/bolt_sync.py",
     "app/services/onboarding.py",
+    "app/services/ghid_ui.py",
     "app/services/confirmare.py",
     "app/services/vehicule.py",
     "app/services/reminder_ui.py",
@@ -43,9 +44,10 @@ def _extract_callbacks():
     return cbs
 
 
-# Snapshot ÎNGHEȚAT (106 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
+# Snapshot ÎNGHEȚAT (108 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
 # +onb|nerezident = captare regim nerezident D100, fiscal #3 sub-pas E;
-# +onb|platforme = gate platforme Bolt/Uber, Uber sub-pas C).
+# +onb|platforme = gate platforme Bolt/Uber, Uber sub-pas C;
+# +ghid|view / ghid|list = ghid de obligații navigabil, sub-pas Ghid 2).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -61,6 +63,7 @@ EXPECTED_CALLBACKS = {
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",
     "tvadecl|{year}|{month}",
     "du|an|{a}", "du|auto|{an}", "du|calc|asig", "du|calc|noasig", "du|manual|{an}",
+    "ghid|list", "ghid|view|{key}",
     "nav|close", "nav|noop",
     "onb|activity|{a['code']}", "onb|cancel", "onb|confirm_all", "onb|cui_retry",
     "onb|cui_save_raw", "onb|done", "onb|finalize|restart", "onb|finalize|yes",

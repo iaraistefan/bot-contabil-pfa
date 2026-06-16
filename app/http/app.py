@@ -616,6 +616,48 @@ def obligatii_fiscale(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
 
 
+@flask_app.route("/api/v1/ghid")
+def ghid_obligatii():
+    """
+    Ghidul de obligații (sub-pas Ghid 2): conținutul pedagogic din DEFINITII_OBLIGATII,
+    grupat pe frecvență (lunar/anual/o dată). SURSĂ UNICĂ — backend serializează, JS
+    DOAR afișează (regula de aur). Sub-pas 2 = TOATE declarațiile; personalizarea pe
+    profil (doar ale userului) = sub-pas 3 (prin ghid_obligation_codes(profile, ctx)).
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.domain import fiscal_calendar
+    try:
+        grupuri = [
+            {
+                "cheie": g["cheie"],
+                "label": g["label"],
+                "obligatii": [
+                    {
+                        "cod": d.cod,
+                        "nume": d.nume,
+                        "frecventa": d.frecventa.value,
+                        "ce_e": d.ce_e,
+                        "cui_se_aplica": d.cui_se_aplica,
+                        "cand": d.cand,
+                        "cum_depun": d.cum_depun,
+                        "de_ce": d.de_ce,
+                        "penalty_info": d.penalty_info,
+                        "formula_suma": d.formula_suma,
+                    }
+                    for d in g["obligatii"]
+                ],
+            }
+            for g in fiscal_calendar.ghid_grupuri()       # TOATE (sub-pas 2)
+        ]
+        return jsonify({"grupuri": grupuri})
+    except Exception as e:
+        logger.error(f"API ghid error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+
+
 @flask_app.route("/api/v1/declaratie-unica/<int:year>")
 def declaratie_unica_d212(year: int):
     """

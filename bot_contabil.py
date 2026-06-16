@@ -26,6 +26,7 @@ from app.services import bank_tax_ui  # Felia 5c-c - UI marcare taxe achitate
 from app.services import banner_send  # Faza UI - trimitere bannere (wrapper comun)
 from app.ro_dates import luna_ro  # Faza UI - luni RO pentru bannere (caption Raport)
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
+from app.services import ghid_ui  # sub-pas Ghid 2: ghid de obligații (Telegram)
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.imports.classify import (
@@ -80,11 +81,12 @@ BTN_DU = du_ui.BTN_DU  # Faza 1: "🧮 Declaratia Unica"
 BTN_CHELTUIELI = "💸 Cheltuieli"  # Faza UI: ecran cheltuieli pe categorii + banner
 BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
+BTN_GHID = "📖 Ghid"  # sub-pas Ghid 2: ghid de obligații fiscale
 
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
     BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_DU, BTN_CHELTUIELI,
-    BTN_SETARI, BTN_AJUTOR,
+    BTN_SETARI, BTN_GHID, BTN_AJUTOR,
 }
 
 LUNI_SHORT = {
@@ -111,7 +113,7 @@ def build_main_menu():
         ],
         [KeyboardButton(BTN_PLATA), KeyboardButton(BTN_PARCURS)],  # Pas 11.4 + A
         [KeyboardButton(BTN_DU), KeyboardButton(BTN_CHELTUIELI)],  # Faza 1 + ecran cheltuieli
-        [KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
+        [KeyboardButton(BTN_GHID), KeyboardButton(BTN_SETARI), KeyboardButton(BTN_AJUTOR)],
     ], resize_keyboard=True, is_persistent=True)
 
 
@@ -920,6 +922,8 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await du_ui.handle_menu_button(update, context)
     elif text == BTN_CHELTUIELI:
         await handle_cheltuieli_command(update, context)   # aceeași cale ca /cheltuieli
+    elif text == BTN_GHID:
+        await ghid_ui.handle_command(update, context)
     elif text == BTN_AJUTOR:
         await send_ajutor(update.effective_chat.id, context)
 
@@ -1134,6 +1138,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         # Pas 11.4: Plata Fiscala
+        if namespace == "ghid":
+            await ghid_ui.handle_callback(update, context, parts)
+            return
+
         if namespace == "plata":
             await plata_fiscala.handle_callback(update, context, parts)
             return
@@ -2942,6 +2950,7 @@ async def post_init(application):
     """
     comenzi = [
         BotCommand("start", "Pornire / meniul principal"),
+        BotCommand("ghid", "Ghid de obligatii fiscale"),
         BotCommand("ajutor", "Ghid de utilizare"),
         BotCommand("profil", "Vezi profilul tau"),
         BotCommand("bolt", "Venituri Bolt automat din API (luna)"),
@@ -3003,6 +3012,7 @@ if __name__ == '__main__':
     # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
+    app_bot.add_handler(CommandHandler("ghid", ghid_ui.handle_command))  # sub-pas Ghid 2
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1

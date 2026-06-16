@@ -558,6 +558,57 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
 
 
 # ============================================================
+#      GHID DE OBLIGAȚII — surfațare registru (sub-pas Ghid 2)
+# ============================================================
+# Grupare pe FRECVENȚĂ — cum TRĂIEȘTE userul obligațiile (rutina lunară / anuală /
+# o singură dată), nu alfabetic. Alegerea „profesor". Ordine fixă; grupuri goale omise.
+GHID_GRUPURI = (
+    ("lunar", "📅 Lunar", (FrecventaObligatie.LUNARA,)),
+    ("anual", "🗓️ Anual", (FrecventaObligatie.ANUALA, FrecventaObligatie.TRIMESTRIALA)),
+    ("o_data", "📌 O singură dată", (FrecventaObligatie.UNICA,)),
+)
+
+
+def ghid_obligation_codes(profile=None, ctx=None) -> List[str]:
+    """
+    Codurile declarațiilor pentru ghid.
+
+    - `profile=None` (sau `ctx=None`) → TOATE cele 8 (ghidul complet — sub-pas 2).
+    - cu `(profile, ctx)` → DOAR cele aplicabile profilului (sub-pas 3, personalizare),
+      refolosind filtrul EXISTENT `plata_fiscala.get_applicable_obligations_codes`
+      (forma juridică + activitate + status TVA). Import lazy → fără ciclu domain↔services.
+
+    Seam pentru sub-pas 3: suprafețele (ghid_ui, /api/v1/ghid) cheamă acest helper —
+    personalizarea = doar pasarea profilului, FĂRĂ rescrierea surfețelor.
+    """
+    if profile is None or ctx is None:
+        return list(DEFINITII_OBLIGATII.keys())
+    from app.services.plata_fiscala import get_applicable_obligations_codes  # lazy
+    return get_applicable_obligations_codes(profile, ctx)
+
+
+def ghid_grupuri(codes: Optional[List[str]] = None) -> List[dict]:
+    """
+    Grupează declarațiile pe frecvență (lunar/anual/o dată) pentru afișaj.
+
+    SURSĂ UNICĂ: citește din `DEFINITII_OBLIGATII` (registrul pedagogic, sub-pas 1).
+    `codes` = lista de afișat (default TOATE). Întoarce grupuri în ordinea fixă
+    GHID_GRUPURI, cu definițiile complete (inclusiv câmpurile pedagogice). Consumat
+    de AMBELE surfețe (Telegram ghid_ui + web /api/v1/ghid) → zero duplicare de text.
+    """
+    if codes is None:
+        codes = ghid_obligation_codes()
+    valide = [c for c in codes if c in DEFINITII_OBLIGATII]
+    grupuri = []
+    for cheie, label, frecvente in GHID_GRUPURI:
+        membri = [DEFINITII_OBLIGATII[c] for c in valide
+                  if DEFINITII_OBLIGATII[c].frecventa in frecvente]
+        if membri:
+            grupuri.append({"cheie": cheie, "label": label, "obligatii": membri})
+    return grupuri
+
+
+# ============================================================
 #              CALCUL OBLIGAȚII PER CONTEXT
 # ============================================================
 
