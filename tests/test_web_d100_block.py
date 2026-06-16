@@ -2,11 +2,16 @@
 Fiscal #3 — SUB-PAS D: blocul D100 servit de web (app._d100_block).
 
 Backend CALCULEAZĂ status + sumă; JS doar afișează (regula de aur). Sursa sumei
-e aceeași ca botul (calcul_impozit_nerezident). 4 status-uri:
-  - de_depus (cota>0) → suma reală (round(baza×cota))
+e aceeași ca botul (tax_engine.compute_d100_plan). 4 status-uri:
+  - de_depus (cota>0) → suma reală (lei întregi, round pe total)
   - scutit (cota 0)   → suma 0.0
   - neconfigurat (None) → suma None (NU o cifră presupusă)
   - fara_baza (vat_out<=0) → suma None
+
+Uber sub-pas B: _d100_block consumă acum vat_out_by_brand (split per-platformă).
+Testele single-brand de mai jos atribuie tot vat_out la „bolt" → regresia rămâne
+IDENTICĂ (657@2%=13, @16%=105). Defalcarea multi-brand e testată în
+test_d100_split_brand.py.
 """
 
 from app.http import app as webapp
@@ -16,6 +21,11 @@ def _block(monkeypatch, regim, vat_out, cota_tva=0.21):
     monkeypatch.setattr(
         webapp.users_repo, "get_profile_dict",
         lambda s, uid: {"firma_forma_juridica": "PFA", "regim_nerezident": regim},
+    )
+    # Tot VAT_OUT atribuit Bolt (single-brand) — vechea cale, regresie identică.
+    monkeypatch.setattr(
+        webapp.tax_engine, "vat_out_by_brand",
+        lambda s, *, user_id, year, month: {"bolt": vat_out} if vat_out > 0 else {},
     )
     totals = {"vat_out_total": vat_out, "cota_tva": cota_tva}
     return webapp._d100_block(None, 1, 2026, 1, totals)

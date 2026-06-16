@@ -131,10 +131,12 @@ def check_and_remind(bot_token: str) -> None:
 
 def check_fiscal_deadlines(bot_token: str) -> None:
     """Alertă termene fiscale — ziua 20 a fiecărei luni."""
+    from datetime import date as _date
     from db import get_session
     from app.models import User
     from app.domain.fiscal_calendar import format_fiscal_message
     from app.domain.fiscal_profile import from_user_dict
+    from app.domain.tax_rules import cota_tva
     from app.repositories import users as users_repo
     from app.services import tax_engine
 
@@ -151,12 +153,22 @@ def check_fiscal_deadlines(bot_token: str) -> None:
             # (EXPENSE+REVERSE_CHARGE) → mereu False → reminder „nu se depun".
             has_bolt = tax_engine.has_taxable_bolt_invoice(
                 session, user_id=user.id, year=year, month=month)
-            # Cota nerezident D100 din profil (None = neconfigurat → fără 2%
-            # presupus în reminder). #3 — nu trimitem „D100 2%" unui scutit/NULL.
+            # D100 split per-platformă (Uber sub-pas B): planul = sursă unică status +
+            # label. #3 — nu trimitem „D100 2%" unui scutit/NULL. cota_nerez = fallback legacy.
             profile = users_repo.get_profile_dict(session, user.id) or {}
             cota_nerez = from_user_dict(profile).cota_nerezident
+            d100_status = d100_label = None
+            if has_bolt:
+                plan = tax_engine.compute_d100_plan(
+                    tax_engine.vat_out_by_brand(session, user_id=user.id, year=year, month=month),
+                    cota_tva(_date(year, month, 1)), from_user_dict(profile),
+                )
+                d100_status = plan.status
+                d100_label = (" · ".join(f"{s.eticheta} {round(s.cota*100)}%" for s in plan.segmente)
+                              or None)
             msg = format_fiscal_message(year, month, has_bolt_invoice=has_bolt,
-                                        cota_nerezident=cota_nerez)
+                                        cota_nerezident=cota_nerez,
+                                        d100_status=d100_status, d100_pct_label=d100_label)
             _send_telegram_message(bot_token, user.telegram_id, msg)
             logger.info(f"Fiscal deadline alert sent to user_id={user.id}")
     except Exception as e:
@@ -368,9 +380,17 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             _build_user_context, _get_intracom_base_for_month,
         )
         from app.domain.fiscal_calendar import get_obligations_for_user
+        from app.services import tax_engine
 
         ctx = _build_user_context(session, user_id)
         intracom = _get_intracom_base_for_month(session, user_id, year, month)
+        # D100 split per-platformă (sub-pas D): suma/status din plan (nu 2%). Defensiv
+        # — un eșec la plan NU trebuie să suprime întreaga linie de plată (degradare grațioasă).
+        try:
+            _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+            _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+        except Exception:
+            _d100_suma = _d100_status = None
         obl = get_obligations_for_user(
             year, month,
             forma_juridica=ctx["forma_juridica"],
@@ -382,6 +402,8 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             judet=ctx["judet"],
             only_applicable=True,
             today=today,
+            d100_suma=_d100_suma,
+            d100_status=_d100_status,
         )
         plati = [o for o in obl if o.suma_estimata and o.suma_estimata > 0]
         # D212 (anual) — linie separată, doar când termenul e aproape

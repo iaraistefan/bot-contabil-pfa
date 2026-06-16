@@ -308,6 +308,7 @@ def _collect_all_obligations(
     Deduplicate pe (cod, perioada_an, perioada_luna).
     """
     from app.domain.fiscal_calendar import get_obligations_for_user
+    from app.services import tax_engine
 
     all_obligatii = []
     seen = set()
@@ -317,6 +318,13 @@ def _collect_all_obligations(
             session, user.id, year, month
         )
         try:
+            # D100 split per-platformă (sub-pas D): suma/status din plan (nu 2%);
+            # defensiv — eșecul planului nu suprimă alertele.
+            try:
+                _plan = tax_engine.d100_plan_for(session, user_id=user.id, year=year, month=month)
+                _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+            except Exception:
+                _d100_suma = _d100_status = None
             obligatii = get_obligations_for_user(
                 year, month,
                 forma_juridica=ctx["forma_juridica"],
@@ -328,6 +336,8 @@ def _collect_all_obligations(
                 judet=ctx["judet"],
                 only_applicable=True,
                 today=today,
+                d100_suma=_d100_suma,
+                d100_status=_d100_status,
             )
         except Exception as e:
             logger.error(
@@ -530,6 +540,7 @@ def _process_user_alerts(
         return 0
 
     from app.domain.fiscal_calendar import get_obligations_for_user
+    from app.services import tax_engine
 
     alerts_sent = 0
     months_to_check = _get_months_to_check(today)
@@ -541,6 +552,12 @@ def _process_user_alerts(
         has_intracom = intracom_base > 0
 
         try:
+            # D100 plan (sub-pas D) — defensiv: eșecul nu suprimă alertele.
+            try:
+                _plan = tax_engine.d100_plan_for(session, user_id=user.id, year=year, month=month)
+                _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+            except Exception:
+                _d100_suma = _d100_status = None
             obligatii = get_obligations_for_user(
                 year, month,
                 forma_juridica=ctx["forma_juridica"],
@@ -552,6 +569,8 @@ def _process_user_alerts(
                 judet=ctx["judet"],
                 only_applicable=True,
                 today=today,
+                d100_suma=_d100_suma,
+                d100_status=_d100_status,
             )
         except Exception as e:
             logger.error(
@@ -846,10 +865,18 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
         today = date.today()
 
         from app.domain.fiscal_calendar import get_obligations_for_user
+        from app.services import tax_engine
 
         intracom_base = _get_intracom_base_for_month(
             session, user.id, today.year, today.month
         )
+        # D100 plan (sub-pas D) — defensiv: eșecul nu pică tot snapshot-ul.
+        try:
+            _plan = tax_engine.d100_plan_for(
+                session, user_id=user.id, year=today.year, month=today.month)
+            _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
+        except Exception:
+            _d100_suma = _d100_status = None
 
         obligatii = get_obligations_for_user(
             today.year, today.month,
@@ -861,6 +888,8 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
             is_vat_payer=ctx["is_vat_payer"],
             judet=ctx["judet"],
             only_applicable=True,
+            d100_suma=_d100_suma,
+            d100_status=_d100_status,
             today=today,
         )
 

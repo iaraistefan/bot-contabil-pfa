@@ -42,22 +42,48 @@ STEP_ACTIVITATE = 4
 STEP_REGIM_TVA = 5
 STEP_REGIM_IMPUNERE = 6
 STEP_CONFIRMARE = 7
-# Pas CONDIȚIONAT (doar ridesharing/Bolt) — inserat între IMPUNERE și CONFIRMARE.
-# Valoare 8: tranzițiile sunt explicite (set_onboarding_step), nu secvențiale,
-# deci CONFIRMARE rămâne 7. Vezi fiscal #3.
-STEP_REGIM_NEREZIDENT = 8
+# Pași CONDIȚIONAȚI (doar ridesharing) — inserați între IMPUNERE și CONFIRMARE.
+# Tranzițiile sunt explicite (set_onboarding_step), nu secvențiale → CONFIRMARE
+# rămâne 7. Vezi fiscal #3 + Uber sub-pas C.
+#   8  = GATE platforme [Bolt / Uber / Ambele] — ce platforme folosește șoferul.
+#   9  = întrebarea Bolt (2%/16%) → scrie regim_nerezident_bolt.
+#   10 = întrebarea Uber (0%/16%) → scrie regim_nerezident_uber.
+# „Ambele" → 9 apoi 10. „Bolt"/„Uber" → doar pasul lui („nu întrebăm irelevant").
+STEP_REGIM_NEREZIDENT = 8          # GATE platforme (numele păstrat: e pasul de intrare)
+STEP_REGIM_NEREZIDENT_BOLT = 9
+STEP_REGIM_NEREZIDENT_UBER = 10
 STEP_COMPLETED = 99
 
 
-# Regim impozit nerezident — comision Bolt (fiscal #3). DOAR 2 opțiuni reale:
-# Bolt (Estonia, Art. 12 Convenție) e 2% cu certificat / 16% fără — NU există 0%
-# pentru Bolt (acela e exclusiv Uber/Olanda, vine ca extensie). NICIUNA
-# preselectată. Codurile = subsetul activ din VALID_REGIMURI_NEREZIDENT.
+# Regim impozit nerezident PER-PLATFORMĂ (fiscal #3 + Uber sub-pas C). Cotele
+# diferă fundamental — Bolt și Uber au convenții DIFERITE, deci seturi separate,
+# fără cross (validatorii VALID_REGIMURI_NEREZIDENT_BOLT/_UBER resping codul
+# celeilalte platforme). NICIUNA preselectată.
+#
+# Bolt (Bolt Operations OÜ, Estonia) — Art. 12 „Comisioane": 2% cu CRF / 16% fără.
+# NU există 0% pentru Bolt.
 REGIMURI_NEREZIDENT = [
     {"code": "BOLT_CU_CRF",   "label": "✅ Am certificatul Bolt — 2% (D100 + D207)"},
     {"code": "BOLT_FARA_CRF", "label": "⚠️ Nu am certificatul — 16% (stopaj)"},
 ]
-REGIM_NEREZIDENT_BY_CODE = {r["code"]: r for r in REGIMURI_NEREZIDENT}
+# Uber (Uber B.V., Olanda) — art. 7 „profituri": 0% cu CRF (doar D207, fără D100)
+# / 16% fără. NU există 2% pentru Uber (acela e exclusiv Bolt).
+REGIMURI_NEREZIDENT_UBER = [
+    {"code": "UBER_CU_CRF",   "label": "✅ Am certificatul Uber — 0% (doar D207)"},
+    {"code": "UBER_FARA_CRF", "label": "⚠️ Nu am certificatul — 16% (stopaj)"},
+]
+# Hartă combinată DOAR pentru etichete + rutarea handler-ului (sub ∈ BY_CODE).
+# REGIMURI_NEREZIDENT rămâne lista Bolt (subsetul activ legacy = VALID_..._BOLT).
+REGIM_NEREZIDENT_BY_CODE = {
+    r["code"]: r for r in (REGIMURI_NEREZIDENT + REGIMURI_NEREZIDENT_UBER)
+}
+
+# Gate-ul de platforme (sub-pas C). „Ambele" → Bolt apoi Uber.
+PLATFORME_NEREZIDENT = [
+    {"code": "BOLT",   "label": "🟢 Doar Bolt"},
+    {"code": "UBER",   "label": "⚫ Doar Uber"},
+    {"code": "AMBELE", "label": "🔵 Ambele (Bolt + Uber)"},
+]
 
 
 def nerezident_label(code: str) -> str:
@@ -66,9 +92,9 @@ def nerezident_label(code: str) -> str:
 
 def next_step_after_impunere(activity_code: str) -> int:
     """
-    Pasul de după REGIM_IMPUNERE: doar ridesharing/Bolt primește întrebarea
-    despre regimul nerezident D100; ceilalți merg direct la confirmare (nu-i
-    întrebăm irelevant — comisionul nerezident e specific Bolt/Uber).
+    Pasul de după REGIM_IMPUNERE: doar ridesharing primește întrebările despre
+    regimul nerezident D100 (gate-ul de platforme); ceilalți merg direct la
+    confirmare (nu-i întrebăm irelevant — comisionul nerezident e specific Bolt/Uber).
     """
     if (activity_code or "") == "ridesharing":
         return STEP_REGIM_NEREZIDENT
@@ -245,11 +271,29 @@ def _kb_regim_impunere(forma: str):
     return InlineKeyboardMarkup(rows)
 
 
+def _kb_platforme_nerezident():
+    """Gate: ce platforme folosește șoferul — Bolt / Uber / Ambele (sub-pas C)."""
+    rows = [
+        [InlineKeyboardButton(p["label"], callback_data=f"onb|platforme|{p['code']}")]
+        for p in PLATFORME_NEREZIDENT
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
 def _kb_regim_nerezident():
     """2 opțiuni regim nerezident Bolt (2%/16%) — NICIUNA preselectată."""
     rows = [
         [InlineKeyboardButton(r["label"], callback_data=f"onb|nerezident|{r['code']}")]
         for r in REGIMURI_NEREZIDENT
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def _kb_regim_nerezident_uber():
+    """2 opțiuni regim nerezident Uber (0%/16%) — NICIUNA preselectată."""
+    rows = [
+        [InlineKeyboardButton(r["label"], callback_data=f"onb|nerezident|{r['code']}")]
+        for r in REGIMURI_NEREZIDENT_UBER
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -443,6 +487,23 @@ async def send_step_question(
         )
 
     elif step == STEP_REGIM_NEREZIDENT:
+        # GATE: ce platforme folosește (sub-pas C). Întrebăm regimul DOAR pentru
+        # platformele alese — nu pe cele irelevante.
+        msg = (
+            "*🌍 Impozit nerezident — platforme*\n\n"
+            "Comisionul reținut de platformele de ridesharing (firme din afara "
+            "României) se impozitează în România prin D100. Cota depinde de "
+            "platformă și de certificatul de rezidență fiscală.\n\n"
+            "*Ce platforme folosești?*\n\n"
+            "_Poți schimba oricând în Setări. Dacă apare o factură de la o "
+            "platformă pe care n-ai configurat-o, te anunțăm înainte de D100._"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id, text=msg, parse_mode="Markdown",
+            reply_markup=_kb_platforme_nerezident(),
+        )
+
+    elif step == STEP_REGIM_NEREZIDENT_BOLT:
         msg = (
             "*🌍 Impozit nerezident — comision Bolt*\n\n"
             "Comisionul reținut de Bolt (Bolt Operations OÜ, Estonia) se "
@@ -459,6 +520,24 @@ async def send_step_question(
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
             reply_markup=_kb_regim_nerezident(),
+        )
+
+    elif step == STEP_REGIM_NEREZIDENT_UBER:
+        msg = (
+            "*🌍 Impozit nerezident — comision Uber*\n\n"
+            "Comisionul reținut de Uber (Uber B.V., Olanda) se impozitează în "
+            "România. Convenția RO-Olanda NU are articol de comisioane → se "
+            "aplică art. 7 „profituri”, cu tratament DIFERIT de Bolt.\n\n"
+            "*Ai certificatul de rezidență fiscală al Uber B.V. (Olanda)?*\n\n"
+            "• *Da, am certificatul* → *0%* (scutire; doar D207, fără D100)\n"
+            "• *Nu am certificatul* → *16%* (stopaj la sursă)\n\n"
+            "_Certificatul e al firmei Uber (Uber B.V.), valabil pe an. Nu există "
+            "cota de 2% pentru Uber (aceea e doar pentru Bolt). Alegerea îți "
+            "aparține — nu alegem noi._"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id, text=msg, parse_mode="Markdown",
+            reply_markup=_kb_regim_nerezident_uber(),
         )
 
     elif step == STEP_CONFIRMARE:
@@ -517,10 +596,14 @@ async def _show_anaf_summary(
     lines.append(f"💰 TVA: *{regim_tva_label}*")
     lines.append(f"📈 Impunere: *{regim_imp}* _(presupus)_")
 
-    # Regim nerezident D100 — afișat doar dacă e setat (ridesharing). #3
-    regim_nerez = profile.get("regim_nerezident")
-    if regim_nerez:
-        lines.append(f"🌍 Nerezident (Bolt): *{nerezident_label(regim_nerez)}*")
+    # Regim nerezident D100 PER-PLATFORMĂ — afișat doar dacă e setat (ridesharing).
+    # Bolt cu fallback la deprecatul `regim_nerezident` (useri pre-migrare). #3 + sub-pas C.
+    regim_bolt = profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident")
+    regim_uber = profile.get("regim_nerezident_uber")
+    if regim_bolt:
+        lines.append(f"🌍 Nerezident Bolt: *{nerezident_label(regim_bolt)}*")
+    if regim_uber:
+        lines.append(f"🌍 Nerezident Uber: *{nerezident_label(regim_uber)}*")
 
     judet = profile.get("judet") or ""
     localitate = profile.get("localitate") or ""
@@ -584,12 +667,14 @@ async def _show_summary(
     )
     regim_imp = regim_impunere_label(profile.get("regim_impunere") or "")
 
-    # Regim nerezident D100 — afișat doar dacă e setat (ridesharing). #3
-    regim_nerez = profile.get("regim_nerezident")
-    nerez_line = (
-        f"🌍 *Nerezident (Bolt):* {nerezident_label(regim_nerez)}\n"
-        if regim_nerez else ""
-    )
+    # Regim nerezident D100 PER-PLATFORMĂ — Bolt cu fallback la deprecat. #3 + sub-pas C.
+    regim_bolt = profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident")
+    regim_uber = profile.get("regim_nerezident_uber")
+    nerez_line = ""
+    if regim_bolt:
+        nerez_line += f"🌍 *Nerezident Bolt:* {nerezident_label(regim_bolt)}\n"
+    if regim_uber:
+        nerez_line += f"🌍 *Nerezident Uber:* {nerezident_label(regim_uber)}\n"
 
     msg = (
         "*📋 Rezumat profil*\n"
@@ -947,19 +1032,48 @@ async def handle_onboarding_callback(
                 await send_step_question(update, context, next_step, user_id)
             return
 
-        # === REGIM NEREZIDENT (D100 — comision Bolt, doar ridesharing) ===
+        # === GATE PLATFORME (sub-pas C — ce platforme folosește, doar ridesharing) ===
+        if action == "platforme" and sub in ("BOLT", "UBER", "AMBELE"):
+            # Reținem alegerea ca să știm dacă după Bolt mai urmează Uber („Ambele").
+            context.user_data["onb_platforme"] = sub
+            first = STEP_REGIM_NEREZIDENT_UBER if sub == "UBER" else STEP_REGIM_NEREZIDENT_BOLT
+            users_repo.set_onboarding_step(session, user, first)
+            session.commit()
+            await query.edit_message_text(
+                "✅ Platforme: " + {
+                    "BOLT": "Bolt", "UBER": "Uber", "AMBELE": "Bolt + Uber",
+                }[sub]
+            )
+            await send_step_question(update, context, first, user_id)
+            return
+
+        # === REGIM NEREZIDENT (D100 — per-platformă, doar ridesharing) ===
+        # Rutare după codul ales: BOLT_* → regim_nerezident_bolt; UBER_* →
+        # regim_nerezident_uber. Scriem câmpul NOU (per-platformă, sub-pas A);
+        # citirea păstrează fallback la deprecatul `regim_nerezident`.
         if action == "nerezident" and sub in REGIM_NEREZIDENT_BY_CODE:
-            users_repo.update_profile(session, user, regim_nerezident=sub)
+            if sub in users_repo.VALID_REGIMURI_NEREZIDENT_BOLT:
+                users_repo.update_profile(session, user, regim_nerezident_bolt=sub)
+                e_bolt = True
+            else:  # sub ∈ VALID_REGIMURI_NEREZIDENT_UBER (seturi separate, fără cross)
+                users_repo.update_profile(session, user, regim_nerezident_uber=sub)
+                e_bolt = False
             session.commit()
             if context.user_data.pop("onb_fixing", None):
                 await _show_anaf_summary(update, context, user_id, via_callback=True)
             else:
-                users_repo.set_onboarding_step(session, user, STEP_CONFIRMARE)
+                # „Ambele": după Bolt urmează Uber; altfel → confirmare.
+                if e_bolt and context.user_data.get("onb_platforme") == "AMBELE":
+                    next_step = STEP_REGIM_NEREZIDENT_UBER
+                else:
+                    context.user_data.pop("onb_platforme", None)
+                    next_step = STEP_CONFIRMARE
+                users_repo.set_onboarding_step(session, user, next_step)
                 session.commit()
                 await query.edit_message_text(
                     f"✅ Regim nerezident: {nerezident_label(sub)}"
                 )
-                await send_step_question(update, context, STEP_CONFIRMARE, user_id)
+                await send_step_question(update, context, next_step, user_id)
             return
 
         # === Finalize (din fluxul manual) ===
