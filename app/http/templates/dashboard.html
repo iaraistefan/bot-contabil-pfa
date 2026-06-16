@@ -759,12 +759,19 @@
               </button>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Regim impozit nerezident (Bolt)</div>
-              <div class="hint" style="margin-bottom:12px">Impozitul pe comisionul reținut de Bolt (Bolt Operations OÜ, Estonia). Conform Convenției RO-Estonia (Art. 12), cota depinde de certificatul de rezidență fiscală al Bolt. Certificatul e al firmei Bolt, valabil pe an — nu îl ai? Îl ceri de la suportul Bolt. Verifică anul înainte de depunere.</div>
+              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Regim impozit nerezident — platforme</div>
+              <div class="hint" style="margin-bottom:12px">Impozitul pe comisionul reținut de platformele din afara RO (D100). Cota depinde de platformă și de certificatul de rezidență fiscală. Setează doar platformele pe care le folosești — fiecare are tratamentul ei.</div>
+              <div class="t" style="font-weight:600;font-size:.86rem;margin-bottom:4px">🟢 Bolt <span style="font-weight:400;color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
               <select class="set-inp" id="set-nerezident" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="BOLT_CU_CRF">Am certificatul Bolt → 2% (D100 lunar + D207 anual)</option>
                 <option value="BOLT_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
+              </select>
+              <div class="t" style="font-weight:600;font-size:.86rem;margin:14px 0 4px">⚫ Uber <span style="font-weight:400;color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
+              <select class="set-inp" id="set-nerezident-uber" onchange="salveazaRegimNerezident()">
+                <option value="">— alege regimul —</option>
+                <option value="UBER_CU_CRF">Am certificatul Uber → 0% (scutire; doar D207)</option>
+                <option value="UBER_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
               </select>
               <div id="set-nerez-msg" class="hint" style="margin-top:8px;min-height:18px"></div>
             </div>
@@ -1659,20 +1666,23 @@
       if(banca) banca.value = s.banca||"";
       if(iban) iban.value = s.iban||"";
       const nz=document.getElementById("set-nerezident");
-      if(nz) nz.value = s.regim_nerezident||"";   // "" = neconfigurat → fără preselecție
+      if(nz) nz.value = s.regim_nerezident_bolt||"";   // "" = neconfigurat → fără preselecție
+      const nzu=document.getElementById("set-nerezident-uber");
+      if(nzu) nzu.value = s.regim_nerezident_uber||"";
       renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
   }
   async function salveazaRegimNerezident(){
-    const sel=document.getElementById("set-nerezident");
     const msg=document.getElementById("set-nerez-msg");
-    const val=(sel||{}).value||"";
-    if(!val){ if(msg) msg.textContent=""; return; }   // placeholder → nu salvăm nimic
+    const bolt=((document.getElementById("set-nerezident")||{}).value)||"";
+    const uber=((document.getElementById("set-nerezident-uber")||{}).value)||"";
+    if(!bolt && !uber){ if(msg) msg.textContent=""; return; } // ambele goale → nimic de salvat
     if(msg){ msg.style.color="var(--muted)"; msg.textContent="Se salvează…"; }
     try{
+      // Trimitem ambele valori curente; gol → backend lasă neschimbat (per platformă).
       const r=await authFetch("/api/v1/setari",{
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({regim_nerezident:val}),
+        body:JSON.stringify({regim_nerezident_bolt:bolt, regim_nerezident_uber:uber}),
       });
       const d=await r.json().catch(()=>({}));
       if(r.ok && d.ok){

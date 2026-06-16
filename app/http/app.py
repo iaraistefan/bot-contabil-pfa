@@ -866,8 +866,12 @@ def setari_get():
             "firma_nume": profile.get("firma_nume") or "",
             "firma_cui": profile.get("firma_cui") or "",
             "cod_special_tva": profile.get("cod_special_tva") or "",
-            # Regim nerezident D100 (#3): "" = neconfigurat → fără preselecție în UI
-            "regim_nerezident": profile.get("regim_nerezident") or "",
+            # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
+            # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.
+            "regim_nerezident_bolt": (
+                profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident") or ""
+            ),
+            "regim_nerezident_uber": profile.get("regim_nerezident_uber") or "",
             "integrari": integrari,
         })
     except Exception as e:
@@ -887,7 +891,10 @@ def setari_post():
     body = request.get_json(silent=True) or {}
     banca = body.get("banca")
     iban = body.get("iban")
-    regim_nerezident = body.get("regim_nerezident")
+    # Regim nerezident PER-PLATFORMĂ (Uber sub-pas C). Backward-compat: cheia veche
+    # `regim_nerezident` (fără sufix) e tratată ca Bolt.
+    regim_bolt = body.get("regim_nerezident_bolt") or body.get("regim_nerezident")
+    regim_uber = body.get("regim_nerezident_uber")
 
     # validare minimala IBAN (RO + 22 caractere alfanumerice = 24 total)
     if iban:
@@ -899,17 +906,27 @@ def setari_post():
                            "RO + 22 caractere (24 in total).",
             }), 400
 
-    # Regim nerezident D100 (#3): cod valid sau gol. Gol → nu schimbăm (None);
-    # un cod nevalid e respins (nu salvăm o valoare care ar da o rată greșită).
-    if regim_nerezident:
-        if not users_repo.is_valid_regim_nerezident(regim_nerezident):
+    # Regim nerezident D100 (#3 + sub-pas C): fiecare platformă validată cu
+    # validatorul EI (seturi separate → codul Uber e respins pe Bolt și invers).
+    # Gol → nu schimbăm (None); cod nevalid → respins (nu salvăm o rată greșită).
+    if regim_bolt:
+        if not users_repo.is_valid_regim_nerezident_bolt(regim_bolt):
             return jsonify({
                 "error": "invalid_regim_nerezident",
-                "message": "Regim nerezident invalid. Alege una dintre cele 3 "
-                           "opțiuni (CRF 0% / CRF 2% / fără CRF 16%).",
+                "message": "Regim nerezident Bolt invalid. Alege 2% (cu certificat) "
+                           "sau 16% (fără). 0% e doar pentru Uber.",
             }), 400
     else:
-        regim_nerezident = None  # gol → lasă neschimbat
+        regim_bolt = None
+    if regim_uber:
+        if not users_repo.is_valid_regim_nerezident_uber(regim_uber):
+            return jsonify({
+                "error": "invalid_regim_nerezident",
+                "message": "Regim nerezident Uber invalid. Alege 0% (cu certificat) "
+                           "sau 16% (fără). 2% e doar pentru Bolt.",
+            }), 400
+    else:
+        regim_uber = None
 
     session = get_session()
     try:
@@ -920,7 +937,8 @@ def setari_post():
             session, user,
             banca=(banca if banca is not None else None),
             iban=(iban if iban is not None else None),
-            regim_nerezident=regim_nerezident,  # None → neschimbat (vezi update_profile)
+            regim_nerezident_bolt=regim_bolt,  # None → neschimbat (vezi update_profile)
+            regim_nerezident_uber=regim_uber,
         )
         session.commit()
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -928,7 +946,10 @@ def setari_post():
             "ok": True,
             "banca": profile.get("banca") or "",
             "iban": profile.get("iban") or "",
-            "regim_nerezident": profile.get("regim_nerezident") or "",
+            "regim_nerezident_bolt": (
+                profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident") or ""
+            ),
+            "regim_nerezident_uber": profile.get("regim_nerezident_uber") or "",
         })
     except Exception as e:
         session.rollback()
