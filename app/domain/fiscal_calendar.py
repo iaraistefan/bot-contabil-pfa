@@ -127,6 +127,17 @@ class DefinitieObligatie:
     # Calcul sumă: callback opțional care primește baza și returnează suma
     formula_suma: Optional[str] = None          # text descriptiv
 
+    # === Ghid pedagogic „profesor" (sub-pas Ghid 1) ===
+    # Câmpuri OPȚIONALE — fundația „Ghidului meu fiscal" (sub-pas 2 le surfațează
+    # într-un ecran/comandă personalizat pe profil). Ton simplu, accent pe „de ce e
+    # obligația TA", întrebare-ghidaj implicită. None = neîmbogățit (backward-compat:
+    # consumatorii actuali citesc doar nume/descriere → neatinși).
+    ce_e: Optional[str] = None                  # ce este, pe scurt
+    cui_se_aplica: Optional[str] = None         # cine o depune (în ce situație)
+    cand: Optional[str] = None                  # termen + frecvență, pe înțeles
+    cum_depun: Optional[str] = None             # pași + capcane reale
+    de_ce: Optional[str] = None                 # rostul fiscal — mai ales „de ce TU"
+
 
 @dataclass
 class ObligatieCalculate:
@@ -195,6 +206,33 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "0.02%/zi + penalități."
         ),
         portal_anaf="https://www.anaf.ro/anaf/internet/ANAF/servicii_online/declaratii_electronice/",
+        ce_e=(
+            "Impozitul pe care România îl reține din comisionul plătit unei "
+            "platforme STRĂINE (nerezidente). Apare la poziția 634 în D100."
+        ),
+        cui_se_aplica=(
+            "Ție, ca PFA care plătește comision unei platforme din afara RO "
+            "(Bolt — Estonia · Uber — Olanda). DOAR lunile cu factură de comision."
+        ),
+        cand=(
+            "Lunar, până pe 25 a lunii URMĂTOARE. Fără factură de comision în "
+            "lună → fără D100 în luna aia."
+        ),
+        cum_depun=(
+            "Pe CUI-ul PFA (NU codul special TVA!), prin SPV. Botul îți dă ghidul "
+            "de completare + fișierul XML pentru DUKIntegrator. Impozitul îl "
+            "plătești din buzunar, SUPLIMENTAR față de comisionul reținut."
+        ),
+        de_ce=(
+            "De ce TU și nu platforma? Convenția de evitare a dublei impuneri lasă "
+            "platforma să NU rețină impozitul — în schimb obligația de a-l reține "
+            "și vira cade pe TINE, plătitorul venitului către nerezident. Bolt/Uber "
+            "nu-l plătesc; tu îl declari. Cota depinde de certificatul de rezidență "
+            "fiscală al platformei: Bolt 2% cu certificat / 16% fără (Art.12, "
+            "Convenția RO-Estonia); Uber 0% cu certificat / 16% fără (art.7, "
+            "Convenția RO-Olanda). D100 = O singură poziție, suma agregată pe "
+            "platformele cu cotă>0."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -222,6 +260,35 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         ),
         urgenta_default=UrgentaObligatie.INALTA,
         formula_suma="N/A — doar declarație informativă",
+        penalty_info=(
+            "Nedepunerea atrage amendă (de regulă 500–1.000 lei pentru declarațiile "
+            "informative). Nu e plată de impozit aici, dar lipsa ei lasă o gaură în "
+            "evidența ANAF a plăților către nerezidenți."
+        ),
+        ce_e=(
+            "O declarație INFORMATIVĂ (fără plată) în care raportezi, o dată pe an, "
+            "toate veniturile plătite platformelor nerezidente în anul trecut — și "
+            "impozitul reținut, ȘI partea scutită."
+        ),
+        cui_se_aplica=(
+            "Ție, dacă ai avut comisioane către platforme străine: Bolt (impozabil) "
+            "SAU Uber (chiar scutit 0% cu certificat — tot se declară). Ambele intră aici."
+        ),
+        cand=(
+            "O dată pe an, până pe 28 februarie, pentru anul precedent. "
+            "Anuală, nu lunară."
+        ),
+        cum_depun=(
+            "Prin SPV. Nu plătești nimic — doar raportezi. Centralizezi pe toate "
+            "platformele (Bolt + Uber) sumele plătite și impozitul aferent (0 pentru "
+            "Uber scutit)."
+        ),
+        de_ce=(
+            "De ce trebuie chiar dacă unele sunt scutite? ANAF vrea EVIDENȚA tuturor "
+            "plăților către nerezidenți — inclusiv cele cu impozit 0 (Uber cu "
+            "certificat). Scutirea NU te scapă de raportare: lipsa D207 pe un venit "
+            "scutit e tot o neconformitate. E perechea anuală a lui D100 (lunar)."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -250,6 +317,29 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "Nedepunerea atrage amendă 1.000-5.000 RON + majorări 0.02%/zi pe TVA."
         ),
         portal_anaf="https://anaf.ro/anaf/internet/ANAF/servicii_online/declaratii_electronice/",
+        ce_e=(
+            "Decontul prin care îți AUTOCALCULEZI și declari TVA-ul pe comisionul "
+            "primit de la o platformă din UE (taxare inversă — îl declari ȘI ca "
+            "datorat, ȘI ca deductibil)."
+        ),
+        cui_se_aplica=(
+            "Ție, ca neplătitor de TVA dar cu cod special TVA (D700), când primești "
+            "factură de comision de la o platformă UE (Bolt EE / Uber NL)."
+        ),
+        cand=(
+            "Lunar, până pe 25 a lunii URMĂTOARE — doar lunile cu factură de comision UE."
+        ),
+        cum_depun=(
+            "Prin SPV. Botul îți dă ghidul + XML pentru DUKIntegrator. Baza = "
+            "valoarea comisionului fără TVA; TVA-ul = 21% din ea."
+        ),
+        de_ce=(
+            "De ce plătești TVA dacă ești NEplătitor? Pe servicii cumpărate din UE, "
+            "regula e taxarea inversă: locul taxării e în România, deci TU declari "
+            "TVA-ul în locul furnizorului străin. Ca neplătitor obișnuit nu-l poți "
+            "deduce integral, deci de regulă rămâne de plată. E perechea fiscală a "
+            "lui D390 (informativ) — se depun împreună."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -275,6 +365,33 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         conditie_extra="Doar pentru lunile cu achiziție/livrare intracom.",
         urgenta_default=UrgentaObligatie.INALTA,
         formula_suma="N/A — declarație informativă",
+        penalty_info=(
+            "Nedepunerea / depunerea cu erori atrage amendă (de regulă 1.000–5.000 "
+            "lei). Nu se plătește nimic prin ea, dar lipsa ei desincronizează VIES-ul "
+            "față de D301."
+        ),
+        ce_e=(
+            "Lista (recapitulativă) a achizițiilor intracomunitare de servicii — "
+            "comisionul de la platformele UE — raportată în sistemul european VIES."
+        ),
+        cui_se_aplica=(
+            "Ție, în aceleași luni ca D301: ai primit factură de comision de la o "
+            "platformă din UE (Bolt EE / Uber NL)."
+        ),
+        cand=(
+            "Lunar, până pe 25 a lunii URMĂTOARE, împreună cu D301. Doar lunile cu "
+            "factură intracomunitară."
+        ),
+        cum_depun=(
+            "Prin SPV, ca declarație informativă (fără plată). Operațiunea se trece "
+            "ca tip „S” (servicii), cu codul TVA al platformei (EE / NL) și valoarea netă."
+        ),
+        de_ce=(
+            "De ce încă o declarație lângă D301? D390 e ochiul UE: alimentează VIES, "
+            "sistemul prin care statele membre verifică reciproc tranzacțiile "
+            "transfrontaliere. D301 spune cât TVA datorezi; D390 spune CU CINE ai "
+            "tranzacționat. Trebuie să se potrivească."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -294,6 +411,23 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         activitati=["*"],
         urgenta_default=UrgentaObligatie.INALTA,
         formula_suma="TVA_colectat - TVA_deductibil",
+        penalty_info=(
+            "Nedepunerea / neplata atrage amendă + majorări 0.02%/zi pe TVA-ul datorat."
+        ),
+        ce_e=(
+            "Decontul lunar/trimestrial de TVA al unui PLĂTITOR de TVA: TVA încasat "
+            "de la clienți minus TVA plătit pe achiziții."
+        ),
+        cui_se_aplica=(
+            "Doar dacă ești PLĂTITOR de TVA (cifră de afaceri peste plafon sau opțiune). "
+            "Ca PFA ridesharing neplătitor NU te privește — tu ai D301, nu D300."
+        ),
+        cand="Lunar sau trimestrial (după cifra de afaceri), până pe 25.",
+        cum_depun="Prin SPV. Plătești diferența pozitivă (colectat − deductibil) către ANAF.",
+        de_ce=(
+            "E decontul de TVA obișnuit — relevant doar dacă ajungi plătitor de TVA. "
+            "Atunci D300 ÎNLOCUIEȘTE D301 (decontul special al neplătitorilor)."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -320,6 +454,33 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         ),
         formula_suma="10% × venit_net + CAS(dacă > 12 sal.min.) + CASS(plafon)",
         portal_anaf="https://anaf.ro/duf",
+        penalty_info=(
+            "Nedepunerea/întârzierea atrage majorări 0.02%/zi + penalități pe sumele "
+            "datorate, plus riscul pierderii bonificației de 3%."
+        ),
+        ce_e=(
+            "Declarația ta ANUALĂ majoră ca PFA: într-un singur formular pui impozitul "
+            "pe venit (10% × venit net), CAS-ul (pensie, 25%) și CASS-ul (sănătate, 10%)."
+        ),
+        cui_se_aplica=(
+            "Ție, ca PFA în sistem real, în fiecare an. CAS și CASS depind de cât "
+            "câștigi față de praguri (multipli de salariu minim brut)."
+        ),
+        cand=(
+            "O dată pe an, până pe 25 mai, pentru anul încheiat. Termenul de 15 aprilie "
+            "(achită integral) e separat — e pragul pentru bonificația de 3%."
+        ),
+        cum_depun=(
+            "Prin SPV sau anaf.ro/duf. Plata merge în CONTUL UNIC (5504) pe CNP-ul tău "
+            "(nu pe CUI). Botul îți calculează cele 3 componente din venitul realizat."
+        ),
+        de_ce=(
+            "De ce „unică”? Regularizezi anul TRECUT (cât ai câștigat real) ȘI declari "
+            "anticipat anul curent, totul într-un loc. CAS (pensie) se plătește doar dacă "
+            "venitul net trece 12 salarii minime; CASS (sănătate) are propriul plafon. "
+            "Bonificația de 3% se aplică DOAR pe impozit, nu pe CAS/CASS — deci plătește "
+            "TOT (nu doar impozitul) până pe 15 aprilie ca s-o prinzi."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -339,6 +500,19 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         activitati=["*"],
         urgenta_default=UrgentaObligatie.CRITICA,
         formula_suma="16% × profit_fiscal",
+        penalty_info=(
+            "Nedepunerea/neplata atrage majorări 0.02%/zi + penalități pe impozitul datorat."
+        ),
+        ce_e="Impozitul de 16% pe profitul unui SRL în regim NORMAL (nu microîntreprindere).",
+        cui_se_aplica=(
+            "Doar dacă ești SRL Normal. Ca PFA ridesharing NU te privește — tu ai D212."
+        ),
+        cand="Trimestrial (25 a lunii după trimestru) + declarația anuală pe 25 martie.",
+        cum_depun="Prin SPV. Plătești 16% din profitul fiscal (venituri − cheltuieli deductibile).",
+        de_ce=(
+            "E impozitul pe profit clasic — relevant doar pentru SRL Normal. Majoritatea "
+            "PFA-urilor ridesharing nu ajung aici (sunt PFA, deci D212)."
+        ),
     ),
 
     # ─────────────────────────────────────────────────────────
@@ -359,6 +533,26 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         activitati=["ridesharing", "ecommerce"],
         urgenta_default=UrgentaObligatie.INALTA,
         formula_suma="N/A — doar înregistrare",
+        penalty_info=(
+            "Fără cod special înregistrat (D700), nu poți depune legal D301/D390 — "
+            "rămâi în neconformitate pe toate lunile cu comision UE până îl obții."
+        ),
+        ce_e=(
+            "Cererea prin care îți iei un COD SPECIAL de TVA pentru tranzacții "
+            "intracomunitare (art. 317) — chiar dacă rămâi neplătitor de TVA pe activitatea ta."
+        ),
+        cui_se_aplica=(
+            "Ție, ca PFA/SRL neplătitor de TVA, ÎNAINTE de prima factură de comision "
+            "de la o platformă UE (Bolt EE / Uber NL)."
+        ),
+        cand="O SINGURĂ DATĂ, cât mai devreme — înainte de prima factură intracomunitară.",
+        cum_depun="Prin SPV. Fără plată — doar te înregistrezi și primești codul special.",
+        de_ce=(
+            "De ce un cod special dacă nu ești plătitor de TVA? Pentru servicii din UE, "
+            "ai nevoie de un identificator TVA valid în VIES ca să faci taxarea inversă "
+            "(D301+D390). Fără D700 nu ai cum depune D301 — deci e PRIMUL pas, poarta "
+            "către tot lanțul intracomunitar."
+        ),
     ),
 }
 
