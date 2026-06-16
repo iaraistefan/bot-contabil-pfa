@@ -933,6 +933,9 @@ SPECIAL_NOTES = [
 def get_monthly_alerts(
     year: int, month: int, has_bolt_invoice: bool = False,
     cota_nerezident: Optional[float] = None,
+    *,
+    d100_status: Optional[str] = None,
+    d100_pct_label: Optional[str] = None,
 ) -> List[dict]:
     """[Backward-compat] Returnează alertele pentru luna dată.
 
@@ -940,6 +943,11 @@ def get_monthly_alerts(
       - cota > 0 (Bolt 2%/16%)        → D100 de depus, procent DINAMIC;
       - cota == 0 (scutit, ex. Uber)  → D100 OMIS (nu se depune; D207 anual acoperă);
       - cota None (neconfigurat)     → D100 ca nudge de configurare, FĂRĂ 2% presupus.
+
+    Uber sub-pas B (multi-brand): dacă se dă `d100_status` (din `D100Plan`), acesta
+    are PRIORITATE peste `cota_nerezident` (single-brand legacy):
+      - 'de_depus'/'neconfigurat'/'scutit'/'fara_baza' → prezent / nudge / omis / omis;
+      - `d100_pct_label` (ex. „Bolt 2% · Uber 16%") apare în numele alertei.
     """
     alerts = []
     today = date.today()
@@ -949,8 +957,12 @@ def get_monthly_alerts(
             continue
 
         is_d100 = decl["code"] == "D100 poz. 634"
-        # Scutit (CRF 0%): D100 nu se depune lunar — îl omitem (D207 anual rămâne).
-        if is_d100 and cota_nerezident is not None and cota_nerezident <= 0:
+        if is_d100 and d100_status is not None:
+            # Multi-brand: scutit/fara_baza → D100 nu se depune lunar (omis).
+            if d100_status in ("scutit", "fara_baza"):
+                continue
+        elif is_d100 and cota_nerezident is not None and cota_nerezident <= 0:
+            # Legacy single-brand: scutit (CRF 0%) — D100 omis (D207 anual rămâne).
             continue
 
         # Termen e în luna URMĂTOARE (deadline 25)
@@ -982,9 +994,26 @@ def get_monthly_alerts(
             "month": month,
         }
 
-        # D100: nume/descriere reflectă cota din profil (sau prompt de setare).
+        # D100: nume/descriere reflectă planul multi-brand (dacă e dat) sau cota legacy.
         if is_d100:
-            if cota_nerezident is None:
+            if d100_status is not None:
+                # Multi-brand: status din D100Plan are prioritate.
+                if d100_status == "neconfigurat":
+                    entry["name"] = "Impozit nerezident — regim nesetat"
+                    entry["description"] = (
+                        "Ai facturi de la o platformă nerezidentă (Bolt/Uber) cu "
+                        "regimul nesetat. Setează-l (Setări / /start) ca să calculăm "
+                        "D100. Cu CRF → 0% (D207); 2% conservator; fără CRF → 16%. "
+                        "Până atunci NU emitem o sumă (ar putea fi greșită la ANAF)."
+                    )
+                else:  # de_depus
+                    label = d100_pct_label or "comisioane platforme nerezidente"
+                    entry["name"] = f"Impozit nerezidenți comisioane ({label})"
+                    entry["description"] = (
+                        f"Conform CDI, virezi impozitul nerezident prin D100 poz. 634 "
+                        f"({label}). Baza: valoarea facturilor × cota pe platformă."
+                    )
+            elif cota_nerezident is None:
                 entry["name"] = "Impozit nerezident — regim nesetat"
                 entry["description"] = (
                     "Setează regimul nerezident (Setări / /start) ca să calculăm "
@@ -1052,12 +1081,16 @@ def format_fiscal_message(
     month: int,
     has_bolt_invoice: bool = False,
     cota_nerezident: Optional[float] = None,
+    *,
+    d100_status: Optional[str] = None,
+    d100_pct_label: Optional[str] = None,
 ) -> str:
     """
     [Backward-compat] Formatează mesajul cu obligațiile fiscale (API vechi).
 
     `cota_nerezident` (fiscal #3) controlează D100: >0 de depus (procent dinamic),
-    0 scutit (omis, D207 anual), None nesetat (nudge de configurare).
+    0 scutit (omis, D207 anual), None nesetat (nudge de configurare). Uber sub-pas B:
+    `d100_status`/`d100_pct_label` (din D100Plan) au prioritate (multi-brand).
 
     NOTĂ: Pentru calendar personalizat per user, folosește
     format_calendar_telegram() (API nou v2).
@@ -1070,7 +1103,8 @@ def format_fiscal_message(
     ]
 
     monthly = get_monthly_alerts(year, month, has_bolt_invoice=has_bolt_invoice,
-                                 cota_nerezident=cota_nerezident)
+                                 cota_nerezident=cota_nerezident,
+                                 d100_status=d100_status, d100_pct_label=d100_pct_label)
     if monthly:
         lines.append("📋 *DECLARAȚII LUNARE (până pe 25 a lunii următoare):*")
         for a in monthly:

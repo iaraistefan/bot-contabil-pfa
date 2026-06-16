@@ -1380,22 +1380,32 @@
     if(!val) return;
     const pct = d.cota!=null ? Math.round(d.cota*100) : null;
     const showRon = (s)=>{ if(ron) ron.style.display = s?"":"none"; };
+    // Defalcare multi-brand (Uber sub-pas B): „din care Bolt X · Uber Y" (cu bani).
+    const defalcare = Array.isArray(d.defalcare) ? d.defalcare : [];
+    const defTxt = defalcare.map(s=>`${s.eticheta} ${RON(s.suma)} (${Math.round(s.cota*100)}%)`).join(" · ");
+    const neatrib = (d.neatribuit_lei||0)>0
+      ? ` ⚠️ ${RON(d.neatribuit_lei)} lei TVA neatribuit unei platforme — verifică furnizorul (exclus din D100).`
+      : "";
     if(d.status==="de_depus"){
       val.textContent=RON(d.suma); showRon(true);
       badge.className="badge-st warn"; badge.textContent="de depus";
-      hint.textContent=`Impozit nerezident pentru Bolt (firmă din afara RO): ${pct}% din comision. Lunar, termen 25.`;
+      hint.textContent = (defalcare.length>1
+        ? `Impozit nerezident (platforme din afara RO): ${RON(d.suma)} lei. Din care ${defTxt}. Lunar, termen 25.`
+        : `Impozit nerezident pentru ${defalcare[0]?defalcare[0].eticheta:"Bolt"} (firmă din afara RO): ${pct}% din comision. Lunar, termen 25.`) + neatrib;
     }else if(d.status==="scutit"){
       val.textContent="0"; showRon(true);
       badge.className="badge-st ok"; badge.textContent="scutit";
-      hint.textContent="Scutit (certificat de rezidență fiscală, 0%) — D100 nu se depune. Venitul scutit se declară anual în D207.";
+      hint.textContent="Scutit (certificat de rezidență fiscală, 0%) — D100 nu se depune. Venitul scutit se declară anual în D207."+neatrib;
     }else if(d.status==="neconfigurat"){
       val.textContent="—"; showRon(false);
       badge.className="badge-st neutral"; badge.textContent="setează regim";
-      hint.textContent="Setează regimul nerezident (în bot: /start sau Setări) ca să calculăm D100. Cu CRF → 0% (depui D207); 2% conservator; fără CRF → 16%. Nu afișăm o sumă până nu alegi.";
+      hint.textContent="Ai facturi de la o platformă nerezidentă (Bolt/Uber) cu regimul nesetat. Setează-l (în bot: /start sau Setări) ca să calculăm D100. Cu CRF → 0% (depui D207); 2% conservator; fără CRF → 16%. Nu afișăm o sumă până nu alegi."+neatrib;
     }else{ // fara_baza
       val.textContent="—"; showRon(false);
       badge.className="badge-st neutral"; badge.textContent="—";
-      hint.textContent="Nicio factură Bolt (comision) în această lună → D100 nu se depune.";
+      hint.textContent=((d.neatribuit_lei||0)>0
+        ? "Facturile (comision) nu-s atribuite unei platforme rideshare (Bolt/Uber) → D100 nu se depune până nu identifici furnizorul."+neatrib
+        : "Nicio factură Bolt (comision) în această lună → D100 nu se depune.");
     }
   }
 

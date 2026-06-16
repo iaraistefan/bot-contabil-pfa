@@ -1444,15 +1444,20 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
     'Nimic de depus' FĂRĂ butoane — nu oferim fise care ar răspunde 'nu se depune'.
     """
     session = get_session()
-    cota_nerez = None
+    d100_plan = None
     try:
         totals = tax_engine.compute_period(
             session, user_id=user_id, year=year, month=month
         )
-        # Cota nerezident D100 din profil (None = neconfigurat). #3.
+        # D100 split per-platformă (Uber sub-pas B): planul = sursă unică status +
+        # defalcare. Aceeași folosită de fișă/web → coerență prag garantată.
         from app.domain.fiscal_profile import from_user_dict
         profile = users_repo.get_profile_dict(session, user_id) or {}
-        cota_nerez = from_user_dict(profile).cota_nerezident
+        cota_p = totals.get("cota_tva") or cota_tva(date(year, month, 1))
+        d100_plan = tax_engine.compute_d100_plan(
+            tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month),
+            cota_p, from_user_dict(profile),
+        )
     except Exception as e:
         logger.error(f"execute_tva_declaratii error: {e}")
         await query.edit_message_text("⚠️ N-am putut calcula TVA & Declarații. Încearcă din nou.")
@@ -1469,8 +1474,8 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         # format RO (oglindă fmt_ron din contai_banners; evită importul PIL în bot)
         baza_ro = f"{baza:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
 
-        # D100 — rând + buton + notă după regimul nerezident (#3). D301/D390
-        # depind doar de vat_out (neschimbate); doar D100 variază cu cota.
+        # D100 — rând + buton + notă după PLANUL split per-platformă. D301/D390
+        # depind doar de vat_out (neschimbate); doar D100 variază cu brand+cotă.
         rows = [
             {"code": "D301", "name": "Decont special TVA"},
             {"code": "D390", "name": "Declarație recapitulativă VIES"},
@@ -1481,24 +1486,42 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
             [InlineKeyboardButton(
                 "🇪🇺 Fisa D390 (VIES)", callback_data=f"d390|{year}|{month}")],
         ]
-        if cota_nerez is None:
-            # Neconfigurat → fără cifră presupusă; butonul duce la promptul de setare.
-            rows.append({"code": "D100", "name": "Nerezident · setează regim", "warn": True})
+        # Defalcare informativă „din care Bolt X · Uber Y" (CU BANI).
+        defalcare_txt = (
+            " · ".join(f"{s.eticheta} {s.suma:.2f}" for s in d100_plan.segmente)
+            if d100_plan.segmente else ""
+        )
+        st = d100_plan.status
+        if st == "neconfigurat":
+            nume = " și ".join(s.title() for s in d100_plan.neconfig_brands) or "platformă"
+            rows.append({"code": "D100", "name": f"Nerezident · setează regim {nume}", "warn": True})
             buttons.append([InlineKeyboardButton(
-                "⚙️ D100 — setează regim nerezident", callback_data=f"d100|{year}|{month}")])
-            d100_nota = ("⚙️ *D100*: regimul nerezident nu e setat — apasă fișa D100 "
-                         "ca să-l configurezi. Nu afișăm o sumă până nu alegi.")
-        elif cota_nerez <= 0:
-            # Scutit (CRF 0%) → D100 nu se depune; D207 anual. Fără buton D100.
+                f"⚙️ D100 — setează regim {nume}", callback_data=f"d100|{year}|{month}")])
+            d100_nota = (f"⚙️ *D100*: ai facturi *{nume}* dar regimul nerezident nu e setat "
+                         f"— apasă fișa D100 ca să-l configurezi. Nu emitem D100 (parțial) "
+                         f"până nu alegi.")
+        elif st == "scutit":
             rows.append({"code": "D100", "name": "Scutit (CRF) · declari D207"})
             d100_nota = ("✅ *D100*: scutit (CRF, 0%) — nu se depune lunar. "
                          "Venitul scutit se declară anual în *D207*.")
-        else:
-            nerez_pct = round(cota_nerez * 100)
-            rows.append({"code": "D100", "name": f"Impozit nerezident · {nerez_pct}%", "warn": True})
+        elif st == "de_depus":
+            pcte = " · ".join(f"{round(s.cota*100)}%" for s in d100_plan.segmente)
+            rows.append({"code": "D100",
+                         "name": f"Impozit nerezident · {int(d100_plan.suma_declarata)} lei",
+                         "warn": True})
             buttons.append([InlineKeyboardButton(
                 "🌍 Fisa D100 (nerezident)", callback_data=f"d100|{year}|{month}")])
-            d100_nota = None
+            d100_nota = (f"🌍 *D100*: {int(d100_plan.suma_declarata)} lei (impozit nerezident, {pcte})"
+                         + (f"\nDin care: {defalcare_txt}" if d100_plan.segmente and len(d100_plan.segmente) > 1 else ""))
+        else:  # fara_baza (vat_out neatribuit unei platforme rideshare)
+            rows.append({"code": "D100", "name": "Nerezident · verifică furnizorul"})
+            d100_nota = ("ℹ️ *D100*: facturile nu-s atribuite unei platforme rideshare "
+                         "(Bolt/Uber). Verifică furnizorul — D100 nu se depune până nu o identificăm.")
+        # Nudge neatribuit (orthogonal — poate coexista cu orice status).
+        if d100_plan.neatribuit_lei > 0 and st != "fara_baza":
+            d100_nota = (d100_nota or "") + (
+                f"\n⚠️ {d100_plan.neatribuit_lei:.2f} lei TVA neatribuit unei platforme "
+                f"— verifică furnizorul (exclus din D100).")
 
         data = {
             "title": "De depus",
@@ -1509,7 +1532,7 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         rm = InlineKeyboardMarkup(buttons)
         text = (
             f"🧾 *TVA & Declarații · {luna_ro(month)} {year}*\n"
-            f"Bază facturi Bolt: *{baza:.2f} RON* · TVA {tva_pct}%\n"
+            f"Bază facturi: *{baza:.2f} RON* · TVA {tva_pct}%\n"
             f"TVA colectat D301: *{vat_out:.2f} RON*\n\n"
             f"Apasă o fișă pentru ghid de completare + XML (DUKIntegrator)."
             + (f"\n\n{d100_nota}" if d100_nota else "")
@@ -1567,6 +1590,13 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
         cota = totals.get("cota_tva") or cota_tva(date(year, month, 1))
         baza = round(tva / cota, 2)
         profile = users_repo.get_profile_dict(session, user_id) or {}
+        # D100 multi-brand (Uber sub-pas B): planul split per-platformă (vat_out_by_brand
+        # are nevoie de DB → îl calculăm aici, în sesiune). Ignorat pentru D301/D390.
+        from app.domain.fiscal_profile import from_user_dict
+        d100_plan = tax_engine.compute_d100_plan(
+            tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month),
+            cota, from_user_dict(profile),
+        ) if tip == "D100" else None
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua compute error {tip}: {e}")
         await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut calcula {tip}. Încearcă din nou.")
@@ -1576,12 +1606,11 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
 
     try:
         firma = decl_nou.date_firma_din_profil(profile)
-        # Cota nerezident D100 din profil (None = neconfigurat → fără cifră
-        # presupusă). Ignorată pentru D390/D301. Sursă unică: from_user_dict.
-        from app.domain.fiscal_profile import from_user_dict
+        # D100 → planul multi-brand (sursă unică); D301/D390 → baza (total).
+        # Cota nerezident legacy păstrată ca fallback dacă planul lipsește.
         cota_nerez = from_user_dict(profile).cota_nerezident
         rez = decl_nou.genereaza(tip, year, month, baza, firma=firma,
-                                 cota_nerezident=cota_nerez)
+                                 cota_nerezident=cota_nerez, d100_plan=d100_plan)
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua gen error {tip}: {e}")
         await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut genera {tip}. Încearcă din nou.")

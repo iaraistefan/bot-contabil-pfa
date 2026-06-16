@@ -198,6 +198,88 @@ def _d100_negenerat(an: int, luna: int, *, motiv: str, ghid: str) -> RezultatDec
     )
 
 
+_D100_ETICHETA = {"bolt": "Bolt", "uber": "Uber"}
+
+
+def _genereaza_d100_din_plan(an, luna, firma, plan, *, d_rec=0, suportat_de_bolt=False):
+    """
+    Genereaza D100 dintr-un `tax_engine.D100Plan` (multi-brand, Uber sub-pas B).
+
+    D100 = O SINGURA pozitie agregata (lei intregi); cota difera pe platforma →
+    suma = Σ pe segment. Statusul planului decide XML vs negenerat:
+      - 'de_depus'     → XML cu segmente (Bolt 2% + Uber 16% etc.), defalcare cu bani;
+      - 'neconfigurat' → BLOCAT (opt.1): brand recunoscut cu regim nesetat → niciun XML;
+      - 'scutit'       → toate la cota 0 (CRF) → D207 anual, niciun XML;
+      - 'fara_baza'    → vat_out neatribuit unei platforme rideshare → niciun XML + nudge.
+    """
+    if plan.status == "neconfigurat":
+        nume = " si ".join(_D100_ETICHETA.get(b, b) for b in plan.neconfig_brands) or "platforma"
+        return _d100_negenerat(
+            an, luna, motiv="neconfigurat",
+            ghid=(
+                f"⚙️ *D100 — regim nerezident nesetat ({nume})*\n\n"
+                f"Ai facturi *{nume}* in aceasta luna, dar n-ai setat regimul "
+                f"nerezident pentru {nume}. Ca sa calculam corect impozitul (poz. 634), "
+                f"alege regimul in Setari (sau /start):\n"
+                f"• cu certificat de rezidenta fiscala (CRF) → *0%* (D100 nu se depune; "
+                f"declari anual in D207)\n"
+                f"• cu CRF, interpretare conservatoare → *2%* (doar Bolt)\n"
+                f"• fara CRF → *16%*\n\n"
+                f"NU emitem D100 pana nu alegi — un XML partial ar subdeclara la ANAF."
+            ),
+        )
+
+    if plan.status in ("scutit", "fara_baza"):
+        if plan.status == "scutit":
+            ghid = (
+                "✅ *D100 — scutit (CRF, 0%)*\n\n"
+                "Cu certificatul de rezidenta fiscala si aplicarea Conventiei, "
+                "impozitul pe comision este *0%* — D100 *nu se depune* lunar.\n\n"
+                "⚠️ Venitul scutit se declara *anual in D207* (informativa, "
+                "termen 28 februarie)."
+            )
+        else:
+            ghid = (
+                "ℹ️ *D100 — nicio factura atribuita unei platforme nerezidente*\n\n"
+                "Exista TVA colectat (taxare inversa) in aceasta luna, dar facturile "
+                "nu sunt atribuite unei platforme rideshare (Bolt/Uber). Verifica "
+                "furnizorul pe facturile respective — D100 (poz. 634) nu se depune "
+                "pana nu identificam platforma."
+            )
+        return _d100_negenerat(an, luna, motiv=plan.status, ghid=ghid)
+
+    # de_depus → XML cu segmente (suma agregata, lei intregi; defalcare cu bani in ghid).
+    identitate = d100.IdentitateD100(
+        cui=firma.cui_pfa,  # CUI PFA, NU codul special!
+        denumire=firma.denumire,
+        adresa=firma.adresa,
+        nume_declarant=firma.nume_declarant,
+        prenume_declarant=firma.prenume_declarant,
+        functie_declarant=firma.functie_declarant,
+    )
+    segmente = [(s.baza, s.cota, s.eticheta) for s in plan.segmente]
+    xml = d100.genereaza_d100(an, luna, identitate, segmente=segmente,
+                              d_rec=d_rec, suportat_de_bolt=suportat_de_bolt)
+    ghid_tg = d100.genereaza_ghid_d100(an, luna, identitate, segmente=segmente,
+                                       d_rec=d_rec, suportat_de_bolt=suportat_de_bolt,
+                                       plain=False)
+    ghid_pl = d100.genereaza_ghid_d100(an, luna, identitate, segmente=segmente,
+                                       d_rec=d_rec, suportat_de_bolt=suportat_de_bolt,
+                                       plain=True)
+    suma = float(plan.suma_declarata or 0.0)
+    pcte = " / ".join(f"{s.cota * 100:.0f}%" for s in plan.segmente)
+    return RezultatDeclaratie(
+        tip="D100", an=an, luna=luna,
+        ghid_telegram=ghid_tg, ghid_plain=ghid_pl,
+        xml=xml, nume_fisier_xml=f"D100_{an}_{luna:02d}.xml",
+        are_plata=(suma > 0), suma_plata=suma,
+        namespace_de_confirmat=True,
+        avertismente=[f"D100 e obligatoriu lunar pentru comisioanele platformelor "
+                      f"nerezidente (impozit nerezident {pcte}). Se depune pana pe 25 "
+                      f"a lunii urmatoare. Impozitul se plateste din buzunar."],
+    )
+
+
 def genereaza(
     tip: str,
     an: int,
@@ -209,7 +291,8 @@ def genereaza(
     factura_nr: Optional[str] = None,
     factura_data: Optional[date] = None,
     suportat_de_bolt: bool = False,  # DEPRECATED — fara efect (vezi mai jos)
-    cota_nerezident: Optional[float] = None,  # D100: cota din profil (0.0/0.02/0.16/None)
+    cota_nerezident: Optional[float] = None,  # D100 legacy (1 brand): cota profil (0.0/0.02/0.16/None)
+    d100_plan: Optional[object] = None,  # D100 multi-brand: tax_engine.D100Plan (split per-platforma)
 ) -> RezultatDeclaratie:
     """
     Genereaza o declaratie ANAF pe luna data, pe baza comisionului Bolt.
@@ -310,6 +393,13 @@ def genereaza(
         )
 
     if tip == "D100":
+        # Multi-brand (Uber sub-pas B): daca primim un D100Plan, il folosim ca sursa
+        # unica (status + segmente + suma agregata in lei intregi). Altfel, calea
+        # LEGACY single-brand de mai jos (backward-compat — apeluri cu cota_nerezident).
+        if d100_plan is not None:
+            return _genereaza_d100_din_plan(
+                an, luna, firma, d100_plan, d_rec=d_rec, suportat_de_bolt=suportat_de_bolt)
+
         # Rata D100 depinde de regimul nerezident (CRF) — sursa unica, din profil.
         # 4 ramuri; XML se produce DOAR la cota > 0 (Strat 1 al garzii — vezi #3).
         cota = cota_nerezident

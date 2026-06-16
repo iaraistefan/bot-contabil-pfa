@@ -271,32 +271,40 @@ def _d100_block(session, user_id: int, year: int, month: int, totals: dict) -> d
     Bloc D100 (impozit nerezident) pentru web — backend CALCULEAZĂ, JS DOAR afișează
     (regula de aur: zero recalcul în JS). Sursă unică a sumei: calcul_impozit_nerezident.
 
-    status:
-      - "fara_baza"     → nicio factură Bolt (vat_out<=0) → D100 nu se depune
-      - "neconfigurat"  → regim nerezident nesetat (None) → NU afișăm sumă (prompt)
-      - "scutit"        → CRF 0% → suma 0, nu se depune lunar (D207 anual)
-      - "de_depus"      → cota>0 (2%/16%) → suma reală
+    status (contract cu 4 stări — JS depinde de el; NU adăuga al 5-lea):
+      - "fara_baza"     → vat_out<=0 SAU tot vat_out neatribuit → D100 nu se depune
+      - "neconfigurat"  → brand recunoscut cu regim nesetat → NU afișăm sumă (prompt)
+      - "scutit"        → toate brandurile la CRF 0% → suma 0, D207 anual
+      - "de_depus"      → ≥1 brand cu cotă>0 → suma reală agregată (lei întregi)
+
+    SPLIT per-platformă (Uber sub-pas B): sursă unică `tax_engine.compute_d100_plan`
+    (aceeași folosită de bot/XML). Câmpuri noi: `defalcare` (din care Bolt/Uber, CU
+    BANI) + `neatribuit_lei` (nudge „verifică furnizorul"). `cota` rămâne pentru
+    afișajul single-brand (None la mixt).
     """
     from app.domain.fiscal_profile import from_user_dict
-    from app.integrations.anaf.d100_generator import calcul_impozit_nerezident
 
-    profile = users_repo.get_profile_dict(session, user_id) or {}
-    cota_nerez = from_user_dict(profile).cota_nerezident
-
-    vat_out = float(totals.get("vat_out_total") or 0.0)
+    profile = from_user_dict(users_repo.get_profile_dict(session, user_id) or {})
     cota_p = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))
-    baza = vat_out / cota_p if vat_out > 0 else 0.0
+    by_brand = tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month)
+    plan = tax_engine.compute_d100_plan(by_brand, cota_p, profile)
 
-    if vat_out <= 0:
-        return {"status": "fara_baza", "suma": None, "cota": cota_nerez}
-    if cota_nerez is None:
-        return {"status": "neconfigurat", "suma": None, "cota": None}
-    if cota_nerez <= 0:
-        return {"status": "scutit", "suma": 0.0, "cota": 0.0}
+    defalcare = [
+        {"brand": s.brand, "eticheta": s.eticheta, "baza": s.baza,
+         "cota": s.cota, "suma": s.suma}
+        for s in plan.segmente
+    ]
+    # `cota` single-brand: doar când e un segment (afișaj „X%"); mixt → None.
+    cota_afisaj = plan.segmente[0].cota if len(plan.segmente) == 1 else None
+    if plan.status == "scutit":
+        cota_afisaj = 0.0
+
     return {
-        "status": "de_depus",
-        "suma": float(calcul_impozit_nerezident(baza, cota_nerez)),
-        "cota": cota_nerez,
+        "status": plan.status,
+        "suma": plan.suma_declarata,            # lei întregi (None la neconfigurat/fara_baza)
+        "cota": cota_afisaj,
+        "defalcare": defalcare,                 # din care Bolt X · Uber Y (cu bani)
+        "neatribuit_lei": plan.neatribuit_lei,  # >0 → nudge „verifică furnizorul"
     }
 
 
@@ -740,6 +748,8 @@ def genereaza_declaratie(tip: str, year: int, month: int):
 
     from app.integrations.anaf import declaratii_service as decl
 
+    from app.domain.fiscal_profile import from_user_dict
+
     session = get_session()
     try:
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -749,6 +759,12 @@ def genereaza_declaratie(tip: str, year: int, month: int):
         vat_out = float(totals.get("vat_out_total") or 0.0)
         cota = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))  # cota perioadei (sursă unică)
         baza_intracom = round(vat_out / cota, 2) if vat_out > 0 else 0.0
+        # D100 multi-brand (Uber sub-pas B): planul split per-platformă, calculat în
+        # sesiune (vat_out_by_brand are nevoie de DB). Ignorat pentru D301/D390.
+        d100_plan = tax_engine.compute_d100_plan(
+            tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month),
+            cota, from_user_dict(profile),
+        ) if tip == "D100" else None
     except Exception as e:
         logger.error(f"API declaratie profil error {tip} {year}/{month} user={user_id}: {e}")
         session.close()
@@ -767,12 +783,11 @@ def genereaza_declaratie(tip: str, year: int, month: int):
 
     try:
         firma = decl.date_firma_din_profil(profile)
-        # Cota nerezident D100 din profil (None = neconfigurat → fără cifră
-        # presupusă). Ignorată pentru D390/D301. Sursă unică: from_user_dict.
-        from app.domain.fiscal_profile import from_user_dict
+        # D100 → planul multi-brand (sursă unică); D301/D390 → baza_intracom (total).
+        # Cota nerezident legacy păstrată ca fallback dacă planul lipsește.
         cota_nerez = from_user_dict(profile).cota_nerezident
         rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma,
-                             cota_nerezident=cota_nerez)
+                             cota_nerezident=cota_nerez, d100_plan=d100_plan)
     except Exception as e:
         logger.error(f"API declaratie gen error {tip} {year}/{month} user={user_id}: {e}")
         return jsonify({"error": "internal error", "message": str(e)}), 500

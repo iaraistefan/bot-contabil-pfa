@@ -30,7 +30,7 @@ DOUA DRUMURI (ca la D301/D390):
 
 from dataclasses import dataclass
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from xml.sax.saxutils import escape
 import unicodedata
 import re
@@ -169,25 +169,60 @@ def calcul_nr_evid_d100(an: int, luna: int, cod_oblig: str) -> str:
 #                    GENERATOR XML D100 (Drumul B)
 # ============================================================
 
+def _normalizeaza_segmente(
+    baza_comision_lei: Optional[float],
+    cota: Optional[float],
+    segmente: Optional[List[Tuple]],
+) -> List[Tuple[float, float]]:
+    """
+    Normalizeaza intrarea D100 la o lista de segmente `(baza, cota)` cu cota>0.
+
+    Shim backward-compat: apelul vechi `(baza_comision_lei, cota=...)` → UN segment
+    (regresie Bolt-only identica). Apelul nou `segmente=[(baza, cota[, eticheta]), ...]`
+    → split multi-brand. Garda Strat 2: orice cota None/<=0 (sau lista goala) →
+    ValueError → IMPOSIBIL un XML cu cota presupusa / suma 0 (date la ANAF, #3).
+    """
+    if segmente is None:
+        if baza_comision_lei is None or cota is None:
+            raise ValueError("genereaza_d100: lipsesc si segmente, si (baza, cota).")
+        segmente = [(baza_comision_lei, cota)]
+    norm = [(s[0], s[1]) for s in segmente]
+    if not norm or any(c is None or c <= 0 for _, c in norm):
+        raise ValueError(
+            f"genereaza_d100: segmente cu cota invalida ({[c for _, c in norm]}) → "
+            f"niciun XML. D100 se genereaza doar la cota > 0 (ex. Bolt 2%/16%). "
+            f"Scutit (0%)/neconfigurat NU produc XML."
+        )
+    return norm
+
+
 def genereaza_d100(
     an: int,
     luna: int,
     identitate: IdentitateD100,
-    baza_comision_lei: float,
+    baza_comision_lei: Optional[float] = None,
     *,
-    cota: float,
+    cota: Optional[float] = None,
+    segmente: Optional[List[Tuple]] = None,
     d_rec: int = 0,
     suportat_de_bolt: bool = False,
 ) -> str:
     """
     Genereaza XML-ul D100 pentru impozitul nerezidenti (poz. 634).
 
+    D100 = O SINGURA pozitie agregata la ANAF; cota difera pe platforma (Bolt/Uber),
+    deci suma = Σ pe segment. Doua moduri de apel:
+      - vechi (Bolt-only): `genereaza_d100(..., baza, cota=0.02)` → un segment;
+      - nou (multi-brand):  `genereaza_d100(..., segmente=[(baza_b, cota_b), ...])`.
+
     Args:
-        baza_comision_lei: baza (comisionul Bolt) pe care se aplica `cota`
-        cota: cota nerezident din profil (0.02 / 0.16). OBLIGATORIE si > 0.
-        suportat_de_bolt: DEPRECATED — fara efect. Cu certificat de rezidenta,
-                          impozitul se plateste de PFA din buzunar; deci
-                          suma_de_plata = suma_datorata intotdeauna.
+        baza_comision_lei / cota: apelul vechi (un segment). cota OBLIGATORIE si > 0.
+        segmente: lista `(baza_b, cota_b[, eticheta])` cu cota_b>0 (split per-brand).
+        suportat_de_bolt: DEPRECATED — fara efect (PFA plateste din buzunar).
+
+    Rotunjire (decizie #B): `suma_datorata = int(round(Σ baza_b × cota_b))` — round
+    O SINGURA DATA pe TOTAL (anti dubla-rotunjire; ANAF cere lei intregi). Cu UN
+    segment ≡ comportamentul vechi (657×2% = 13,14 → 13).
 
     ⚠️ GARDA (Strat 2 — date la ANAF): la cota None/<=0 ridica ValueError, deci
     e IMPOSIBIL sa iasa un XML D100 cu suma 0 sau cu o cota presupusa. Scutit
@@ -199,14 +234,12 @@ def genereaza_d100(
         raise ValueError(f"An invalid: {an}")
     if not (1 <= luna <= 12):
         raise ValueError(f"Luna invalida: {luna}")
-    if cota is None or cota <= 0:
-        raise ValueError(
-            f"genereaza_d100: cota {cota} → niciun XML. D100 se genereaza doar "
-            f"la cota > 0 (ex. Bolt 2%/16%). Scutit (0%)/neconfigurat NU produc XML."
-        )
+
+    segmente_norm = _normalizeaza_segmente(baza_comision_lei, cota, segmente)
 
     cui = _curata_cui(identitate.cui)
-    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei, cota))
+    # round pe TOTAL o singura data (NU Σ round per segment — evita eroarea dubla).
+    suma_datorata = int(round(sum(b * c for b, c in segmente_norm)))
     # Regula ANAF R17-20.1 (model 1): suma_plata = suma_dat - suma_redu.
     # Fara reducere, suma_plata = suma_dat. suma_ded si suma_rest NU se completeaza.
     suma_de_plata = suma_datorata
@@ -264,24 +297,39 @@ def genereaza_ghid_d100(
     an: int,
     luna: int,
     identitate: IdentitateD100,
-    baza_comision_lei: float,
+    baza_comision_lei: Optional[float] = None,
     *,
-    cota: float,
+    cota: Optional[float] = None,
+    segmente: Optional[List[Tuple]] = None,
     d_rec: int = 0,
     suportat_de_bolt: bool = False,
     plain: bool = False,
 ) -> str:
     """Ghid de completare D100 — valorile exacte pentru formular.
 
-    `cota` (din profil) e folosita atat la suma cat si la afisarea cotei.
-    Chemat doar pe calea generata (cota > 0); calcul_impozit_nerezident ridica
-    ValueError la cota 0/None.
+    Doua moduri (ca `genereaza_d100`): vechi `(baza, cota=...)` → un segment
+    (afisaj identic Bolt-only); nou `segmente=[(baza_b, cota_b, eticheta), ...]`
+    → defalcare CU BANI pe brand + total agregat in lei intregi. Chemat doar pe
+    calea generata (cota > 0).
     """
+    # Segmente etichetate: shim Bolt-only → un segment „Bolt" (afisaj identic azi).
+    if segmente is None:
+        if baza_comision_lei is None or cota is None:
+            raise ValueError("genereaza_ghid_d100: lipsesc si segmente, si (baza, cota).")
+        seg = [(baza_comision_lei, cota, "Bolt")]
+    else:
+        seg = [(s[0], s[1], (s[2] if len(s) > 2 and s[2] else "comision")) for s in segmente]
+    if not seg or any(c is None or c <= 0 for _, c, _ in seg):
+        raise ValueError("genereaza_ghid_d100: segmente cu cota invalida (cota>0 obligatorie).")
+
     cui = _curata_cui(identitate.cui)
     luna_nume = _LUNI.get(luna, str(luna))
-    suma_datorata = int(calcul_impozit_nerezident(baza_comision_lei, cota))
+    multi = len(seg) > 1
+    baza_totala = sum(bz for bz, _, _ in seg)
+    # round pe TOTAL o singura data (decizie #B) — defalcarea ramane cu bani.
+    suma_datorata = int(round(sum(bz * ct for bz, ct, _ in seg)))
     # suportat_de_bolt e DEPRECATED si nu mai are efect: cu certificat de
-    # rezidenta, impozitul 2% se plateste de PFA -> suma_de_plata = suma_datorata.
+    # rezidenta, impozitul se plateste de PFA -> suma_de_plata = suma_datorata.
     suma_de_plata = suma_datorata
 
     b = (lambda s: s) if plain else (lambda s: f"*{s}*")
@@ -302,15 +350,30 @@ def genereaza_ghid_d100(
     L.append(f"   Adresa: {_curata_text(identitate.adresa)}")
     L.append("")
     L.append(f"{'' if plain else '📝 '}{b('Creanta (poz. 634 — impozit nerezidenti)')}")
-    L.append(f"   Baza (comision Bolt): {baza_comision_lei:.0f} lei")
-    L.append(f"   Cota: {cota * 100:.0f}% (CDI Romania-Estonia)")
-    L.append(f"   Suma datorata: {b(suma_datorata)} lei")
+    if multi:
+        # Defalcare informativa per platforma (CU BANI); poz. 634 ramane O suma agregata.
+        for bz, ct, et in seg:
+            L.append(f"   {et}: baza {bz:.0f} × {ct * 100:.0f}% = {bz * ct:.2f} lei")
+        L.append(f"   Baza totala: {baza_totala:.0f} lei")
+        L.append(f"   Suma datorata (agregat, lei intregi): {b(suma_datorata)} lei")
+    else:
+        bz, ct, et = seg[0]
+        L.append(f"   Baza (comision {et}): {bz:.0f} lei")
+        L.append(f"   Cota: {ct * 100:.0f}% (CDI Romania-Estonia)")
+        L.append(f"   Suma datorata: {b(suma_datorata)} lei")
     L.append(f"   {b(f'SUMA DE PLATA: {suma_de_plata} lei')}")
     L.append("")
-    warn = (f"D100 e OBLIGATORIU lunar pentru comisionul Bolt "
-            f"(impozit nerezident {cota * 100:.0f}%). Se depune pana pe 25 a "
-            f"lunii urmatoare. Impozitul se plateste din buzunar, suplimentar "
-            f"fata de comisionul Bolt.")
+    if multi:
+        pcte = " / ".join(f"{ct * 100:.0f}%" for _, ct, _ in seg)
+        warn = (f"D100 e OBLIGATORIU lunar pentru comisioanele platformelor "
+                f"nerezidente (impozit nerezident {pcte}). Se depune pana pe 25 a "
+                f"lunii urmatoare. Impozitul se plateste din buzunar, suplimentar "
+                f"fata de comision.")
+    else:
+        warn = (f"D100 e OBLIGATORIU lunar pentru comisionul {seg[0][2]} "
+                f"(impozit nerezident {seg[0][1] * 100:.0f}%). Se depune pana pe 25 a "
+                f"lunii urmatoare. Impozitul se plateste din buzunar, suplimentar "
+                f"fata de comisionul {seg[0][2]}.")
     L.append(warn if plain else f"⚠️ _{warn}_")
     L.append("")
     L.append(f"{'' if plain else '✍️ '}Declarant: {_curata_text(identitate.nume_declarant)} "

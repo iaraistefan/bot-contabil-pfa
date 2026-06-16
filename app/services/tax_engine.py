@@ -12,6 +12,7 @@ ACTIVITY-AWARE + PROFILE-AWARE (Pas 8.4a):
 import logging
 import threading
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, Any, List, Type, Optional
 
@@ -186,6 +187,174 @@ def compute_period(
         "tx_count": len(txs),
         "fiscal_estimate": fiscal_estimate.to_dict() if fiscal_estimate else None,
     }
+
+
+# ════════════════════════════════════════════════════════
+# === Uber sub-pas B — split D100 per-platformă (per-brand) ===
+# ════════════════════════════════════════════════════════
+#
+# D100 (impozit nerezident, poz. 634) = O SINGURĂ poziție agregată la ANAF
+# (Ordin 587/2016), NU linii per beneficiar. Dar cota diferă pe platformă
+# (Bolt 2%/16%, Uber 0%/16% după CRF), deci suma agregată = Σ pe brand cu cotă>0
+# a `baza_brand × cota_brand`. D301/D390 NU se ating — rămân pe vat_out_total
+# (taxare inversă identică UE). DOAR D100 se splitează.
+
+# Branduri relevante pentru D100 (platforme rideshare nerezidente). Orice
+# altceva (brand non-rideshare ex. AWS, sau nerecunoscut) → neatribuit pentru D100.
+_D100_BRANDS = ("bolt", "uber")
+_D100_ETICHETA = {"bolt": "Bolt", "uber": "Uber"}
+
+
+def _d100_brand_key(counterparty: Optional[str]) -> Optional[str]:
+    """
+    Normalizează `counterparty` la cheia D100: 'bolt' / 'uber' / None.
+
+    Sursă unică de detecție: `vat_engine.detect_brand` (Bolt EE / Uber NL).
+    None = neatribuit pentru D100 — fie brand nerecunoscut, fie brand non-rideshare
+    (ex. AWS): nu intră în impozitul nerezident poz. 634 → izolat + nudge, NU presupus
+    (filosofia #3: niciodată o rată presupusă pe date la ANAF).
+    """
+    from app.domain.vat_engine import detect_brand
+    res = detect_brand(counterparty)
+    if not res:
+        return None
+    brand_name = (res[3] or "").strip().lower()   # res = (keyword, country, vat_id, brand_name)
+    if brand_name.startswith("uber"):
+        return "uber"
+    if brand_name == "bolt":
+        return "bolt"
+    return None
+
+
+def vat_out_by_brand(
+    session: Session, *, user_id: int, year: int, month: int
+) -> Dict[Optional[str], float]:
+    """
+    VAT_OUT (taxare inversă din factura comision) grupat pe brand D100:
+    `{'bolt': X, 'uber': Y, None: Z}`. Brand-ul vine din `counterparty` →
+    `_d100_brand_key`. Neatribuit → cheia None.
+
+    Filtru IDENTIC cu `compute_period` (`locked == False`) → INVARIANT:
+    `sum(vat_out_by_brand(...).values()) == compute_period(...)['vat_out_total']`.
+    (Refolosim semnalul, nu reimplementăm suma — ca să nu poată diverge.)
+    """
+    txs = (
+        session.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.period_year == year,
+            Transaction.period_month == month,
+            Transaction.locked == False,
+            Transaction.tx_type == "VAT_OUT",
+        )
+        .all()
+    )
+    out: Dict[Optional[str], float] = defaultdict(float)
+    for tx in txs:
+        out[_d100_brand_key(tx.counterparty)] += tx.amount_brut
+    return {k: round(v, 2) for k, v in out.items()}
+
+
+@dataclass
+class D100Segment:
+    """Un segment D100 per brand rideshare cu cotă>0 — pentru defalcarea CU BANI."""
+    brand: str            # 'bolt' / 'uber'
+    eticheta: str         # 'Bolt' / 'Uber' (afișaj)
+    vat_out: float        # TVA colectat (reverse charge) pe brand
+    baza: float           # vat_out / cota_tva (afișaj 2 zecimale)
+    cota: float           # cota nerezident (>0)
+    suma: float           # baza × cota CU BANI (informativ) — NU rotunjit la leu
+
+
+@dataclass
+class D100Plan:
+    """
+    Planul D100 pentru o lună — SURSĂ UNICĂ a sumei/statusului/defalcării,
+    consumată de toate suprafețele (web, bot fișă, banner, XML, calendar).
+
+    Rotunjire (decizie #B): suma DECLARATĂ = `round(Σ baza_b × cota_b)` în LEI
+    ÎNTREGI, O SINGURĂ rotunjire pe TOTAL (anti dublă-rotunjire; ANAF cere D100
+    fără bani). Segmentele păstrează banii (ex. 8,62 / 48,00) pentru defalcarea
+    informativă; ÎNSUMATE dau `suma_exact` (56,62) care rotunjit dă `suma_declarata`
+    (57). Cu UN segment, round-pe-total ≡ round-pe-segment → regresia Bolt-only e
+    identică (657×2% = 13,14 → 13, ca azi).
+
+    status (contract cu 4 stări — NU adăuga al 5-lea, vezi _d100_block + JS):
+      - 'fara_baza'     → vat_out<=0 SAU tot vat_out e neatribuit → D100 nu se depune
+      - 'neconfigurat'  → brand RECUNOSCUT cu regim nesetat (cota None) → BLOCAT TOT
+                          (opțiunea 1 anti-subdeclarare: niciun XML parțial la ANAF)
+      - 'scutit'        → toate brandurile recunoscute la cotă 0 (CRF) → D207 anual
+      - 'de_depus'      → ≥1 brand cu cotă>0 → suma reală agregată
+    `neatribuit_lei` (orthogonal, NU status nou): VAT_OUT fără brand D100 → nudge
+    'verifică furnizorul'; izolat, NU blochează restul (≠ brand recunoscut nesetat).
+    """
+    status: str
+    suma_declarata: Optional[float]          # LEI ÎNTREGI (None la neconfigurat/fara_baza)
+    suma_exact: float = 0.0                  # Σ baza×cota CU BANI (transparență: 56,62→57)
+    baza_total: float = 0.0                  # Σ baza pe segmente (afișaj)
+    segmente: List[D100Segment] = field(default_factory=list)
+    scutite: List[str] = field(default_factory=list)         # branduri cotă 0 → D207
+    neconfig_brands: List[str] = field(default_factory=list)  # branduri recunoscute, regim nesetat
+    neatribuit_lei: float = 0.0
+
+
+def compute_d100_plan(by_brand: Dict[Optional[str], float], cota_tva: float, profile) -> "D100Plan":
+    """
+    Construiește planul D100 din VAT_OUT per-brand + cota TVA + profilul fiscal.
+
+    PUR (fără DB): testabil direct. `profile.cota_nerezident_for(brand)` dă cota
+    pe platformă (Bolt/Uber/None). Vezi D100Plan pentru regulile de status/rotunjire.
+    """
+    vat_out_total = round(sum(by_brand.values()), 2)
+    neatribuit = round(by_brand.get(None, 0.0), 2)
+
+    if vat_out_total <= 0:
+        return D100Plan(status="fara_baza", suma_declarata=None, neatribuit_lei=0.0)
+
+    # Branduri D100 cu vat_out>0 (bolt/uber). Restul (neatribuit) → câmp separat.
+    branded = {b: v for b, v in by_brand.items() if b in _D100_BRANDS and v > 0}
+
+    if not branded:
+        # vat_out>0 dar TOTUL neatribuit → D100 fără bază + nudge (NU blochează nimic).
+        return D100Plan(status="fara_baza", suma_declarata=None, neatribuit_lei=neatribuit)
+
+    # Opțiunea 1 (status mixt): orice brand RECUNOSCUT cu regim nesetat (cota None)
+    # → BLOCHEAZĂ tot D100. Contai ȘTIE platforma dar nu cota → întreabă, NU emite
+    # XML parțial subdeclarat (filosofia #3 / Strat-2, date la ANAF).
+    neconfig = sorted(b for b in branded if profile.cota_nerezident_for(b) is None)
+    if neconfig:
+        return D100Plan(status="neconfigurat", suma_declarata=None,
+                        neconfig_brands=neconfig, neatribuit_lei=neatribuit)
+
+    # Toate brandurile recunoscute au regim setat → segmente (cotă>0) vs scutite (cotă 0).
+    segmente: List[D100Segment] = []
+    scutite: List[str] = []
+    suma_exact_raw = 0.0                       # acumulare EXACTĂ (round o singură dată pe total)
+    for b in sorted(branded):
+        cota = profile.cota_nerezident_for(b)
+        vat_b = round(branded[b], 2)
+        baza_b = vat_b / cota_tva              # precizie completă pentru suma declarată
+        if cota > 0:
+            suma_exact_raw += baza_b * cota
+            segmente.append(D100Segment(
+                brand=b, eticheta=_D100_ETICHETA.get(b, b.title()),
+                vat_out=vat_b, baza=round(baza_b, 2), cota=cota,
+                suma=round(baza_b * cota, 2)))
+        else:
+            scutite.append(b)                  # cota 0 (CRF) → D207
+
+    if not segmente:
+        # Toate brandurile la cotă 0 → scutit (D100 nu se depune, D207 anual).
+        return D100Plan(status="scutit", suma_declarata=0.0,
+                        scutite=scutite, neatribuit_lei=neatribuit)
+
+    return D100Plan(
+        status="de_depus",
+        suma_declarata=float(round(suma_exact_raw)),   # LEI ÎNTREGI, round pe TOTAL
+        suma_exact=round(suma_exact_raw, 2),
+        baza_total=round(sum(s.baza for s in segmente), 2),
+        segmente=segmente, scutite=scutite, neatribuit_lei=neatribuit,
+    )
 
 
 def has_taxable_bolt_invoice(
