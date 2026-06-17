@@ -32,7 +32,9 @@
   ::-webkit-scrollbar-thumb{background:var(--night-3);border-radius:10px}
   ::-webkit-scrollbar-track{background:transparent}
 
-  .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:100vh}
+  /* C9-C: înălțimea reală a Mini App-ului (Telegram variază chrome/tastatură).
+     Fallback 100vh în browser (var nesetat). JS o setează din tg.viewportStableHeight. */
+  .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:var(--tg-viewport-stable-height,100vh)}
 
   /* ============ SIDEBAR ============ */
   .sidebar{
@@ -397,11 +399,24 @@
     .topbar{padding:14px 16px}
     .topbar .page-title{font-size:1.1rem}
     .periods{padding:4px;gap:5px}
-    .pchip{padding:6px 10px;font-size:.74rem}
-    .ybtn{width:25px;height:25px;font-size:.8rem}
     .yval{font-size:.76rem;min-width:38px}
     .scroll{padding:18px 14px 80px}
     .hamb{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--night);display:grid;place-items:center;cursor:pointer;color:var(--cream)}
+    /* C9-C: touch targets ≥44px (deget) — selector perioadă + butoane mici */
+    .ybtn{width:44px;height:44px;font-size:.95rem}
+    .pchip{padding:0 14px;min-height:44px;display:flex;align-items:center;font-size:.78rem}
+    .doc-dl{min-height:44px;padding:0 12px}
+    /* C9-C: card-rows pe PLATI (tabel → carduri verticale label:valoare, nativ premium) */
+    .t-cards thead{display:none}
+    .t-cards tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:12px}
+    .t-cards td{display:flex;justify-content:space-between;align-items:center;gap:12px;border:none;padding:7px 0;text-align:right}
+    .t-cards td::before{content:attr(data-label);color:var(--muted-2);font-size:.72rem;font-weight:600;text-align:left;flex:none}
+    .t-cards td[data-label=""]{padding-top:10px}
+    .t-cards td[data-label=""]::before{display:none}
+    .t-cards td[data-label=""] .btn{width:100%;justify-content:center;min-height:44px}
+    /* C9-C: scroll-x pe tabelele interne late (registru/documente) */
+    .t-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .t-scroll table{min-width:560px}
   }
   .hamb{display:none}
   @media(max-width:860px){.hamb{display:grid}}
@@ -709,7 +724,7 @@
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Obligații de plată<span id="plati-luna"></span></div></div>
-          <table>
+          <table class="t-cards">
             <thead><tr><th>Obligație</th><th>Cont</th><th class="r">Sumă</th><th class="r">Termen</th><th></th></tr></thead>
             <tbody id="plati-tbody">
               <tr><td colspan="5" class="hint" style="padding:14px">Se încarcă…</td></tr>
@@ -722,11 +737,13 @@
       <section class="page" id="page-registru">
         <div class="panel" style="margin-bottom:16px">
           <div class="panel-h"><div class="t">Registru de Încasări și Plăți<span>OMFP 170/2015</span></div><a class="btn btn-primary" id="reg-export" href="#" target="_blank"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Export Excel</a></div>
+          <div class="t-scroll">
           <table>
             <thead><tr><th>Nr</th><th>Data</th><th>Document</th><th>Explicații</th><th class="r">Încasări</th><th class="r">Plăți</th><th class="r">Sold</th></tr></thead>
             <tbody id="reg-tbody">
             </tbody>
           </table>
+          </div>
         </div>
         <div class="grid g-3">
           <div class="kpi g"><div class="lab">Total încasări</div><div class="val g num" id="reg-inc">—</div></div>
@@ -739,10 +756,12 @@
       <section class="page" id="page-documente">
         <div class="panel">
           <div class="panel-h"><div class="t">Documente procesate<span>citite cu AI</span></div><a class="btn btn-primary" href="https://t.me/contabilPFA_bot"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 20h16" stroke-linecap="round" stroke-linejoin="round"/></svg>Încarcă în bot</a></div>
+          <div class="t-scroll">
           <table>
             <thead><tr><th>Data</th><th>Furnizor</th><th>Tip</th><th class="r">Sumă</th><th class="r">Status</th><th class="r">Fișier</th></tr></thead>
             <tbody id="doc-tbody"></tbody>
           </table>
+          </div>
         </div>
       </section>
 
@@ -861,10 +880,21 @@
       // --line*, --night-3, accentele → rămân :root (alpha/brand, merg pe orice fundal închis).
     }
   }
+  // ---- C9-C: viewport stable height (mobil — chrome/tastatura Telegram variază) ----
+  // Setăm --tg-viewport-stable-height din înălțimea reală a Mini App-ului → layout-ul
+  // respectă viewport-ul Telegram (nu mai taie conținutul de jos). Browser → var nesetat
+  // → .app cade pe 100vh (fallback). Re-setăm la viewportChanged (deschidere tastatură etc.).
+  function applyViewport(){
+    if(!tg) return;                                  // browser → 100vh (fallback)
+    const h = tg.viewportStableHeight || tg.viewportHeight;
+    if(h) document.documentElement.style.setProperty("--tg-viewport-stable-height", h + "px");
+  }
   if(tg){
     tg.ready();tg.expand();
     applyTelegramTheme();
+    applyViewport();
     try{ tg.onEvent && tg.onEvent("themeChanged", applyTelegramTheme); }catch(e){}  // re-aplică live
+    try{ tg.onEvent && tg.onEvent("viewportChanged", applyViewport); }catch(e){}
   }
 
   // ---- helpers ----
@@ -1629,7 +1659,7 @@
           const btn = o.suma_estimata!=null && o.suma_estimata>0
             ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
             : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
-          return `<tr><td><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" style="font-size:.78rem">${cont}</td><td class="r num neu">${suma}</td><td class="r">${termen}</td><td class="r">${btn}</td></tr>`;
+          return `<tr><td data-label="Obligație"><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" data-label="Cont" style="font-size:.78rem">${cont}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
         }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
       }
     }catch(e){
