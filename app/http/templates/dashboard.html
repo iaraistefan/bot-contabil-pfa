@@ -1870,7 +1870,8 @@
       <label class="set-lbl" style="margin-top:12px">Client Secret</label>
       <input class="set-inp" id="bolt-csec" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false">
       <div id="bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
-      <button class="btn btn-primary" id="bolt-connect-btn" style="margin-top:6px" onclick="conecteazaBolt()">Conectează contul Bolt</button>`;
+      <button class="btn btn-primary" id="bolt-connect-btn" style="margin-top:6px" onclick="conecteazaBolt()">Conectează contul Bolt</button>
+      <div class="hint" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">🛟 <b>Nu poți conecta API-ul Bolt?</b> (ex. cont gestionat de altă flotă) — API-ul sincronizează automat, dar dacă nu-l poți folosi, introdu venitul <b>manual</b>: trimite în bot <b>screenshotul raportului Bolt</b> sau text (<code>venit bolt [lună]: net X, cash Y</code>). Manual e alternativa pentru cine n-are acces API.</div>`;
   }
   function boltReconecteaza(){ const box=document.getElementById("bolt-conectare"); if(box) boltFormular(box); }
   async function conecteazaBolt(){

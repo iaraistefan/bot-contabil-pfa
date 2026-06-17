@@ -700,7 +700,12 @@ async def handle_bolt_conectare(update: Update, context: ContextTypes.DEFAULT_TY
             "*Dashboard → Setări → Conectare cont Bolt* (lipești Client ID + Secret, "
             "le generezi în fleets.bolt.eu → Settings → API).\n\n"
             "🔒 Din motive de securitate, conectarea se face DOAR în Dashboard (web), "
-            "NU lipi cheile aici în chat — ar rămâne în istoricul conversației."
+            "NU lipi cheile aici în chat — ar rămâne în istoricul conversației.\n\n"
+            "🛟 *Nu poți conecta API-ul?* (ex. cont gestionat de altă flotă) — API-ul "
+            "sincronizează automat, dar dacă nu-l poți folosi, introdu venitul *manual*: "
+            "trimite-mi *screenshotul raportului Bolt* sau text "
+            "(`venit bolt aprilie: net 1878, cash 1081`). Manual e alternativa pentru "
+            "cine n-are acces API."
         )
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("🖥️ Deschide Dashboard", web_app=WebAppInfo(url=DASHBOARD_URL))
