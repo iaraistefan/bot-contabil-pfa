@@ -70,9 +70,12 @@ LUNI_LONG = {
 # ============================================================
 
 class BoltClient:
-    def __init__(self, timeout=30):
-        self.client_id = (os.getenv("BOLT_CLIENT_ID") or "").strip()
-        self.client_secret = (os.getenv("BOLT_CLIENT_SECRET") or "").strip()
+    def __init__(self, client_id=None, client_secret=None, timeout=30):
+        # #2-B: credențiale PER-USER dacă sunt date; altfel env (owner, backward-compat).
+        # Cele 5 apeluri `BoltClient()` existente rămân pe env. `BoltClient(id, secret)` =
+        # per-user (din bolt_client_for_user).
+        self.client_id = (client_id or os.getenv("BOLT_CLIENT_ID") or "").strip()
+        self.client_secret = (client_secret or os.getenv("BOLT_CLIENT_SECRET") or "").strip()
         self.timeout = timeout
         self._token = None
         self._token_exp = 0
@@ -132,6 +135,52 @@ class BoltClient:
             "offset": offset, "limit": limit, "company_ids": company_ids,
             "start_ts": int(start_ts), "end_ts": int(end_ts),
         })
+
+
+# ============================================================
+#        CREDENȚIALE PER-USER (#2-B) — încărcare + validare
+# ============================================================
+
+def bolt_client_for_user(session, user_id):
+    """
+    BoltClient cu credențialele PROPRII ale userului, sau None dacă neconectat.
+
+    Decriptează `bolt_client_secret_enc` în memorie, DOAR la apel (nu se stochează în
+    clar nicăieri). Folosit de sync-ul per-user (#2-C). Returnează None dacă userul
+    n-are credențiale sau dacă decriptarea eșuează (cheie schimbată) — degradare grațioasă.
+    """
+    from app.models import User
+    from app.domain import crypto
+    u = session.query(User).filter(User.id == user_id).first()
+    if not u or not u.bolt_client_id or not u.bolt_client_secret_enc:
+        return None
+    try:
+        secret = crypto.decrypt(u.bolt_client_secret_enc)
+    except Exception as e:
+        logger.error(f"bolt_client_for_user: decriptare eșuată user {user_id}: {e}")
+        return None
+    return BoltClient(client_id=u.bolt_client_id, client_secret=secret)
+
+
+def validate_bolt_credentials(client_id: str, client_secret: str):
+    """
+    Validează credențiale Bolt printr-un token call de test → (ok: bool, err: Optional[str]).
+
+    NU stochează nimic. NU loghează secretul. Folosit la conectare (#2-B) ca să prindem
+    cheile greșite ÎNAINTE de a stoca. Degradare: fără cheie de criptare → nu are sens să
+    conectăm (n-am putea stoca securizat) → (False, mesaj).
+    """
+    from app.domain import crypto
+    if not crypto.is_available():
+        return False, "Criptare indisponibilă — contactează administratorul."
+    if not (client_id or "").strip() or not (client_secret or "").strip():
+        return False, "Completează ambele câmpuri (Client ID și Secret)."
+    try:
+        BoltClient(client_id=client_id.strip(), client_secret=client_secret.strip())._get_token()
+        return True, None
+    except Exception:
+        # 401/4xx/timeout etc. — NU expunem detalii/secret
+        return False, "Cheile par invalide — verifică în fleets.bolt.eu → Settings → API."
 
 
 # ============================================================

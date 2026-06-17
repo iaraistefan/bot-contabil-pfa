@@ -670,6 +670,44 @@ async def handle_certificat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"handle_certificat send_document error: {e}")
 
 
+async def handle_bolt_conectare(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/bolt_conectare — status conectare Bolt + link spre Setări web (#2-B).
+
+    SECURITATE: conectarea (lipit Client ID + Secret) se face DOAR în Setări web —
+    cheile NU se primesc în chat (ar rămâne în istoricul Telegram). Aici doar status + link.
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        return
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+    connected = bool(profile.get("bolt_client_id") and profile.get("bolt_client_secret_enc"))
+    if connected:
+        dt = (profile.get("bolt_connected_at") or "")[:10]
+        text = (
+            f"✅ *Cont Bolt conectat*" + (f" (din {dt})" if dt else "") + "\n\n"
+            "Sincronizăm automat cursele tale Bolt la închiderea zilei și îți propunem "
+            "să le adaugi în Registru. Poți schimba cheile în *Dashboard → Setări*."
+        )
+    else:
+        text = (
+            "🔌 *Conectare cont Bolt (sync automat)*\n\n"
+            "Ca să sincronizăm automat cursele, conectează-ți contul Bolt Fleet în "
+            "*Dashboard → Setări → Conectare cont Bolt* (lipești Client ID + Secret, "
+            "le generezi în fleets.bolt.eu → Settings → API).\n\n"
+            "🔒 Din motive de securitate, conectarea se face DOAR în Dashboard (web), "
+            "NU lipi cheile aici în chat — ar rămâne în istoricul conversației."
+        )
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🖥️ Deschide Dashboard", web_app=WebAppInfo(url=DASHBOARD_URL))
+    ]])
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
+
+
 async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/profil - afiseaza profilul curent."""
     user_id = ensure_user(update)
@@ -2982,6 +3020,7 @@ async def post_init(application):
         BotCommand("ajutor", "Ghid de utilizare"),
         BotCommand("profil", "Vezi profilul tau"),
         BotCommand("bolt", "Venituri Bolt automat din API (luna)"),
+        BotCommand("bolt_conectare", "Conecteaza contul Bolt (sync automat)"),
         BotCommand("plata_fiscala", "Calcul si IBAN pentru plata ANAF"),
         BotCommand("coduri_fiscale", "Coduri fiscale (CUI, TVA art.317, CNP)"),
         BotCommand("status", "Starea bot-ului"),
@@ -3050,6 +3089,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
     app_bot.add_handler(CommandHandler("ghid", ghid_ui.handle_command))  # sub-pas Ghid 2
     app_bot.add_handler(CommandHandler("certificat", handle_certificat))  # Certificat Bolt
+    app_bot.add_handler(CommandHandler("bolt_conectare", handle_bolt_conectare))  # #2-B status+link
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1

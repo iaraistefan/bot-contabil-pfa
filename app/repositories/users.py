@@ -5,7 +5,7 @@ Conventie: orice functie care atinge DB accepta o SQLAlchemy Session ca prim arg
 Asta tine tranzactiile sub controlul apelantului.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Dict, Any
 
 from sqlalchemy.orm import Session
@@ -76,6 +76,9 @@ def update_profile(
     telefon: Optional[str] = None,
     banca: Optional[str] = None,
     iban: Optional[str] = None,
+    bolt_client_id: Optional[str] = None,
+    bolt_client_secret_enc: Optional[str] = None,
+    bolt_connected_at: Optional[datetime] = None,
 ) -> User:
     """
     Actualizeaza campurile de profil ale user-ului.
@@ -130,6 +133,14 @@ def update_profile(
             c for c in str(iban).upper() if c.isalnum()
         )
         user.iban = iban_clean[:34] if iban_clean else None
+    # Bolt Fleet API per-user (#2-B): client_id în clar, secret deja CRIPTAT de apelant
+    # (NICIODATĂ plaintext aici), connected_at marcaj.
+    if bolt_client_id is not None:
+        user.bolt_client_id = bolt_client_id.strip() if bolt_client_id else None
+    if bolt_client_secret_enc is not None:
+        user.bolt_client_secret_enc = bolt_client_secret_enc or None
+    if bolt_connected_at is not None:
+        user.bolt_connected_at = bolt_connected_at
 
     session.flush()
     return user
@@ -257,6 +268,13 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "telefon": user.telefon,
         "banca": user.banca,
         "iban": user.iban,
+        # Bolt Fleet API per-user (#2-B). secret_enc NU se expune ca atare în UI —
+        # consumatorul (status) îl maschează; prezența lui = „conectat".
+        "bolt_client_id": user.bolt_client_id,
+        "bolt_client_secret_enc": user.bolt_client_secret_enc,
+        "bolt_connected_at": (
+            user.bolt_connected_at.isoformat() if user.bolt_connected_at else None
+        ),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
