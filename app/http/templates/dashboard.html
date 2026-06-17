@@ -827,10 +827,44 @@
     if(d) headers["X-Telegram-Init-Data"]=d;
     return fetch(url,{...opts,headers});
   }
+  // ---- C9-A: temă adaptivă (branded-dark + chrome sync) ----
+  // Strategie: suprafața internă rămâne dark navy LUSTRUITĂ (brand consistent, contrast
+  // garantat, accentele teal/amber strălucesc). Adaptăm:
+  //  • chrome-ul Telegram (header + background din jur) la tema userului — pe AMBELE scheme;
+  //  • neutrele interne (fundal/text/carduri) DOAR pe schema dark (sigur, e tot închis);
+  //  • pe light → NU atingem neutrele → rămâne dark-surface intenționat (anti-mină-contrast).
+  // Accentele (teal/gold/red/blue + gradienți brand) NU se ating NICIODATĂ → brand recognizabil.
+  // Browser (fără tg/themeParams) → :root navy neschimbat (fallback grațios).
+  function applyTelegramTheme(){
+    if(!tg) return;                                   // browser → :root navy (fallback)
+    const tp = tg.themeParams || {};
+    const dark = (tg.colorScheme || "dark") !== "light";
+    const root = document.documentElement;
+
+    // Chrome sync (ambele scheme): bara + fundalul Telegram din jur ≈ tema userului.
+    const chromeBg = tp.bg_color || (dark ? "#070B14" : "#ffffff");
+    try{ tg.setHeaderColor && tg.setHeaderColor(tp.header_bg_color || chromeBg); }catch(e){}
+    try{ tg.setBackgroundColor && tg.setBackgroundColor(chromeBg); }catch(e){}
+
+    // Neutre adaptate DOAR pe dark (themeParams e tot închis → contrast garantat de Telegram).
+    // Pe light: return fără a atinge neutrele → suprafața navy din :root rămâne (dark-surface).
+    if(dark && tp.bg_color){
+      const set=(k,v)=>{ if(v) root.style.setProperty(k,v); };
+      set("--ink", tp.bg_color);
+      set("--night", tp.bg_color);
+      set("--night-2", tp.secondary_bg_color || tp.section_bg_color);
+      set("--card", tp.secondary_bg_color || tp.section_bg_color);
+      set("--card-2", tp.section_bg_color || tp.secondary_bg_color);
+      set("--cream", tp.text_color);                  // text ↔ bg garantat lizibil de Telegram
+      set("--muted", tp.hint_color || tp.subtitle_text_color);
+      set("--muted-2", tp.subtitle_text_color || tp.hint_color);
+      // --line*, --night-3, accentele → rămân :root (alpha/brand, merg pe orice fundal închis).
+    }
+  }
   if(tg){
     tg.ready();tg.expand();
-    try{tg.setHeaderColor&&tg.setHeaderColor("#070B14");}catch(e){}
-    try{tg.setBackgroundColor&&tg.setBackgroundColor("#070B14");}catch(e){}
+    applyTelegramTheme();
+    try{ tg.onEvent && tg.onEvent("themeChanged", applyTelegramTheme); }catch(e){}  // re-aplică live
   }
 
   // ---- helpers ----
