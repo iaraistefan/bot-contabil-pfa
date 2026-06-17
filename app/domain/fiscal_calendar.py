@@ -221,7 +221,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         cum_depun=(
             "Pe CUI-ul PFA (NU codul special TVA!), prin SPV. Botul îți dă ghidul "
             "de completare + fișierul XML pentru DUKIntegrator. Impozitul îl "
-            "plătești din buzunar, SUPLIMENTAR față de comisionul reținut."
+            "plătești din buzunar, SUPLIMENTAR față de comisionul reținut. "
+            "Cum obții certificatul Bolt (pentru cota 2%) → /certificat (bot) sau Setări (web)."
         ),
         de_ce=(
             "De ce TU și nu platforma? Convenția de evitare a dublei impuneri lasă "

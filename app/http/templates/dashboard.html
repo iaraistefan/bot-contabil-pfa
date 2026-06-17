@@ -789,6 +789,10 @@
               </select>
               <div id="set-nerez-msg" class="hint" style="margin-top:8px;min-height:18px"></div>
             </div>
+            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Certificat de rezidență Bolt</div>
+              <div id="cert-continut"><div class="hint">Se încarcă…</div></div>
+            </div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Integrări</div></div>
@@ -1727,6 +1731,25 @@
       if(nzu) nzu.value = s.regim_nerezident_uber||"";
       renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
+    loadCertificat();
+  }
+  // Certificat Bolt — sursă unică /api/v1/certificat (text + nume fișier dinamic pe an).
+  async function loadCertificat(){
+    const box=document.getElementById("cert-continut");
+    if(!box) return;
+    const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    const md=s=>esc(s).replace(/\*(.+?)\*/g,"<b>$1</b>").replace(/_(.+?)_/g,"<i>$1</i>").replace(/\n/g,"<br>");
+    try{
+      const r=await authFetch("/api/v1/certificat"); const c=await r.json();
+      let html=`<div class="hint" style="margin-bottom:12px">${md(c.intro)}</div>`;
+      html+=`<div class="hint" style="margin-bottom:12px">${md(c.ghid_obtinere)}</div>`;
+      if(c.disponibil){
+        html+=`<a class="btn btn-primary" href="${c.url}" target="_blank" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă certificat ${c.an}</a>`;
+      }else{
+        html+=`<div class="hint">📄 Documentul ${c.an} nu e încărcat încă în Contai — folosește ghidul de mai sus ca să-l obții de la Bolt.</div>`;
+      }
+      box.innerHTML=html;
+    }catch(e){console.error(e);box.innerHTML='<div class="hint">Nu am putut încărca secțiunea certificat.</div>';}
   }
   async function salveazaRegimNerezident(){
     const msg=document.getElementById("set-nerez-msg");
