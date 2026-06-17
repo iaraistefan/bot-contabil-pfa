@@ -616,6 +616,58 @@ def obligatii_fiscale(year: int, month: int):
         return jsonify({"error": "internal error"}), 500
 
 
+@flask_app.route("/api/v1/ghid")
+def ghid_obligatii():
+    """
+    Ghidul de obligații (sub-pas Ghid 2+3): conținutul pedagogic din DEFINITII_OBLIGATII,
+    grupat pe frecvență (lunar/anual/o dată). SURSĂ UNICĂ — backend serializează, JS DOAR
+    afișează (regula de aur).
+
+    PERSONALIZARE (sub-pas 3): default = DOAR obligațiile userului (filtrat pe profil, via
+    `ghid_codes_for_user`, același helper ca Telegram). `?all=1` → toate (toggle „vezi
+    toate"). Profil incomplet → toate + nudge (anti-omisiune: nu ascundem D100/D301/D390).
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.domain import fiscal_calendar
+    from app.services.ghid_ui import ghid_codes_for_user
+    force_all = bool(request.args.get("all"))
+    session = get_session()
+    try:
+        codes, personalizat, nudge = ghid_codes_for_user(
+            session, user_id, force_all=force_all)
+        grupuri = [
+            {
+                "cheie": g["cheie"],
+                "label": g["label"],
+                "obligatii": [
+                    {
+                        "cod": d.cod,
+                        "nume": d.nume,
+                        "frecventa": d.frecventa.value,
+                        "ce_e": d.ce_e,
+                        "cui_se_aplica": d.cui_se_aplica,
+                        "cand": d.cand,
+                        "cum_depun": d.cum_depun,
+                        "de_ce": d.de_ce,
+                        "penalty_info": d.penalty_info,
+                        "formula_suma": d.formula_suma,
+                    }
+                    for d in g["obligatii"]
+                ],
+            }
+            for g in fiscal_calendar.ghid_grupuri(codes)
+        ]
+        return jsonify({"personalizat": personalizat, "nudge": nudge, "grupuri": grupuri})
+    except Exception as e:
+        logger.error(f"API ghid error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
 @flask_app.route("/api/v1/declaratie-unica/<int:year>")
 def declaratie_unica_d212(year: int):
     """

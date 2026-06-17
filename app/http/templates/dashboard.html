@@ -472,6 +472,9 @@
       <div class="nav-item" data-page="calendar">
         <span class="tile"><span class="ic"><svg viewBox="0 0 24 24"><use href="#i-cal"/></svg></span></span>
         Calendar fiscal<span class="badge" id="cal-badge" style="display:none"></span></div>
+      <div class="nav-item" data-page="ghid">
+        <span class="tile"><span class="ic" style="font-size:15px">📖</span></span>
+        Ghid obligații</div>
       <div class="nav-item" data-page="plati">
         <span class="tile"><span class="ic"><svg viewBox="0 0 24 24"><use href="#i-pay"/></svg></span></span>
         Plăți</div>
@@ -687,6 +690,17 @@
         </div>
       </section>
 
+      <!-- ===== GHID OBLIGATII ===== -->
+      <section class="page" id="page-ghid">
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-h"><div class="t">Ghidul tău fiscal</div></div>
+          <div class="hint">Fiecare declarație, explicată pe înțeles — <b>ce e</b>, <b>cine</b>, <b>când</b>, <b>cum</b> și mai ales <b>de ce e obligația TA</b>. Grupate după cât de des le ai.</div>
+        </div>
+        <div id="ghid-continut">
+          <div class="hint" style="padding:10px">Se încarcă…</div>
+        </div>
+      </section>
+
       <!-- ===== PLATI ===== -->
       <section class="page" id="page-plati">
         <div class="alert" style="margin-bottom:16px">
@@ -869,6 +883,7 @@
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
   async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
+  async function getGhid(all){const k=all?"ghid_all":"ghid_me";if(cache[k])return cache[k];const r=await authFetch("/api/v1/ghid"+(all?"?all=1":""));if(!r.ok)throw new Error("ghid "+r.status);cache[k]=await r.json();return cache[k];}
 
   // ---- NAV ----
   const titles={
@@ -878,6 +893,7 @@
     parcurs:["Foaie de parcurs","Km business + combustibil"],
     tva:["TVA & Declarații","Taxare inversă · D301 · D390 · D100"],
     calendar:["Calendar fiscal","Termene și obligații"],
+    ghid:["Ghid obligații","Fiecare declarație, pe înțeles"],
     plati:["Plăți","Obligații către ANAF"],
     registru:["Registru","Încasări și plăți · OMFP 170/2015"],
     documente:["Documente","Procesate cu AI"],
@@ -910,7 +926,47 @@
     if(page==="documente")  loadDocumente();
     if(page==="calendar")   loadObligatii("calendar");
     if(page==="plati")      loadObligatii("plati");
+    if(page==="ghid")       loadGhid();
     if(page==="setari")     loadSetari();
+  }
+
+  // ---- GHID obligații (sub-pas Ghid 2+3): backend serializează, JS DOAR afișează ----
+  // Default = personalizat (ale userului); toggle „vezi toate". Profil incomplet → toate+nudge.
+  function loadGhid(all){
+    const box=document.getElementById("ghid-continut");
+    const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    const field=(icon,label,val)=> val?`<div style="margin:10px 0"><b>${icon} ${label}</b><br><span style="color:var(--muted)">${esc(val)}</span></div>`:"";
+    box.innerHTML='<div class="hint" style="padding:10px">Se încarcă…</div>';
+    getGhid(!!all).then(d=>{
+      let html="";
+      // Nudge profil incomplet (anti-omisiune: arătăm tot, nu ascundem nimic).
+      if(d.nudge){
+        html+=`<div class="alert" style="margin-bottom:14px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet — nu ascundem nimic. Completează-l (în bot: /start) ca să vezi doar obligațiile TALE.</div></div></div>`;
+      }
+      // Toggle personalizat ↔ toate (doar dacă profilul e complet — altfel oricum vede tot).
+      if(!d.nudge){
+        html+= d.personalizat
+          ? `<div style="margin-bottom:12px"><button class="btn btn-ghost" onclick="loadGhid(true)">👁️ Vezi toate declarațiile</button></div>`
+          : `<div style="margin-bottom:12px"><button class="btn btn-ghost" onclick="loadGhid(false)">📋 Doar ale mele</button></div>`;
+      }
+      (d.grupuri||[]).forEach(g=>{
+        html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">${esc(g.label)}</div></div>`;
+        (g.obligatii||[]).forEach((o,i)=>{
+          const id=`ghid-${g.cheie}-${i}`;
+          html+=`<div style="border-top:1px solid var(--line)">
+            <div class="row" style="cursor:pointer" onclick="var b=document.getElementById('${id}');b.style.display=(b.style.display==='none'?'block':'none')">
+              <div class="info"><div class="t">${esc(o.cod)} — ${esc(o.nume)}</div><div class="m">${esc((o.ce_e||'').slice(0,80))}…</div></div>
+              <span class="hint">Detalii ▾</span></div>
+            <div id="${id}" style="display:none;padding:2px 12px 14px">
+              ${field('🔹','Ce e?',o.ce_e)}${field('👤','Cui se aplică?',o.cui_se_aplica)}
+              ${field('📅','Când?',o.cand)}${field('📝','Cum depun?',o.cum_depun)}
+              ${field('💡','De ce?',o.de_ce)}${field('⚠️','Dacă nu depui',o.penalty_info)}
+            </div></div>`;
+        });
+        html+=`</div>`;
+      });
+      box.innerHTML=html||'<div class="hint" style="padding:10px">—</div>';
+    }).catch(e=>{console.error(e);box.innerHTML='<div class="hint" style="padding:10px">Nu am putut încărca ghidul.</div>';});
   }
 
   // ---- CHART HELPERS ----
