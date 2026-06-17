@@ -883,7 +883,7 @@
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
   async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
-  async function getGhid(){if(cache.ghid)return cache.ghid;const r=await authFetch("/api/v1/ghid");if(!r.ok)throw new Error("ghid "+r.status);cache.ghid=await r.json();return cache.ghid;}
+  async function getGhid(all){const k=all?"ghid_all":"ghid_me";if(cache[k])return cache[k];const r=await authFetch("/api/v1/ghid"+(all?"?all=1":""));if(!r.ok)throw new Error("ghid "+r.status);cache[k]=await r.json();return cache[k];}
 
   // ---- NAV ----
   const titles={
@@ -930,14 +930,25 @@
     if(page==="setari")     loadSetari();
   }
 
-  // ---- GHID obligații (sub-pas Ghid 2): backend serializează, JS DOAR afișează ----
-  function loadGhid(){
-    if(loaded.ghid) return; loaded.ghid=true;
+  // ---- GHID obligații (sub-pas Ghid 2+3): backend serializează, JS DOAR afișează ----
+  // Default = personalizat (ale userului); toggle „vezi toate". Profil incomplet → toate+nudge.
+  function loadGhid(all){
     const box=document.getElementById("ghid-continut");
     const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
     const field=(icon,label,val)=> val?`<div style="margin:10px 0"><b>${icon} ${label}</b><br><span style="color:var(--muted)">${esc(val)}</span></div>`:"";
-    getGhid().then(d=>{
+    box.innerHTML='<div class="hint" style="padding:10px">Se încarcă…</div>';
+    getGhid(!!all).then(d=>{
       let html="";
+      // Nudge profil incomplet (anti-omisiune: arătăm tot, nu ascundem nimic).
+      if(d.nudge){
+        html+=`<div class="alert" style="margin-bottom:14px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet — nu ascundem nimic. Completează-l (în bot: /start) ca să vezi doar obligațiile TALE.</div></div></div>`;
+      }
+      // Toggle personalizat ↔ toate (doar dacă profilul e complet — altfel oricum vede tot).
+      if(!d.nudge){
+        html+= d.personalizat
+          ? `<div style="margin-bottom:12px"><button class="btn btn-ghost" onclick="loadGhid(true)">👁️ Vezi toate declarațiile</button></div>`
+          : `<div style="margin-bottom:12px"><button class="btn btn-ghost" onclick="loadGhid(false)">📋 Doar ale mele</button></div>`;
+      }
       (d.grupuri||[]).forEach(g=>{
         html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">${esc(g.label)}</div></div>`;
         (g.obligatii||[]).forEach((o,i)=>{

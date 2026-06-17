@@ -44,10 +44,10 @@ def _extract_callbacks():
     return cbs
 
 
-# Snapshot ÎNGHEȚAT (108 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
+# Snapshot ÎNGHEȚAT (109 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
 # +onb|nerezident = captare regim nerezident D100, fiscal #3 sub-pas E;
 # +onb|platforme = gate platforme Bolt/Uber, Uber sub-pas C;
-# +ghid|view / ghid|list = ghid de obligații navigabil, sub-pas Ghid 2).
+# +ghid|view / ghid|list / ghid|all = ghid de obligații navigabil + toggle personalizat/toate (Ghid 2+3)).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -63,7 +63,7 @@ EXPECTED_CALLBACKS = {
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",
     "tvadecl|{year}|{month}",
     "du|an|{a}", "du|auto|{an}", "du|calc|asig", "du|calc|noasig", "du|manual|{an}",
-    "ghid|list", "ghid|view|{key}",
+    "ghid|all", "ghid|list", "ghid|view|{key}",
     "nav|close", "nav|noop",
     "onb|activity|{a['code']}", "onb|cancel", "onb|confirm_all", "onb|cui_retry",
     "onb|cui_save_raw", "onb|done", "onb|finalize|restart", "onb|finalize|yes",
