@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     google_credentials_json: Optional[str] = None
     sheet_id: Optional[str] = None
 
+    # --- Criptare secrete la rest (cheie Fernet) — #2-A Bolt sync per-user ---
+    # Cheie Fernet (base64, 32 bytes) DOAR în env. Lipsă → criptarea indisponibilă →
+    # conectarea Bolt eșuează grațios (restul aplicației neafectat). Generează cu:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    contai_enc_key: Optional[str] = None
+
 
 # Singleton. Import THIS everywhere instead of calling os.getenv.
 settings = Settings()
