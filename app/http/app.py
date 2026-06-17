@@ -668,6 +668,27 @@ def ghid_obligatii():
         session.close()
 
 
+@flask_app.route("/api/v1/certificat")
+def certificat_bolt():
+    """
+    Certificat de rezidență fiscală Bolt (secțiune Setări). SURSĂ UNICĂ:
+    `app.services.certificat` (text + nume fișier dinamic pe an). Documentul COMUN
+    Bolt, NU personalizat — `disponibil` reflectă dacă owner-ul a pus PDF-ul anului.
+    """
+    _, err = _require_user()
+    if err:
+        return err
+    from app.services import certificat
+    an = certificat.current_year()
+    return jsonify({
+        "an": an,
+        "url": certificat.url(an),
+        "disponibil": certificat.exists(an),
+        "intro": certificat.INTRO,
+        "ghid_obtinere": certificat.GHID_OBTINERE,
+    })
+
+
 @flask_app.route("/api/v1/declaratie-unica/<int:year>")
 def declaratie_unica_d212(year: int):
     """

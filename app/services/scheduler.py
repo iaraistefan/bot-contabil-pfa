@@ -522,6 +522,39 @@ def run_monthly_summary(bot_token: str) -> None:
 #                    SCHEDULER STARTUP
 # ============================================================
 
+def check_certificate_renewal(bot_token: str) -> None:
+    """
+    Reminder anual certificat Bolt (~10 ianuarie) — gate pe regimul Bolt, MESAJE DIFERITE:
+      - BOLT_CU_CRF (2%)   → REÎNNOIRE (păstrezi 2% la D100);
+      - BOLT_FARA_CRF (16%)→ OPTIMIZARE (obține certificatul → 16%→2%, economisești 14%);
+      - alți useri (Uber-only / nesetat) → fără reminder.
+    Sursă unică a mesajelor: `certificat.mesaj_reminder`.
+    """
+    from db import get_session
+    from app.models import User
+    from app.repositories import users as users_repo
+    from app.services import certificat
+
+    an = datetime.now(ROMANIA_TZ).year
+    session = get_session()
+    try:
+        for user in session.query(User).all():
+            if not user.telegram_id:
+                continue
+            profile = users_repo.get_profile_dict(session, user.id) or {}
+            # Bolt cu fallback la câmpul deprecat (ca from_user_dict).
+            regim_bolt = profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident")
+            msg = certificat.mesaj_reminder(an, regim_bolt)
+            if not msg:
+                continue
+            _send_telegram_message(bot_token, user.telegram_id, msg)
+            logger.info(f"Certificate reminder ({regim_bolt}) sent to user_id={user.id}")
+    except Exception as e:
+        logger.error(f"check_certificate_renewal error: {e}")
+    finally:
+        session.close()
+
+
 def start_scheduler(bot_token: str) -> BackgroundScheduler:
     """Pornește toate job-urile schedulerului."""
     scheduler = BackgroundScheduler(timezone=ROMANIA_TZ)
@@ -589,6 +622,17 @@ def start_scheduler(bot_token: str) -> BackgroundScheduler:
         ),
         id="monthly_summary",
         name="Monthly summary (bilant luna incheiata)",
+        replace_existing=True,
+    )
+
+    # Certificat Bolt: reminder anual — 10 ianuarie, 09:00 (înainte de prima D100 a anului)
+    scheduler.add_job(
+        func=lambda: check_certificate_renewal(bot_token),
+        trigger=CronTrigger(
+            month=1, day=10, hour=9, minute=0, timezone=ROMANIA_TZ
+        ),
+        id="certificate_renewal",
+        name="Annual Bolt certificate reminder (renew 2% / optimize 16%->2%)",
         replace_existing=True,
     )
 

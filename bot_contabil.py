@@ -27,6 +27,7 @@ from app.services import banner_send  # Faza UI - trimitere bannere (wrapper com
 from app.ro_dates import luna_ro  # Faza UI - luni RO pentru bannere (caption Raport)
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.services import ghid_ui  # sub-pas Ghid 2: ghid de obligații (Telegram)
+from app.services import certificat  # Certificat rezidență Bolt (PDF comun + ghid)
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.imports.classify import (
@@ -641,6 +642,32 @@ async def send_ajutor(chat_id, context):
         chat_id=chat_id, text=msg, parse_mode="Markdown",
         reply_markup=build_main_menu(),
     )
+
+
+async def handle_certificat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/certificat — trimite ghidul de obținere + PDF-ul comun Bolt (dacă e încărcat).
+
+    Document COMUN Bolt (același pentru toți), NU personalizat — onest. Sursă unică:
+    app.services.certificat (text + nume fișier dinamic pe an).
+    """
+    chat_id = update.effective_chat.id
+    an = certificat.current_year()
+    text = (
+        f"📄 *Certificat de rezidență fiscală Bolt {an}*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{certificat.INTRO}\n\n{certificat.GHID_OBTINERE}"
+    )
+    await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+    if certificat.exists(an):
+        try:
+            with open(certificat.file_path(an), "rb") as f:
+                await context.bot.send_document(
+                    chat_id=chat_id, document=f, filename=certificat.filename(an),
+                    caption=(f"📎 Certificat Bolt {an} — document COMUN Bolt "
+                             f"(Romania.pdf), nu personal. Verifică anul înainte de depunere."),
+                )
+        except Exception as e:
+            logger.error(f"handle_certificat send_document error: {e}")
 
 
 async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2951,6 +2978,7 @@ async def post_init(application):
     comenzi = [
         BotCommand("start", "Pornire / meniul principal"),
         BotCommand("ghid", "Ghid de obligatii fiscale"),
+        BotCommand("certificat", "Certificat rezidenta Bolt (2% D100)"),
         BotCommand("ajutor", "Ghid de utilizare"),
         BotCommand("profil", "Vezi profilul tau"),
         BotCommand("bolt", "Venituri Bolt automat din API (luna)"),
@@ -3013,6 +3041,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
     app_bot.add_handler(CommandHandler("ghid", ghid_ui.handle_command))  # sub-pas Ghid 2
+    app_bot.add_handler(CommandHandler("certificat", handle_certificat))  # Certificat Bolt
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
     app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1
