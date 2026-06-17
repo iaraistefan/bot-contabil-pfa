@@ -689,6 +689,74 @@ def certificat_bolt():
     })
 
 
+@flask_app.route("/api/v1/bolt/status")
+def bolt_status():
+    """Status conectare Bolt (#2-B) — secretul NU se întoarce NICIODATĂ în clar (mascat)."""
+    user_id, err = _require_user()
+    if err:
+        return err
+    from app.domain import crypto
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        cid = profile.get("bolt_client_id")
+        connected = bool(cid and profile.get("bolt_client_secret_enc"))
+        return jsonify({
+            "connected": connected,
+            "connected_at": profile.get("bolt_connected_at"),
+            "client_id": cid or "",                      # în clar (identificator)
+            "secret_masked": "••••••" if connected else "",   # NICIODATĂ secretul real
+            "crypto_available": crypto.is_available(),
+        })
+    except Exception as e:
+        logger.error(f"API bolt/status error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
+@flask_app.route("/api/v1/bolt/connect", methods=["POST"])
+def bolt_connect():
+    """
+    Conectează contul Bolt (#2-B): validează cheile printr-un token de test → dacă OK,
+    stochează client_id (clar) + secret CRIPTAT + connected_at. Eșec → NU stochează.
+    Secretul intră direct în criptare; NU se loghează, NU se întoarce.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    client_id = (body.get("client_id") or "").strip()
+    client_secret = (body.get("client_secret") or "").strip()
+
+    from app.integrations.bolt_sync import validate_bolt_credentials
+    from app.domain import crypto
+    ok, msg = validate_bolt_credentials(client_id, client_secret)
+    if not ok:
+        return jsonify({"error": "invalid_credentials", "message": msg}), 400
+
+    session = get_session()
+    try:
+        user = users_repo.get_by_id(session, user_id)
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+        now = datetime.utcnow()
+        users_repo.update_profile(
+            session, user,
+            bolt_client_id=client_id,
+            bolt_client_secret_enc=crypto.encrypt(client_secret),   # CRIPTAT
+            bolt_connected_at=now,
+        )
+        session.commit()
+        return jsonify({"ok": True, "connected_at": now.isoformat()})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API bolt/connect error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
 @flask_app.route("/api/v1/declaratie-unica/<int:year>")
 def declaratie_unica_d212(year: int):
     """

@@ -78,6 +78,14 @@ class User(Base):
     proactive_alerts_hour = Column(Integer, nullable=False, default=8)
     proactive_alerts_advance_days = Column(Integer, nullable=False, default=7)
 
+    # === Bolt Fleet API per-user (#2-A) — credențiale proprii pentru sync auto ===
+    # client_id în CLAR (identificator OAuth, inutil singur); client_secret CRIPTAT
+    # (token Fernet, NICIODATĂ în clar — vezi app.domain.crypto). NULL = neconectat
+    # (comportament neschimbat; sync-ul API rămâne owner-only prin env). Setate în #2-B.
+    bolt_client_id = Column(String(255), nullable=True)
+    bolt_client_secret_enc = Column(String(500), nullable=True)
+    bolt_connected_at = Column(DateTime, nullable=True)
+
     # === Relations ===
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")

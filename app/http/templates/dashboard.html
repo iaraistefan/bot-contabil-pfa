@@ -812,6 +812,10 @@
               <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Certificat de rezidență Bolt</div>
               <div id="cert-continut"><div class="hint">Se încarcă…</div></div>
             </div>
+            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Conectare cont Bolt (sync automat)</div>
+              <div id="bolt-conectare"><div class="hint">Se încarcă…</div></div>
+            </div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Integrări</div></div>
@@ -1837,7 +1841,56 @@
       renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
     loadCertificat();
+    loadBoltConectare();
   }
+  // Conectare Bolt (#2-B) — status mascat (secretul NU se afișează niciodată în clar).
+  async function loadBoltConectare(){
+    const box=document.getElementById("bolt-conectare");
+    if(!box) return;
+    try{
+      const r=await authFetch("/api/v1/bolt/status"); const s=await r.json();
+      if(s.connected){
+        const dt=s.connected_at?new Date(String(s.connected_at).replace(" ","T")).toLocaleDateString("ro-RO"):"—";
+        box.innerHTML=`<div class="hint" style="margin-bottom:10px">✅ <b>Conectat</b> la ${dt} · Client ID: <code>${(s.client_id||"").slice(0,10)}…</code> · secret: ${s.secret_masked}</div>`
+          +`<div class="hint" style="margin-bottom:10px">Sincronizăm automat cursele tale Bolt (la închiderea zilei) → îți propunem să le adaugi în Registru.</div>`
+          +`<button class="btn btn-ghost" onclick="boltReconecteaza()">Reconectează (schimbă cheile)</button>`;
+      }else{
+        if(!s.crypto_available){
+          box.innerHTML='<div class="hint" style="color:var(--red)">⚠️ Criptarea nu e configurată pe server — conectarea Bolt e indisponibilă momentan. Contactează administratorul.</div>';
+          return;
+        }
+        boltFormular(box);
+      }
+    }catch(e){console.error(e);box.innerHTML='<div class="hint">Nu am putut încărca starea conectării Bolt.</div>';}
+  }
+  function boltFormular(box){
+    box.innerHTML=`<div class="hint" style="margin-bottom:12px">Conectează-ți contul Bolt Fleet ca să sincronizăm automat cursele. Generează cheile în <b>fleets.bolt.eu → Settings → API → Generate credentials</b>, apoi lipește-le aici (secretul e stocat CRIPTAT, nu îl mai vedem după).</div>
+      <label class="set-lbl">Client ID</label>
+      <input class="set-inp" id="bolt-cid" type="text" placeholder="Client ID din fleets.bolt.eu" autocomplete="off" spellcheck="false">
+      <label class="set-lbl" style="margin-top:12px">Client Secret</label>
+      <input class="set-inp" id="bolt-csec" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false">
+      <div id="bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
+      <button class="btn btn-primary" id="bolt-connect-btn" style="margin-top:6px" onclick="conecteazaBolt()">Conectează contul Bolt</button>
+      <div class="hint" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">🛟 <b>Nu poți conecta API-ul Bolt?</b> (ex. cont gestionat de altă flotă) — API-ul sincronizează automat, dar dacă nu-l poți folosi, introdu venitul <b>manual</b>: trimite în bot <b>screenshotul raportului Bolt</b> sau text (<code>venit bolt [lună]: net X, cash Y</code>). Manual e alternativa pentru cine n-are acces API.</div>`;
+  }
+  function boltReconecteaza(){ const box=document.getElementById("bolt-conectare"); if(box) boltFormular(box); }
+  async function conecteazaBolt(){
+    const msg=document.getElementById("bolt-msg");
+    const btn=document.getElementById("bolt-connect-btn");
+    const cid=(document.getElementById("bolt-cid")||{}).value||"";
+    const csec=(document.getElementById("bolt-csec")||{}).value||"";
+    if(!cid.trim()||!csec.trim()){ if(msg){msg.style.color="var(--red)";msg.textContent="Completează ambele câmpuri.";} return; }
+    if(msg){msg.style.color="var(--muted)";msg.textContent="Se verifică cheile cu Bolt…";}
+    if(btn) btn.style.opacity=".6";
+    try{
+      const r=await authFetch("/api/v1/bolt/connect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:cid,client_secret:csec})});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){ cache.setari=null; loadBoltConectare(); }   // re-randează → status conectat
+      else{ if(msg){msg.style.color="var(--red)";msg.textContent=d.message||"Nu am putut conecta. Verifică cheile.";} }
+    }catch(e){ if(msg){msg.style.color="var(--red)";msg.textContent="Conexiune pierdută. Încearcă din nou.";} }
+    finally{ if(btn) btn.style.opacity="1"; }
+  }
+  window.conecteazaBolt=conecteazaBolt; window.boltReconecteaza=boltReconecteaza;
   // Certificat Bolt — sursă unică /api/v1/certificat (text + nume fișier dinamic pe an).
   async function loadCertificat(){
     const box=document.getElementById("cert-continut");

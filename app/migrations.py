@@ -367,6 +367,20 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "015_bolt_credentials_per_user",
+        "description": (
+            "Bolt sync per-user (#2-A): credentiale Bolt Fleet API proprii per user. "
+            "client_id in clar (identificator OAuth); client_secret_enc CRIPTAT (Fernet, "
+            "niciodata in clar). Nullable: userii existenti NULL = neconectati (neschimbat). "
+            "Inert (storage) — conectarea efectiva = #2-B."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bolt_client_id VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bolt_client_secret_enc VARCHAR(500)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bolt_connected_at TIMESTAMP",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

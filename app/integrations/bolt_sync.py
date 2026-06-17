@@ -70,9 +70,12 @@ LUNI_LONG = {
 # ============================================================
 
 class BoltClient:
-    def __init__(self, timeout=30):
-        self.client_id = (os.getenv("BOLT_CLIENT_ID") or "").strip()
-        self.client_secret = (os.getenv("BOLT_CLIENT_SECRET") or "").strip()
+    def __init__(self, client_id=None, client_secret=None, timeout=30):
+        # #2-B: credențiale PER-USER dacă sunt date; altfel env (owner, backward-compat).
+        # Cele 5 apeluri `BoltClient()` existente rămân pe env. `BoltClient(id, secret)` =
+        # per-user (din bolt_client_for_user).
+        self.client_id = (client_id or os.getenv("BOLT_CLIENT_ID") or "").strip()
+        self.client_secret = (client_secret or os.getenv("BOLT_CLIENT_SECRET") or "").strip()
         self.timeout = timeout
         self._token = None
         self._token_exp = 0
@@ -132,6 +135,52 @@ class BoltClient:
             "offset": offset, "limit": limit, "company_ids": company_ids,
             "start_ts": int(start_ts), "end_ts": int(end_ts),
         })
+
+
+# ============================================================
+#        CREDENȚIALE PER-USER (#2-B) — încărcare + validare
+# ============================================================
+
+def bolt_client_for_user(session, user_id):
+    """
+    BoltClient cu credențialele PROPRII ale userului, sau None dacă neconectat.
+
+    Decriptează `bolt_client_secret_enc` în memorie, DOAR la apel (nu se stochează în
+    clar nicăieri). Folosit de sync-ul per-user (#2-C). Returnează None dacă userul
+    n-are credențiale sau dacă decriptarea eșuează (cheie schimbată) — degradare grațioasă.
+    """
+    from app.models import User
+    from app.domain import crypto
+    u = session.query(User).filter(User.id == user_id).first()
+    if not u or not u.bolt_client_id or not u.bolt_client_secret_enc:
+        return None
+    try:
+        secret = crypto.decrypt(u.bolt_client_secret_enc)
+    except Exception as e:
+        logger.error(f"bolt_client_for_user: decriptare eșuată user {user_id}: {e}")
+        return None
+    return BoltClient(client_id=u.bolt_client_id, client_secret=secret)
+
+
+def validate_bolt_credentials(client_id: str, client_secret: str):
+    """
+    Validează credențiale Bolt printr-un token call de test → (ok: bool, err: Optional[str]).
+
+    NU stochează nimic. NU loghează secretul. Folosit la conectare (#2-B) ca să prindem
+    cheile greșite ÎNAINTE de a stoca. Degradare: fără cheie de criptare → nu are sens să
+    conectăm (n-am putea stoca securizat) → (False, mesaj).
+    """
+    from app.domain import crypto
+    if not crypto.is_available():
+        return False, "Criptare indisponibilă — contactează administratorul."
+    if not (client_id or "").strip() or not (client_secret or "").strip():
+        return False, "Completează ambele câmpuri (Client ID și Secret)."
+    try:
+        BoltClient(client_id=client_id.strip(), client_secret=client_secret.strip())._get_token()
+        return True, None
+    except Exception:
+        # 401/4xx/timeout etc. — NU expunem detalii/secret
+        return False, "Cheile par invalide — verifică în fleets.bolt.eu → Settings → API."
 
 
 # ============================================================
@@ -274,6 +323,46 @@ _DELETE_PERIOD_SQL = text("""
 
 
 _LAST_SYNC_SQL = text("SELECT MAX(updated_at) FROM bolt_orders WHERE user_id = :uid")
+
+_SELECT_DAY_SQL = text("""
+    SELECT order_status, payment_method, ride_price, commission,
+           net_earnings, tip, cash_discount, ride_distance
+    FROM bolt_orders
+    WHERE user_id = :uid AND finished_ts >= :start AND finished_ts < :end
+""")
+
+
+def get_today_summary(user_id: int) -> dict:
+    """Agregatul curselor de AZI (fereastra zilei, ora României) din cache. Pentru
+    notificarea „închiderea zilei" (#2-C). 0 curse → n=0 (fără ping)."""
+    import pytz
+    tz = pytz.timezone("Europe/Bucharest")
+    now = datetime.now(tz)
+    start = int(tz.localize(datetime(now.year, now.month, now.day)).timestamp())
+    end = start + 86400
+    session = get_session()
+    try:
+        rows = session.execute(_SELECT_DAY_SQL, {"uid": user_id, "start": start, "end": end})
+        data = [dict(r._mapping) for r in rows]
+    except Exception as e:
+        logger.error(f"get_today_summary error user {user_id}: {e}")
+        return {"n": 0}
+    finally:
+        session.close()
+    return _aggregate(data)
+
+
+def _send_plain(bot_token, chat_id, text_msg):
+    """Mesaj Telegram simplu (fără buton). Best-effort; nu ridică."""
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json={"chat_id": chat_id, "text": text_msg, "parse_mode": "Markdown",
+                  "disable_web_page_preview": True},
+            timeout=15,
+        )
+    except Exception as e:
+        logger.error(f"_send_plain failed: {e}")
 
 
 def get_sync_status(user_id: int) -> dict:
@@ -438,9 +527,12 @@ def get_month_km(user_id: int, year: int, month: int) -> dict:
     return {"km": s.get("km", 0.0), "n": s.get("n", 0)}
 
 
-def collect_recent(user_id: int, days: int = 4) -> int:
-    """Trage ultimele `days` zile din API si face upsert in cache. Returneaza nr comenzi."""
-    client = BoltClient()
+def collect_recent(user_id: int, days: int = 4, client: "BoltClient" = None) -> int:
+    """Trage ultimele `days` zile din API si face upsert in cache. Returneaza nr comenzi.
+
+    `client` per-user (#2-C) sau None → env (owner, backward-compat).
+    """
+    client = client or BoltClient()
     if not client.available():
         return 0
     company_ids = client.get_company_ids()
@@ -756,21 +848,77 @@ def _send_with_button(bot_token, chat_id, text_msg, year, month):
         return False
 
 
-def run_bolt_daily_sync(bot_token: str):
-    """Job zilnic: colecteaza ultimele zile in cache (single-tenant: owner)."""
-    owner = os.getenv("BOLT_OWNER_TELEGRAM_ID")
-    client = BoltClient()
-    if not client.available() or not owner:
+def _daily_sync_one(bot_token, user):
+    """
+    Sync + notificare „închiderea zilei" pentru UN user conectat (#2-C). IZOLAT:
+    orice eroare (ex. chei revocate) → notificare reconectare, NU se propagă (ceilalți merg).
+    Confirm-first: sync în cache + ping informativ + buton OPȚIONAL (post_month luna curentă,
+    atomic, prin callback-ul existent). NU auto-postează.
+    """
+    session = get_session()
+    try:
+        client = bolt_client_for_user(session, user.id)
+    finally:
+        session.close()
+    if client is None:
         return
     try:
-        uid = _resolve_user_id(int(owner))
-    except (ValueError, TypeError):
-        uid = None
-    if not uid:
-        logger.info("bolt_daily_sync: owner user negasit")
-        return
-    n = collect_recent(uid, days=4)
-    logger.info(f"bolt_daily_sync: {n} comenzi colectate")
+        collect_recent(user.id, days=4, client=client)        # sync silent în cache
+        today = get_today_summary(user.id)
+        if today.get("n", 0) <= 0:
+            return                                             # nimic azi → fără ping
+        now = datetime.now()
+        text = (
+            f"📊 *Azi ai făcut {today['net']:.2f} lei net* ({today['n']} curse Bolt).\n\n"
+            f"Vrei să actualizezi Registrul pe {LUNI_LONG[now.month]} {now.year}?\n"
+            f"_(opțional — sincronizăm automat; postezi când vrei)_"
+        )
+        # buton OPȚIONAL → post_month luna curentă (replace, atomic) via handle_bolt_callback
+        _send_with_button(bot_token, user.telegram_id, text, now.year, now.month)
+    except Exception as e:
+        logger.error(f"bolt daily sync user {user.id} esuat: {e}")
+        _send_plain(
+            bot_token, user.telegram_id,
+            "🔌 N-am putut sincroniza Bolt azi — cheile par invalide sau revocate. "
+            "Reconectează contul în *Dashboard → Setări → Conectare cont Bolt* "
+            "(verifică fleets.bolt.eu → Settings → API).",
+        )
+
+
+def run_bolt_daily_sync(bot_token: str):
+    """
+    Job zilnic 23:30 (#2-C): sync + notificare pentru TOȚI userii conectați (bolt_client_id
+    setat). Izolare per-user (o eroare nu oprește jobul). Owner backward-compat: dacă owner-ul
+    (env) NU s-a conectat per-user, rulează calea env veche (cache silent, fără notificare).
+    """
+    from app.models import User
+    session = get_session()
+    try:
+        connected = session.query(User).filter(
+            User.bolt_client_id.isnot(None), User.telegram_id.isnot(None)
+        ).all()
+        connected_ids = {u.id for u in connected}
+    finally:
+        session.close()
+
+    for u in connected:
+        _daily_sync_one(bot_token, u)                          # izolat în interior
+
+    logger.info(f"bolt_daily_sync: {len(connected)} useri conectați sincronizați")
+
+    # Owner backward-compat (env) — DOAR dacă owner n-are creds per-user (evită dublu-sync).
+    owner = os.getenv("BOLT_OWNER_TELEGRAM_ID")
+    if owner and BoltClient().available():
+        try:
+            uid = _resolve_user_id(int(owner))
+        except (ValueError, TypeError):
+            uid = None
+        if uid and uid not in connected_ids:
+            try:
+                n = collect_recent(uid, days=4)                # env client, cache silent (neschimbat)
+                logger.info(f"bolt_daily_sync (owner env): {n} comenzi")
+            except Exception as e:
+                logger.error(f"bolt_daily_sync owner env esuat: {e}")
 
 
 def run_bolt_monthly_suggest(bot_token: str):
@@ -816,8 +964,12 @@ def _start_bolt_scheduler(bot_token: str):
     global _SCHED
     if _SCHED is not None:
         return
-    if not BoltClient().available() or not os.getenv("BOLT_OWNER_TELEGRAM_ID"):
-        logger.info("Bolt scheduler dezactivat (lipsesc credentialele sau owner id)")
+    # #2-C: pornim scheduler-ul dacă e POSIBIL sync — fie owner-env (BoltClient env), fie
+    # per-user (criptarea disponibilă → userii se pot conecta). Jobul zilnic se auto-gate-ază
+    # pe userii efectiv conectați (bolt_client_id); dacă nu există → no-op, fără cost.
+    from app.domain import crypto
+    if not BoltClient().available() and not crypto.is_available():
+        logger.info("Bolt scheduler dezactivat (nici env owner, nici criptare per-user)")
         return
     try:
         import pytz
