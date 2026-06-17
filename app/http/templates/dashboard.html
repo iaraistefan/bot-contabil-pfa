@@ -968,7 +968,9 @@
     setari:["Setări","Profil și integrări"],
   };
   const loaded={};
+  let currentPage="overview";
   function nav(page){
+    currentPage=page;
     document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active",n.dataset.page===page));
     document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+page));
     const t=titles[page]||["",""];
@@ -977,11 +979,50 @@
     document.querySelector(".scroll").scrollTop=0;
     toggleNav(false);
     loadPage(page);
+    syncNative();
   }
-  document.querySelectorAll(".nav-item").forEach(n=>n.onclick=()=>nav(n.dataset.page));
+  document.querySelectorAll(".nav-item").forEach(n=>n.onclick=()=>{ haptic("select"); nav(n.dataset.page); });
   function toggleNav(open){
     document.getElementById("sidebar").classList.toggle("open",open);
     document.getElementById("overlay").classList.toggle("show",open);
+  }
+
+  // ---- C9-B: butoane native Telegram (BackButton/MainButton) + haptic ----
+  // Tot gated pe tg → în browser nu există → navigarea cu sidebar rămâne neschimbată.
+  function haptic(kind){
+    try{ const h = tg && tg.HapticFeedback; if(!h) return;
+      if(kind==="select") h.selectionChanged();
+      else if(kind==="success") h.notificationOccurred("success");
+      else if(kind==="error") h.notificationOccurred("error");
+    }catch(e){}
+  }
+  function _modalOpen(){ const m=document.getElementById("plata-modal"); return !!(m && m.classList.contains("show")); }
+  function syncBackButton(){
+    if(!tg || !tg.BackButton) return;
+    // Back vizibil pe sub-ecran SAU când modalul Plătește e deschis (închidere în straturi).
+    if(currentPage!=="overview" || _modalOpen()) tg.BackButton.show(); else tg.BackButton.hide();
+  }
+  let _mainAction=null;
+  function syncMainButton(){
+    if(!tg || !tg.MainButton) return;
+    const save=document.getElementById("set-save");
+    if(currentPage==="setari"){
+      // Varianta A: pe Telegram MainButton ÎNLOCUIEȘTE butonul in-page (zero duplicare).
+      _mainAction=salveazaSetari;
+      tg.MainButton.setText("Salvează"); tg.MainButton.show();
+      if(save) save.style.display="none";
+    }else{
+      _mainAction=null; tg.MainButton.hide();
+      if(save) save.style.display="";       // restaurat pe celelalte ecrane / browser
+    }
+  }
+  function syncNative(){ syncBackButton(); syncMainButton(); }
+  if(tg){
+    if(tg.BackButton) tg.BackButton.onClick(()=>{
+      if(_modalOpen()){ closePlata(); return; }   // strat 1: modal → ecran → app
+      haptic("select"); nav("overview");
+    });
+    if(tg.MainButton) tg.MainButton.onClick(()=>{ if(_mainAction) _mainAction(); });
   }
 
   function loadPage(page){
@@ -1830,14 +1871,17 @@
       const d=await r.json().catch(()=>({}));
       if(r.ok && d.ok){
         if(msg){ msg.style.color="var(--pos-br)"; msg.textContent="✓ Salvat. D100 se calculează după acest regim."; }
+        haptic("success");
         // invalidează cache-urile ca D100 să se reîmprospăteze pe ecranul TVA
         cache.setari=null; loaded.tva=false;
         for(const k in cache){ if(k[0]==="p") delete cache[k]; }
       }else{
         if(msg){ msg.style.color="var(--red)"; msg.textContent=d.message||"Nu am putut salva. Încearcă din nou."; }
+        haptic("error");
       }
     }catch(e){
       if(msg){ msg.style.color="var(--red)"; msg.textContent="Conexiune pierdută. Încearcă din nou."; }
+      haptic("error");
     }
   }
   window.salveazaRegimNerezident=salveazaRegimNerezident;
@@ -1859,13 +1903,16 @@
         msg.style.color="var(--pos-br)";
         msg.textContent="✓ Salvat. Datele vor apărea în declarația D301.";
         const ib=document.getElementById("set-iban"); if(ib) ib.value=d.iban||iban;
+        haptic("success");
       }else{
         msg.style.color="var(--red)";
         msg.textContent = d.message || "Nu am putut salva. Verifică IBAN-ul și încearcă din nou.";
+        haptic("error");
       }
     }catch(e){
       msg.style.color="var(--red)";
       msg.textContent="Conexiune pierdută. Încearcă din nou.";
+      haptic("error");
     }finally{
       if(btn) btn.style.opacity="1";
     }
@@ -1879,8 +1926,9 @@
     setTxt("pm-cont", cont || "—");
     setTxt("pm-identif", identif==="CUI" ? "pe CUI (firmă)" : "pe CNP (persoană)");
     document.getElementById("plata-modal").classList.add("show");
+    syncBackButton();   // modal deschis → Back-ul nativ îl închide întâi (strat)
   }
-  function closePlata(){ document.getElementById("plata-modal").classList.remove("show"); }
+  function closePlata(){ document.getElementById("plata-modal").classList.remove("show"); syncBackButton(); }
   window.openPlata=openPlata; window.closePlata=closePlata;
 
   // ---- INIT ----
