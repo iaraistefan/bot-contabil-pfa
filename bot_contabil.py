@@ -56,7 +56,7 @@ from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     KeyboardButton, ReplyKeyboardMarkup, WebAppInfo,
-    BotCommand, MenuButtonCommands,
+    BotCommand, MenuButtonCommands, MenuButtonWebApp,
 )
 from telegram.ext import (
     ApplicationBuilder, ContextTypes,
@@ -2990,10 +2990,18 @@ async def post_init(application):
     ]
     try:
         await application.bot.set_my_commands(comenzi)
+        # C9-D: butonul de meniu (lângă input) deschide Mini App-ul într-un tap, pentru
+        # toți userii. Înlocuiește MenuButtonCommands — comenzile rămân accesibile tastând
+        # "/" (set_my_commands neschimbat). Butonul de MENIU WebApp primește init_data
+        # (≠ KeyboardButton) → auth funcționează. Fallback: dacă set eșuează (except mai
+        # jos), butonul inline 🖥️ Dashboard + /start rămân → accesul nu se rupe.
         await application.bot.set_chat_menu_button(
-            menu_button=MenuButtonCommands()
+            menu_button=MenuButtonWebApp(
+                text="📊 Contai",
+                web_app=WebAppInfo(url=DASHBOARD_URL),
+            )
         )
-        logger.info("Meniu comenzi setat (set_my_commands + menu button)")
+        logger.info("Meniu setat (set_my_commands + buton meniu → Mini App)")
     except Exception as e:
         logger.error(f"Nu am putut seta meniul de comenzi: {e}")
 
