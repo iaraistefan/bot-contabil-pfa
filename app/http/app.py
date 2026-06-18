@@ -698,12 +698,49 @@ def onboarding_status():
     user_id, err = _require_user()
     if err:
         return err
+    from app.repositories import vehicule as vehicule_repo
     session = get_session()
     try:
         profile = users_repo.get_profile_dict(session, user_id) or {}
+        # Rehidratare wizard (sub-pas C): la resume, frontend-ul pre-populează WIZ.data cu
+        # ce-a introdus deja userul (nu doar sare la pasul corect). Derivăm is_ridesharing
+        # și platformele din profil; vehiculul implicit din vehicule_repo.
+        regim_bolt = profile.get("regim_nerezident_bolt")
+        regim_uber = profile.get("regim_nerezident_uber")
+        if regim_bolt and regim_uber:
+            platforme = "AMBELE"
+        elif regim_bolt:
+            platforme = "BOLT"
+        elif regim_uber:
+            platforme = "UBER"
+        else:
+            platforme = None
+        veh = vehicule_repo.get_default(session, user_id)
+        data = {
+            "name": profile.get("name"),
+            "firma_cui": profile.get("firma_cui"),
+            "firma_nume": profile.get("firma_nume"),
+            "firma_forma_juridica": profile.get("firma_forma_juridica"),
+            "regim_tva": profile.get("regim_tva"),
+            "regim_impunere": profile.get("regim_impunere"),
+            "caen_principal": profile.get("caen_principal"),
+            "activity_code": profile.get("activity_code"),
+            "judet": profile.get("judet"),
+            "localitate": profile.get("localitate"),
+            "regim_nerezident_bolt": regim_bolt,
+            "regim_nerezident_uber": regim_uber,
+            "is_ridesharing": profile.get("activity_code") == "ridesharing",
+            "_platforme": platforme,
+            "_boltConnected": bool(profile.get("bolt_client_id")),
+            "veh_nr": veh.nr_inmatriculare if veh else None,
+            "veh_marca": veh.marca_model if veh else None,
+            "veh_consum": veh.norma_consum if veh else None,
+            "veh_tip": veh.tip_detinere if veh else None,
+        }
         return jsonify({
             "onboarding_completed": bool(profile.get("onboarding_completed")),
             "current_step": profile.get("onboarding_step") or 0,
+            "data": data,
         })
     except Exception as e:
         logger.error(f"API onboarding/status error user={user_id}: {e}")
@@ -812,6 +849,56 @@ def vehicul_create():
     except Exception as e:
         session.rollback()
         logger.error(f"API vehicul create error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
+# Câmpuri minime obligatorii pentru finalizare (sub-pas C). Bolt e OPȚIONAL.
+# firma = CUI sau denumire (calea manuală are doar denumirea).
+def _onboarding_missing(profile, has_vehicul):
+    missing = []
+    if not (profile.get("name") or "").strip():
+        missing.append("name")
+    if not ((profile.get("firma_cui") or "").strip() or (profile.get("firma_nume") or "").strip()):
+        missing.append("firma")
+    if not (profile.get("regim_impunere") or "").strip():
+        missing.append("regim_impunere")
+    if not has_vehicul:
+        missing.append("masina")
+    return missing
+
+
+@flask_app.route("/api/v1/onboarding/complete", methods=["POST"])
+def onboarding_complete():
+    """
+    Finalizare wizard (sub-pas C): validează câmpurile minime obligatorii → marchează
+    onboarding_completed=True (userul intră în dashboard normal). Bolt e opțional (nu se
+    verifică). Lipsă → 400 + lista câmpurilor lipsă (frontend-ul indică pasul). Per-user.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+    from app.repositories import vehicule as vehicule_repo
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        has_vehicul = vehicule_repo.count_active(session, user_id) > 0
+        missing = _onboarding_missing(profile, has_vehicul)
+        if missing:
+            return jsonify({
+                "ok": False, "missing": missing,
+                "message": "Mai sunt câmpuri obligatorii de completat.",
+            }), 400
+        user = users_repo.get_by_id(session, user_id)
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+        users_repo.complete_onboarding(session, user)
+        session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API onboarding/complete error user={user_id}: {e}")
         return jsonify({"error": "internal error"}), 500
     finally:
         session.close()

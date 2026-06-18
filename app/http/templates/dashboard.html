@@ -2035,11 +2035,22 @@
 
   function enterWizard(status){
     document.body.classList.add("wizard-mode");
+    // Rehidratare (sub-pas C): pre-populăm cu ce-a introdus deja userul → câmpurile apar
+    // completate la resume, nu doar sărim la pasul corect.
+    const d=(status&&status.data)||{};
+    for(const k in d){ if(d[k]!==null&&d[k]!==undefined) WIZ.data[k]=d[k]; }
+    if(WIZ.data.veh_consum!=null) WIZ.data.veh_consum=String(WIZ.data.veh_consum);
+    if(WIZ.data.firma_cui||WIZ.data.firma_nume) WIZ.data._cuiConfirmat=true;   // deblochează CUI la resume
     WIZ.steps = wizSteps();
     WIZ.i = Math.min(Math.max((status && status.current_step) || 0, 0), WIZ.steps.length-1);
     wizRender();
   }
   window.enterWizard=enterWizard;
+  function exitWizardToDashboard(){
+    document.body.classList.remove("wizard-mode");
+    const wr=document.getElementById("wizard-root"); if(wr) wr.innerHTML="";
+    buildPeriods(); nav("overview");   // init normal — chrome-ul revine, fără reload
+  }
 
   function wizShell(titlu, corp){
     const n=WIZ.steps.length, x=WIZ.i+1;
@@ -2073,10 +2084,48 @@
     return r.json();
   }
   function wizAdvance(){ if(WIZ.i<WIZ.steps.length-1){ WIZ.i++; wizRender(); } else { wizDone(); } }
+  // ── Ecran FINALIZARE (sub-pas C): rezumat + complete → dashboard normal ──
+  const WIZ_REGIM_LBL={NORMA_VENIT:"Normă de venit",SISTEM_REAL:"Sistem real"};
+  const WIZ_NEREZ_LBL={BOLT_CU_CRF:"Bolt 2%",BOLT_FARA_CRF:"Bolt 16%",UBER_CU_CRF:"Uber 0%",UBER_FARA_CRF:"Uber 16%"};
   function wizDone(){
-    // Placeholder final (finalizarea reală /complete = sub-pas C). B2 a completat pașii ridesharing.
-    wizShell("Aproape gata", `<div class="hint">✅ Datele tale sunt salvate. Finalizarea configurării se activează în curând.</div>`);
+    const d=WIZ.data, e=WIZ.esc;
+    const rand=(emoji,txt)=>`<div style="display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><span>${emoji}</span><div class="hint" style="color:var(--ink)">${txt}</div></div>`;
+    let rez=rand("🏢", e(d.firma_nume||d.firma_cui||"Firma ta"));
+    if(d.regim_impunere) rez+=rand("🧾", "Regim: "+(WIZ_REGIM_LBL[d.regim_impunere]||d.regim_impunere));
+    if(d.veh_nr) rez+=rand("🚗", e(d.veh_nr)+(d.veh_marca?" · "+e(d.veh_marca):""));
+    if(d.is_ridesharing){
+      const plat=[]; if(d.regim_nerezident_bolt)plat.push(WIZ_NEREZ_LBL[d.regim_nerezident_bolt]||"Bolt");
+      if(d.regim_nerezident_uber)plat.push(WIZ_NEREZ_LBL[d.regim_nerezident_uber]||"Uber");
+      if(plat.length) rez+=rand("🌍", "Platforme: "+plat.join(" · "));
+      if(wizHasBolt()) rez+=rand("🔗", d._boltConnected?"Bolt API: conectat":"Bolt API: manual (poți conecta din Setări)");
+    }
+    document.getElementById("wizard-root").innerHTML=`
+      <div style="max-width:480px;margin:0 auto;width:100%;text-align:center">
+        <div style="font-size:3rem;margin-bottom:6px">✅</div>
+        <div style="font-family:var(--display);font-weight:700;font-size:1.5rem;margin-bottom:6px">Gata! Contul tău e configurat</div>
+        <div class="hint" style="margin-bottom:16px">Am salvat tot. Iată ce-ai configurat:</div>
+        <div class="panel" style="text-align:left;margin-bottom:16px">${rez}</div>
+        <div id="wiz-done-msg" class="hint" style="color:var(--red);min-height:18px;margin-bottom:8px"></div>
+        <button class="btn btn-primary" id="wiz-complete-btn" onclick="wizComplete()" style="width:100%;min-height:48px;font-size:1.05rem">Intră în Contai →</button>
+      </div>`;
   }
+  async function wizComplete(){
+    const msg=document.getElementById("wiz-done-msg"), btn=document.getElementById("wiz-complete-btn");
+    if(btn) btn.style.opacity=".6";
+    try{
+      const r=await authFetch("/api/v1/onboarding/complete",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){ haptic("success"); exitWizardToDashboard(); return; }
+      // edge: lipsește un câmp obligatoriu → indică pasul lipsă + buton „mergi la pas"
+      const lbl={name:"numele",firma:"firma (CUI)",regim_impunere:"regimul de impunere",masina:"mașina"};
+      const miss=(d.missing||[]).map(k=>lbl[k]||k).join(", ");
+      const firstStep={name:"nume",firma:"cui",regim_impunere:"regim",masina:"masina"}[(d.missing||[])[0]]||"nume";
+      if(msg){ msg.innerHTML=`Mai lipsește: <b>${miss||"un câmp obligatoriu"}</b>. <a href="#" onclick="wizGoto('${firstStep}');return false" style="color:var(--emerald)">Mergi la pas →</a>`; }
+    }catch(e){ if(msg) msg.textContent="Conexiune pierdută. Încearcă din nou."; }
+    finally{ if(btn) btn.style.opacity="1"; }
+  }
+  function wizGoto(stepName){ const k=WIZ.steps.indexOf(stepName); if(k>=0){ WIZ.i=k; wizRender(); } }
+  window.wizComplete=wizComplete; window.wizGoto=wizGoto;
 
   function wizRender(){
     WIZ.steps = wizSteps();   // recalcul: pașii ridesharing pot apărea/dispărea după alegeri
