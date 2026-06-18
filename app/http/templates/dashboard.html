@@ -2015,13 +2015,23 @@
     nav("overview");
   })();
 
-  // ===================== ONBOARDING WIZARD (B1) =====================
-  // State-machine: pași de bază (nume → CUI+ANAF → normă/real → mașină). B2 inserează
-  // pașii ridesharing (platforme+regim+Bolt) după CUI dacă is_ridesharing. Resume prin
-  // onboarding_step (numerotare proprie wizard). Fiecare pas salvează la „Înainte".
+  // ===================== ONBOARDING WIZARD (B1 + B2) =====================
+  // State-machine: pași de bază (nume → CUI+ANAF → normă/real → mașină), apoi — DOAR dacă
+  // is_ridesharing (B2) — platforme → regim nerezident → API Bolt (dacă Bolt selectat).
+  // Resume prin onboarding_step (numerotare proprie wizard). Fiecare pas salvează la „Înainte".
   const WIZ = { i:0, data:{}, esc:s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;") };
-  // pașii de bază B1 (B2 va extinde lista dacă is_ridesharing)
-  function wizSteps(){ return ["nume","cui","regim","masina"]; }
+  // Pașii de bază (B1) + pașii ridesharing (B2) inserați DOAR dacă is_ridesharing.
+  // Lista e dinamică: apibolt apare doar după ce userul alege o platformă cu Bolt.
+  function wizHasBolt(){ return WIZ.data._platforme==="BOLT" || WIZ.data._platforme==="AMBELE"; }
+  function wizHasUber(){ return WIZ.data._platforme==="UBER" || WIZ.data._platforme==="AMBELE"; }
+  function wizSteps(){
+    const s=["nume","cui","regim","masina"];
+    if(WIZ.data.is_ridesharing){
+      s.push("platforme","nerezident");
+      if(wizHasBolt()) s.push("apibolt");   // Uber n-are sync API → fără pas de conectare
+    }
+    return s;
+  }
 
   function enterWizard(status){
     document.body.classList.add("wizard-mode");
@@ -2064,16 +2074,21 @@
   }
   function wizAdvance(){ if(WIZ.i<WIZ.steps.length-1){ WIZ.i++; wizRender(); } else { wizDone(); } }
   function wizDone(){
-    // B1: placeholder final (finalizarea reală /complete = sub-pas C; pașii ridesharing = B2)
-    wizShell("Aproape gata", `<div class="hint">✅ Datele de bază sunt salvate. Pașii rămași (platforme/Bolt + finalizare) se activează în curând.</div>`);
+    // Placeholder final (finalizarea reală /complete = sub-pas C). B2 a completat pașii ridesharing.
+    wizShell("Aproape gata", `<div class="hint">✅ Datele tale sunt salvate. Finalizarea configurării se activează în curând.</div>`);
   }
 
   function wizRender(){
+    WIZ.steps = wizSteps();   // recalcul: pașii ridesharing pot apărea/dispărea după alegeri
+    if(WIZ.i > WIZ.steps.length-1) WIZ.i = WIZ.steps.length-1;
     const step=WIZ.steps[WIZ.i];
     if(step==="nume") return wizNume();
     if(step==="cui") return wizCui();
     if(step==="regim") return wizRegim();
     if(step==="masina") return wizMasina();
+    if(step==="platforme") return wizPlatforme();
+    if(step==="nerezident") return wizNerezident();
+    if(step==="apibolt") return wizApiBolt();
   }
 
   // ── Pas NUME ──
@@ -2173,6 +2188,87 @@
       ${wizBtns(true)}`);
   }
 
+  // ═══════════ PAȘI RIDESHARING (B2) — doar dacă is_ridesharing ═══════════
+  // ── Pas PLATFORME (gate: Bolt / Uber / Ambele) ──
+  function wizPlatforme(){
+    const sel=WIZ.data._platforme;
+    const card=(val,emoji,tit,desc)=>`<div onclick="wizPickPlatforme('${val}')" style="cursor:pointer;border:2px solid ${sel===val?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
+    wizShell("Pe ce platforme lucrezi?", `
+      <div class="hint" style="margin-bottom:12px">Comisionul reținut de platforme (firme din afara României) se impozitează aici prin D100. Te întrebăm regimul doar pentru platformele alese.</div>
+      ${card("BOLT","🟢","Doar Bolt","Bolt Operations OÜ (Estonia).")}
+      ${card("UBER","⚫","Doar Uber","Uber B.V. (Olanda).")}
+      ${card("AMBELE","🔵","Ambele","Și Bolt, și Uber.")}
+      ${wizBtns(true)}`);
+    const nb=document.getElementById("wiz-next"); if(nb && !sel){ nb.disabled=true; nb.style.opacity=".5"; }
+  }
+  function wizPickPlatforme(v){ WIZ.data._platforme=v; wizPlatforme(); }
+  window.wizPickPlatforme=wizPickPlatforme;
+
+  // ── Pas REGIM NEREZIDENT (bloc per platformă aleasă) ──
+  function wizNerezident(){
+    const card=(grup,val,emoji,tit,desc)=>{
+      const sel=WIZ.data[grup]===val;
+      return `<div onclick="wizPickNerezident('${grup}','${val}')" style="cursor:pointer;border:2px solid ${sel?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:13px;margin-bottom:9px">
+        <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:3px">${desc}</div></div>`;
+    };
+    let corp=`<div class="hint" style="margin-bottom:12px">Cota de impozit pe comisionul nerezident depinde de certificatul de rezidență fiscală al platformei.</div>`;
+    if(wizHasBolt()){
+      corp+=`<div style="font-weight:600;margin:6px 0 8px">🟢 Bolt (Estonia)</div>`
+        +card("regim_nerezident_bolt","BOLT_CU_CRF","✅","Am certificatul Bolt — 2%","Impozit 2% (D100 lunar + D207 anual). Necesită certificatul de rezidență fiscală al Bolt.")
+        +card("regim_nerezident_bolt","BOLT_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
+        +`<div class="hint" style="margin:2px 0 14px">📄 Certificatul Bolt îl găsești în secțiunea <b>Certificat</b> după configurare.</div>`;
+    }
+    if(wizHasUber()){
+      corp+=`<div style="font-weight:600;margin:6px 0 8px">⚫ Uber (Olanda)</div>`
+        +card("regim_nerezident_uber","UBER_CU_CRF","✅","Am certificatul Uber — 0%","Scutire: doar D207 anual, fără D100. Necesită certificatul de rezidență fiscală al Uber.")
+        +card("regim_nerezident_uber","UBER_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
+        +`<div class="hint" style="margin:2px 0 6px">ℹ️ Uber nu are cota de 2% (aceea e doar pentru Bolt).</div>`;
+    }
+    wizShell("Impozit nerezident (D100)", corp+wizBtns(true));
+    const ok=(!wizHasBolt()||WIZ.data.regim_nerezident_bolt)&&(!wizHasUber()||WIZ.data.regim_nerezident_uber);
+    const nb=document.getElementById("wiz-next"); if(nb && !ok){ nb.disabled=true; nb.style.opacity=".5"; }
+  }
+  function wizPickNerezident(grup,val){ WIZ.data[grup]=val; wizNerezident(); }
+  window.wizPickNerezident=wizPickNerezident;
+
+  // ── Pas API BOLT (refolosește conectarea #2-B; opțional — se poate sări) ──
+  function wizApiBolt(){
+    wizShell("Conectează Bolt (opțional)", `
+      <div class="hint" style="margin-bottom:12px">Conectează contul Bolt Fleet ca să sincronizăm automat cursele. Generează cheile în <b>fleets.bolt.eu → Settings → API → Generate credentials</b>, apoi lipește-le aici (secretul e stocat CRIPTAT).</div>
+      <label class="set-lbl">Client ID</label>
+      <input class="set-inp" id="wiz-bolt-cid" type="text" placeholder="Client ID din fleets.bolt.eu" autocomplete="off" spellcheck="false">
+      <label class="set-lbl" style="margin-top:12px">Client Secret</label>
+      <input class="set-inp" id="wiz-bolt-csec" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false">
+      <div id="wiz-bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" onclick="wizBack()" style="min-height:44px">⬅️ Înapoi</button>
+        <button class="btn btn-primary" id="wiz-bolt-btn" onclick="wizApiBoltConnect()" style="flex:1;min-height:44px">Conectează</button>
+      </div>
+      <button class="btn btn-ghost" onclick="wizApiBoltSkip()" style="width:100%;margin-top:10px;min-height:44px">Sări peste — conectez mai târziu →</button>
+      <div class="hint" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)">🛟 Fără API poți introduce venitul <b>manual</b>: trimite în bot screenshotul raportului Bolt sau text (<code>venit bolt [lună]: net X, cash Y</code>).</div>`);
+  }
+  async function wizApiBoltConnect(){
+    const msg=document.getElementById("wiz-bolt-msg"), btn=document.getElementById("wiz-bolt-btn");
+    const cid=(document.getElementById("wiz-bolt-cid")||{}).value||"";
+    const csec=(document.getElementById("wiz-bolt-csec")||{}).value||"";
+    if(!cid.trim()||!csec.trim()){ if(msg){msg.style.color="var(--red)";msg.textContent="Completează ambele câmpuri (sau sari peste).";} return; }
+    if(msg){msg.style.color="var(--muted)";msg.textContent="Se verifică cheile cu Bolt…";}
+    if(btn) btn.style.opacity=".6";
+    try{
+      const r=await authFetch("/api/v1/bolt/connect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:cid.trim(),client_secret:csec.trim()})});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){ WIZ.data._boltConnected=true; haptic("success"); await wizSave({}); wizAdvance(); }
+      else{ if(msg){msg.style.color="var(--red)";msg.textContent=d.message||"Nu am putut conecta. Verifică cheile (sau sari peste).";} }
+    }catch(e){ if(msg){msg.style.color="var(--red)";msg.textContent="Conexiune pierdută. Încearcă din nou.";} }
+    finally{ if(btn) btn.style.opacity="1"; }
+  }
+  async function wizApiBoltSkip(){
+    try{ await wizSave({}); }catch(e){ console.error(e); }
+    haptic("light"); wizAdvance();
+  }
+  window.wizApiBoltConnect=wizApiBoltConnect; window.wizApiBoltSkip=wizApiBoltSkip;
+
   // ── Avansare: validează + salvează pasul curent ──
   async function wizNext(){
     const step=WIZ.steps[WIZ.i];
@@ -2208,6 +2304,16 @@
             norma_consum:parseFloat(WIZ.data.veh_consum)||7.5,tip_detinere:WIZ.data.veh_tip})});
         if(!r.ok){ wizMsg("Nu am putut salva mașina.",true); return; }
         await wizSave({});  // avansează pasul
+      } else if(step==="platforme"){
+        if(!WIZ.data._platforme){ wizMsg("Alege o platformă.",true); return; }
+        await wizSave({});  // platforma e ephemeral (regimul de la pasul următor e persistat)
+      } else if(step==="nerezident"){
+        if(wizHasBolt() && !WIZ.data.regim_nerezident_bolt){ wizMsg("Alege regimul pentru Bolt.",true); return; }
+        if(wizHasUber() && !WIZ.data.regim_nerezident_uber){ wizMsg("Alege regimul pentru Uber.",true); return; }
+        const f={};
+        if(wizHasBolt()) f.regim_nerezident_bolt=WIZ.data.regim_nerezident_bolt;
+        if(wizHasUber()) f.regim_nerezident_uber=WIZ.data.regim_nerezident_uber;
+        await wizSave(f);
       }
       haptic("success"); wizAdvance();
     }catch(e){ console.error(e); wizMsg("Ceva n-a mers. Încearcă din nou.",true); }
