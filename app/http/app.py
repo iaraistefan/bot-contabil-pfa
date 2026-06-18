@@ -712,6 +712,111 @@ def onboarding_status():
         session.close()
 
 
+@flask_app.route("/api/v1/cui-lookup")
+def cui_lookup():
+    """
+    Cercetare CUI pentru wizard (B1) — wrap `lookup_cui` (ANAF V9) + activitate din CAEN
+    + flag ridesharing (deblochează pașii Bolt). Backend cercetează, JS afișează cardul.
+    """
+    _, err = _require_user()
+    if err:
+        return err
+    cui = (request.args.get("cui") or "").strip()
+    from app.integrations.anaf_lookup import lookup_cui
+    from app.services.onboarding import activity_from_caen, ACTIVITIES_BY_CODE
+    res = lookup_cui(cui)
+    if not res.get("found"):
+        return jsonify({"found": False, "error": res.get("error") or "Firmă negăsită"})
+    activity = activity_from_caen(res.get("cod_caen") or "")
+    act_label = ACTIVITIES_BY_CODE.get(activity, {}).get("label") if activity else None
+    return jsonify({
+        "found": True,
+        "cui": res.get("cui"),
+        "denumire": res.get("denumire"),
+        "cod_caen": res.get("cod_caen"),
+        "activity_code": activity,                       # ex. "ridesharing" (sau None)
+        "activity_label": act_label,
+        "is_ridesharing": activity == "ridesharing",     # deblochează pașii Bolt (B2)
+        "forma_juridica": res.get("forma_juridica_detectata"),
+        "regim_tva": res.get("regim_tva"),
+        "is_platitor_tva": res.get("is_platitor_tva"),
+        "is_inactiv": res.get("is_inactiv"),
+        "stare_inregistrare": res.get("stare_inregistrare"),
+        "judet": res.get("judet"),
+        "localitate": res.get("localitate"),
+        "adresa_completa": res.get("adresa_completa"),
+    })
+
+
+# Câmpurile pe care wizardul le poate salva (allowlist — restul se ignoră).
+_ONBOARDING_SAVE_FIELDS = {
+    "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
+    "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
+    "caen_principal", "activity_code", "judet", "localitate",
+}
+
+
+@flask_app.route("/api/v1/onboarding/save", methods=["POST"])
+def onboarding_save():
+    """
+    Salvare generică a unui pas din wizard (B1): scrie câmpurile de profil permise
+    (allowlist, refolosește update_profile) + avansează `onboarding_step`. NU finalizează
+    (asta = /complete, sub-pas C). Per-user (_require_user).
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    fields = {k: v for k, v in body.items() if k in _ONBOARDING_SAVE_FIELDS}
+    step = body.get("step")
+    session = get_session()
+    try:
+        user = users_repo.get_by_id(session, user_id)
+        if user is None:
+            return jsonify({"error": "user not found"}), 404
+        if fields:
+            users_repo.update_profile(session, user, **fields)
+        if isinstance(step, int) and step > (user.onboarding_step or 0):
+            users_repo.set_onboarding_step(session, user, step)
+        session.commit()
+        return jsonify({"ok": True, "current_step": user.onboarding_step or 0})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API onboarding/save error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
+@flask_app.route("/api/v1/vehicul", methods=["POST"])
+def vehicul_create():
+    """Creează un vehicul din wizard (B1) — refolosește vehicule_repo.create. Per-user."""
+    user_id, err = _require_user()
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    nr = (body.get("nr_inmatriculare") or "").strip()
+    if not nr:
+        return jsonify({"error": "invalid", "message": "Numărul de înmatriculare e obligatoriu."}), 400
+    from app.repositories import vehicule as vehicule_repo
+    session = get_session()
+    try:
+        v = vehicule_repo.create(
+            session, user_id=user_id, nr_inmatriculare=nr,
+            marca_model=body.get("marca_model"),
+            norma_consum=float(body.get("norma_consum") or 7.5),
+            tip_detinere=body.get("tip_detinere"),
+        )
+        session.commit()
+        return jsonify({"ok": True, "vehicul_id": v.id})
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API vehicul create error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
 @flask_app.route("/api/v1/bolt/status")
 def bolt_status():
     """Status conectare Bolt (#2-B) — secretul NU se întoarce NICIODATĂ în clar (mascat)."""

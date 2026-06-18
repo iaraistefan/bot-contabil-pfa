@@ -119,8 +119,9 @@ ACTIVITIES_BY_CODE = {a["code"]: a for a in ACTIVITIES}
 
 # === Mapare cod CAEN -> activitate (pentru auto-detectie din ANAF) ===
 CAEN_TO_ACTIVITY = {
-    # Ridesharing / transport persoane
-    "4932": "ridesharing", "4931": "ridesharing", "4939": "ridesharing",
+    # Ridesharing / transport persoane (4933 = transport rutier de pasageri cu taxiul/
+    # alternativ — eligibil normă de venit 2026, OMF 1960/2025)
+    "4932": "ridesharing", "4931": "ridesharing", "4933": "ridesharing", "4939": "ridesharing",
     # IT
     "6201": "it_freelance", "6202": "it_freelance", "6209": "it_freelance",
     "6311": "it_freelance", "6312": "it_freelance",
