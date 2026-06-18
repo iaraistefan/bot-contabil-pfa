@@ -35,6 +35,12 @@
   /* C9-C: înălțimea reală a Mini App-ului (Telegram variază chrome/tastatură).
      Fallback 100vh în browser (var nesetat). JS o setează din tg.viewportStableHeight. */
   .app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;height:var(--tg-viewport-stable-height,100vh)}
+  /* Onboarding wizard (sub-pas A): takeover full-screen pt user neonboarded.
+     Mod wizard → ascunde dashboard-ul normal, arată wizard-root. Chrome ascuns = focus. */
+  .wizard-root{display:none}
+  body.wizard-mode .app{display:none}
+  body.wizard-mode .wizard-root{display:flex;flex-direction:column;position:fixed;inset:0;z-index:200;
+    background:var(--ink);color:var(--cream);overflow-y:auto;padding:28px 20px 40px}
 
   /* ============ SIDEBAR ============ */
   .sidebar{
@@ -453,6 +459,9 @@
   <g id="i-gear"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></g>
   <g id="i-brand"><path d="M16 6a7 7 0 1 0 0 12" stroke="#06231f" stroke-width="2.2"/><path d="M5 14l3-3 2.5 2L14 8" stroke="#06231f" stroke-width="2.2"/></g>
 </defs></svg>
+<!-- ONBOARDING WIZARD (sub-pas A: shell full-screen; pașii vin la sub-pas B). Afișat
+     DOAR în mod wizard (user neonboarded), via routing prin stare la init. -->
+<div id="wizard-root" class="wizard-root"></div>
 <div class="overlay" id="overlay" onclick="toggleNav(false)"></div>
 <div class="app">
 
@@ -1995,10 +2004,37 @@
         return;
       }
     }catch(e){}
+    // Onboarding wizard (sub-pas A): routing PRIN STARE — user neonboarded → wizard,
+    // nu dashboard normal. Degradare grațioasă: la eroare/status indisponibil → dashboard.
+    try{
+      const sr=await authFetch("/api/v1/onboarding/status");
+      if(sr.ok){ const st=await sr.json(); if(!st.onboarding_completed){ enterWizard(st); return; } }
+    }catch(e){ console.error("onboarding status:", e); }
     // construim selectorul de luni (ultimele 5 luni) + îl facem funcțional
     buildPeriods();
     nav("overview");
   })();
+
+  // Mod wizard: takeover full-screen (chrome ascuns). Sub-pas A = shell + welcome;
+  // pașii (nume → CUI+ANAF → normă → mașină → platforme → Bolt) vin la sub-pas B.
+  function enterWizard(status){
+    document.body.classList.add("wizard-mode");
+    const root=document.getElementById("wizard-root");
+    if(!root) return;
+    root.innerHTML=`
+      <div style="max-width:480px;margin:0 auto;width:100%">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:22px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:800;color:#06231f">C</span>
+          <div style="font-family:var(--display);font-weight:700;font-size:1.4rem">Contai</div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><div class="t">Configurare cont</div></div>
+          <div class="hint" style="margin-bottom:14px">Hai să-ți configurăm contul — durează sub un minut. Îți caut datele firmei automat în ANAF; tu doar confirmi.</div>
+          <div class="hint">⏳ Pașii de configurare se activează în curând (nume → CUI + căutare ANAF → normă/real → mașină → platforme → API Bolt).</div>
+        </div>
+      </div>`;
+  }
+  window.enterWizard=enterWizard;
 
   // ---- SELECTOR PERIOADĂ (an + luni) ----
   let pickYear = Y;   // anul afișat în selector (poate diferi de anul activ până apeși o lună)

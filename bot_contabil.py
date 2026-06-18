@@ -594,7 +594,23 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=build_main_menu(),
         )
     else:
-        await onboarding.start_onboarding(update, context)
+        # Onboarding nou (wizard în dashboard, sub-pas A): user neonboarded → buton WebApp.
+        # Dashboard-ul se auto-rutează la wizard via /api/v1/onboarding/status (routing prin
+        # stare, nu URL). ensure_user a creat deja rândul. Fallback chat = /setup_text (sub-pas D).
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🚀 Începe configurarea",
+                                 web_app=WebAppInfo(url=DASHBOARD_URL))
+        ]])
+        await update.message.reply_text(
+            "👋 *Bun venit la Contai!*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Hai să-ți configurăm contul — apasă butonul de mai jos. Durează *sub un "
+            "minut*: îți caut datele firmei automat în registrul ANAF (denumire, CAEN, TVA), "
+            "tu doar confirmi.\n\n"
+            "_Configurarea se face în Dashboard (mai clar decât în chat)._",
+            parse_mode="Markdown",
+            reply_markup=markup,
+        )
 
 
 async def handle_ajutor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

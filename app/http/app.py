@@ -689,6 +689,29 @@ def certificat_bolt():
     })
 
 
+@flask_app.route("/api/v1/onboarding/status")
+def onboarding_status():
+    """
+    Starea onboarding (wizard nou, sub-pas A) — frontend-ul rutează: dacă NU e complet →
+    afișează wizardul (nu dashboard-ul normal). Routing prin STARE, nu prin URL.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        return jsonify({
+            "onboarding_completed": bool(profile.get("onboarding_completed")),
+            "current_step": profile.get("onboarding_step") or 0,
+        })
+    except Exception as e:
+        logger.error(f"API onboarding/status error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+
 @flask_app.route("/api/v1/bolt/status")
 def bolt_status():
     """Status conectare Bolt (#2-B) — secretul NU se întoarce NICIODATĂ în clar (mascat)."""
