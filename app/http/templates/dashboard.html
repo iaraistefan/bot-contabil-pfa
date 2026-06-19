@@ -2191,7 +2191,7 @@
     WIZ.data.judet=d.judet; WIZ.data.localitate=d.localitate; WIZ.data.is_ridesharing=!!d.is_ridesharing;
     WIZ.data._cuiConfirmat=true;
     const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=false; nb.style.opacity="1"; }
-    wizMsg("✓ Date confirmate. Apasă „Înainte".");
+    wizMsg("✓ Date confirmate. Apasă „Înainte”.");
   }
   function wizCuiManual(motiv){
     const card=document.getElementById("wiz-cui-card");
@@ -2328,7 +2328,7 @@
         if(!v.trim()){ wizMsg("Scrie numele.",true); return; }
         WIZ.data.name=v.trim(); await wizSave({name:v.trim()});
       } else if(step==="cui"){
-        if(!WIZ.data._cuiConfirmat){ wizMsg("Caută CUI-ul și confirmă (sau alege „Editez").",true); return; }
+        if(!WIZ.data._cuiConfirmat){ wizMsg("Caută CUI-ul și confirmă (sau alege „Editez”).",true); return; }
         if(WIZ.data._cuiManual){
           const den=(document.getElementById("wiz-denumire")||{}).value||"";
           await wizSave({firma_nume:den.trim()});
