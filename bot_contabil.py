@@ -594,7 +594,40 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=build_main_menu(),
         )
     else:
-        await onboarding.start_onboarding(update, context)
+        # Onboarding nou (wizard în dashboard, sub-pas A): user neonboarded → buton WebApp.
+        # Dashboard-ul se auto-rutează la wizard via /api/v1/onboarding/status (routing prin
+        # stare, nu URL). ensure_user a creat deja rândul. Fallback chat = /setup_text (sub-pas D).
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🚀 Începe configurarea",
+                                 web_app=WebAppInfo(url=DASHBOARD_URL))
+        ]])
+        await update.message.reply_text(
+            "👋 *Bun venit la Contai!*\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Hai să-ți configurăm contul — apasă butonul de mai jos. Durează *sub un "
+            "minut*: îți caut datele firmei automat în registrul ANAF (denumire, CAEN, TVA), "
+            "tu doar confirmi.\n\n"
+            "_Configurarea se face în Dashboard (mai clar decât în chat)._\n"
+            "_Nu poți deschide dashboard-ul? Scrie /setup_text pentru configurare prin chat._",
+            parse_mode="Markdown",
+            reply_markup=markup,
+        )
+
+
+async def handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /setup_text — configurare prin chat (calea text ALTERNATIVĂ, ne-promovată). Fallback de
+    reziliență pentru userul care nu poate deschide dashboard-ul (hiccup WebApp/Render).
+    Aceeași logică ca wizardul (lookup_cui + update_profile = sursă unică), doar UI diferă.
+    """
+    ensure_user(update)
+    await update.message.reply_text(
+        "💬 *Configurare prin chat* (alternativă)\n\n"
+        "Te ghidez pas cu pas aici, în conversație. "
+        "Dacă poți, folosește dashboard-ul pentru o experiență mai bună: /start",
+        parse_mode="Markdown",
+    )
+    await onboarding.start_onboarding(update, context)
 
 
 async def handle_ajutor_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3097,6 +3130,7 @@ if __name__ == '__main__':
     app_bot.add_handler(CommandHandler("bolt_conectare", handle_bolt_conectare))  # #2-B status+link
     app_bot.add_handler(CommandHandler("profil", handle_profil))
     app_bot.add_handler(CommandHandler("reset_profil", handle_reset_profil))
+    app_bot.add_handler(CommandHandler("setup_text", handle_setup_text))  # onboarding D — fallback chat ne-promovat
     app_bot.add_handler(CommandHandler("status", handle_status))  # Pas 13.1
     app_bot.add_handler(CommandHandler("cont", handle_cont))  # diagnostic izolare
     app_bot.add_handler(CommandHandler("delete", handle_delete))
