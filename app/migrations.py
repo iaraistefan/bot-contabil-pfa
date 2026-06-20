@@ -405,6 +405,17 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_salariat BOOLEAN",
         ],
     },
+    {
+        "id": "018_user_incaseaza_numerar",
+        "description": (
+            "Casa de marcat (PAS 3): incaseaza_numerar — userul a declarat ca incaseaza "
+            "numerar de la pasageri. Semnalul AMEF = declarat SAU income_cash>0 (date reale "
+            "au prioritate). Nullable, aditiva ca 016/017 (NULL/False = nedeclarat)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS incaseaza_numerar BOOLEAN",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

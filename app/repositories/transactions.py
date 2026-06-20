@@ -76,6 +76,27 @@ def list_for_period(
     return q.order_by(Transaction.occurred_on).all()
 
 
+def cash_income_for_year(session: Session, user_id: int, year: int) -> float:
+    """
+    Total încasări în NUMERAR pe an (lei) — semnal pentru casa de marcat (PAS 3).
+    Σ amount_brut pe INCOME cu payment_method=CASH (filtru locked=False, ca restul
+    motorului fiscal). Sursa: tranzacții cash (manual + curse cash postate din Bolt).
+    """
+    from sqlalchemy import func
+    total = (
+        session.query(func.coalesce(func.sum(Transaction.amount_brut), 0.0))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.period_year == year,
+            Transaction.tx_type == "INCOME",
+            Transaction.payment_method == "CASH",
+            Transaction.locked == False,  # noqa: E712
+        )
+        .scalar()
+    )
+    return round(float(total or 0.0), 2)
+
+
 def delete_for_document(
     session: Session,
     document_id: int,

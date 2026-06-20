@@ -555,6 +555,7 @@
         <div id="ov-onboarding"></div>
         <div id="ov-fiscal"></div>
         <div id="ov-praguri"></div>
+        <div id="ov-amef"></div>
         <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
@@ -1087,6 +1088,16 @@
         });
         html+=`</div>`;
       });
+      // Secțiune AMEF (casă de marcat) — pedagogică, ca restul ghidului (PAS 3).
+      if(d.amef){
+        const a=d.amef;
+        html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">🧾 ${esc(a.titlu)}</div></div>
+          <div style="border-top:1px solid var(--line);padding:2px 12px 14px">
+            ${field('🔹','Ce e?',a.ce_e)}${field('📅','Când e obligatorie?',a.cand)}
+            ${field('💡','De ce?',a.de_ce)}${field('📝','Cum?',a.cum)}
+            <div class="hint" style="margin-top:6px">Orientativ — verifică cu un contabil/ANAF.</div>
+          </div></div>`;
+      }
       box.innerHTML=html||'<div class="hint" style="padding:10px">—</div>';
     }).catch(e=>{console.error(e);box.innerHTML='<div class="hint" style="padding:10px">Nu am putut încărca ghidul.</div>';});
   }
@@ -1122,6 +1133,20 @@
       // A3: hero fiscal explicativ (anual YTD, /declaratie-unica) — teza, deasupra "Cât plătesc"
       try{const fisc=await getD212(Y);setNum("ov-net", fisc.venit_net, RON);setTxt("ov-net-sub", Y+" · la zi");renderFiscalHero(fisc);renderPraguri(fisc);}catch(e){console.error(e);setTxt("ov-net","—");const b=document.getElementById("ov-fiscal");if(b)b.innerHTML="";const pb=document.getElementById("ov-praguri");if(pb)pb.innerHTML="";}
       try{await renderOnboarding();}catch(e){console.error(e);}
+      // Card AMEF (casă de marcat) — INFORMATIV, doar dacă semnalul e True (PAS 3).
+      try{
+        const r=await authFetch("/api/v1/casa-marcat?year="+Y); const cm=await r.json();
+        const box=document.getElementById("ov-amef");
+        if(box){
+          const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+          box.innerHTML = cm.necesita
+            ? `<div class="alert" style="margin-bottom:16px;cursor:pointer" onclick="nav('ghid')">
+                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
+                 <div><div class="t">Probabil ai nevoie de casă de marcat (AMEF)</div>
+                 <div class="d">${esc(cm.motiv)} Vezi <b>Ghidul</b> pentru detalii.</div></div></div>`
+            : "";
+        }
+      }catch(e){console.error(e);}
       // A5: linie discretă "Date actualizate {relativ}" (cel mai recent sync: Bolt sau documente)
       try{const st=await getSetari();const ig=st.integrari||{};const ts=[ig.bolt&&ig.bolt.last_synced,ig.documente&&ig.documente.last_synced].filter(Boolean).sort();setTxt("ov-synced", ts.length?("Date actualizate "+relTime(ts[ts.length-1])):"");}catch(e){console.error(e);}
       try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
@@ -2295,10 +2320,14 @@
         <span style="font-size:1.3rem">${emoji}</span>
         <div style="flex:1"><div style="font-weight:600">${tit} ${on?"✓":""}</div><div class="hint" style="margin-top:4px">${desc}</div></div></div>`;
     };
+    const cashTog = WIZ.data.is_ridesharing
+      ? tog("incaseaza_numerar","💵","Încasez numerar de la pasageri","Dacă accepți curse plătite cash, probabil ai nevoie de casă de marcat (AMEF). Plățile card prin app NU intră.")
+      : "";
     wizShell("Situația ta personală", `
-      <div class="hint" style="margin-bottom:12px">Bifează ce ți se aplică — afectează contribuțiile (CAS/CASS). Opțional; dacă niciuna nu se aplică, treci mai departe.</div>
+      <div class="hint" style="margin-bottom:12px">Bifează ce ți se aplică — afectează contribuțiile (CAS/CASS) și obligațiile. Opțional; dacă niciuna nu se aplică, treci mai departe.</div>
       ${tog("is_pensionar","🧓","Sunt pensionar","Pensionarii NU plătesc CAS (pensie) pe activitatea PFA. CASS se aplică pe venitul real.")}
       ${tog("is_salariat","💼","Sunt angajat cu normă întreagă altundeva","Ca asigurat prin salariu, CASS pe PFA se calculează pe venitul real (fără baza minimă). CAS pe PFA rămâne după prag.")}
+      ${cashTog}
       ${wizBtns(true)}`);
   }
   function wizToggleSituatie(key){ WIZ.data[key]=!WIZ.data[key]; wizSituatie(); }
@@ -2432,8 +2461,9 @@
           await wizSave({regim_impunere:WIZ.data.regim_impunere});
         }
       } else if(step==="situatie"){
-        // opțional — salvăm ambele flag-uri (default false). Afectează CAS/CASS.
-        await wizSave({is_pensionar:!!WIZ.data.is_pensionar, is_salariat:!!WIZ.data.is_salariat});
+        // opțional — salvăm flag-urile (default false). Afectează CAS/CASS + casa de marcat.
+        await wizSave({is_pensionar:!!WIZ.data.is_pensionar, is_salariat:!!WIZ.data.is_salariat,
+          incaseaza_numerar:!!WIZ.data.incaseaza_numerar});
       } else if(step==="masina"){
         const nr=(document.getElementById("wiz-nr")||{}).value||"";
         if(!nr.trim()){ wizMsg("Numărul de înmatriculare e obligatoriu.",true); return; }

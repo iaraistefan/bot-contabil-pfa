@@ -660,7 +660,9 @@ def ghid_obligatii():
             }
             for g in fiscal_calendar.ghid_grupuri(codes)
         ]
-        return jsonify({"personalizat": personalizat, "nudge": nudge, "grupuri": grupuri})
+        from app.domain import casa_marcat
+        return jsonify({"personalizat": personalizat, "nudge": nudge, "grupuri": grupuri,
+                        "amef": casa_marcat.AMEF_INFO})
     except Exception as e:
         logger.error(f"API ghid error user={user_id}: {e}")
         return jsonify({"error": "internal error"}), 500
@@ -735,6 +737,7 @@ def onboarding_status():
             "norma_venit_anuala": profile.get("norma_venit_anuala"),
             "is_pensionar": bool(profile.get("is_pensionar")),
             "is_salariat": bool(profile.get("is_salariat")),
+            "incaseaza_numerar": bool(profile.get("incaseaza_numerar")),
             # An fiscal curent — pentru gardianul de selecție normă (ridesharing pe
             # normă doar din 2026; sub-pas PAS 1-UI). Sursa regulii = norma_venit.norma_permisa.
             "_an_fiscal": date.today().year,
@@ -796,7 +799,7 @@ _ONBOARDING_SAVE_FIELDS = {
     "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
-    "is_pensionar", "is_salariat",
+    "is_pensionar", "is_salariat", "incaseaza_numerar",
 }
 
 
@@ -822,6 +825,38 @@ def norma_lookup():
     cod = norma_venit._normalize_judet(judet)
     sursa = (norma_venit.NORMA_VENIT_4933.get(an, {}).get(cod, {}) or {}).get("_sursa")
     return jsonify({"found": True, "norma": val, "sursa": sursa})
+
+
+@flask_app.route("/api/v1/casa-marcat")
+def casa_marcat_status():
+    """
+    Semnal „ai nevoie de casă de marcat (AMEF)?" (PAS 3). Combină DATELE (income_cash pe an,
+    din tranzacții CASH) cu DECLARAȚIA (incaseaza_numerar) — date reale au prioritate. Sursă
+    unică: `casa_marcat.necesita_amef`. Ton INFORMATIV (+ trimitere la ghid). Per-user.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+    from app.domain import casa_marcat
+    year = int(request.args.get("year") or date.today().year)
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        declarat = bool(profile.get("incaseaza_numerar"))
+        income_cash = tx_repo.cash_income_for_year(session, user_id, year)
+        necesita, motiv = casa_marcat.necesita_amef(income_cash, declarat)
+        return jsonify({
+            "necesita": necesita,
+            "motiv": motiv,
+            "income_cash": income_cash,
+            "declarat": declarat,
+            "info": casa_marcat.AMEF_INFO,
+        })
+    except Exception as e:
+        logger.error(f"API casa-marcat error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
 
 
 @flask_app.route("/api/v1/onboarding/save", methods=["POST"])
