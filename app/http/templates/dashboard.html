@@ -783,7 +783,7 @@
               <div class="row"><div class="info"><div class="m">Denumire</div><div class="t" id="set-denumire">—</div></div></div>
               <div class="row"><div class="info"><div class="m">CUI</div><div class="t num" id="set-cui">—</div></div></div>
               <div class="row"><div class="info"><div class="m">Cod special TVA (art. 317)</div><div class="t num" id="set-cod-special">—</div></div></div>
-              <div class="row"><div class="info"><div class="m">Formă juridică</div><div class="t">PFA · sistem real</div></div></div>
+              <div class="row"><div class="info"><div class="m">Formă juridică · regim</div><div class="t" id="set-forma">—</div></div></div>
               <div class="row"><div class="info"><div class="m">TVA</div><div class="t">Neplătitor · cod special art. 317</div></div></div>
               <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
             </div>
@@ -1839,6 +1839,15 @@
       setTxt("set-denumire", s.firma_nume||"—");
       setTxt("set-cui", s.firma_cui||"—");
       setTxt("set-cod-special", s.cod_special_tva||"—");
+      // Formă juridică · regim (dinamic) — pe normă, arată și norma anuală folosită
+      // (transparență: afișaj = ce calculează motorul D212).
+      const regimLbl={NORMA_VENIT:"normă de venit",SISTEM_REAL:"sistem real",MICRO_1:"micro 1%",MICRO_3:"micro 3%"};
+      const rg=regimLbl[s.regim_impunere]||"sistem real";
+      let formaTxt=(s.firma_forma_juridica||"PFA")+" · "+rg;
+      if(s.regim_impunere==="NORMA_VENIT" && s.norma_venit_anuala>0){
+        formaTxt+=" ("+Number(s.norma_venit_anuala).toLocaleString("ro-RO")+" lei/an)";
+      }
+      setTxt("set-forma", formaTxt);
       const banca=document.getElementById("set-banca");
       const iban=document.getElementById("set-iban");
       if(banca) banca.value = s.banca||"";
@@ -2207,17 +2216,69 @@
   // ── Pas NORMĂ vs REAL ──
   function wizRegim(){
     const sel=WIZ.data.regim_impunere;
-    const card=(val,emoji,tit,desc)=>`<div onclick="wizPickRegim('${val}')" style="cursor:pointer;border:2px solid ${sel===val?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:14px;margin-bottom:10px">
+    // Gardian selecție: ridesharing pe NORMĂ doar din 2026 (regula = norma_permisa, server).
+    const normaPermisa = !(WIZ.data.is_ridesharing && (WIZ.data._an_fiscal||9999) < 2026);
+    const card=(val,emoji,tit,desc,disabled)=>`<div ${disabled?"":`onclick="wizPickRegim('${val}')"`} style="cursor:${disabled?"not-allowed":"pointer"};opacity:${disabled?".5":"1"};border:2px solid ${sel===val?"var(--emerald)":"var(--line-2)"};border-radius:14px;padding:14px;margin-bottom:10px">
       <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
+    const normaDesc = normaPermisa
+      ? "Sumă fixă stabilită de ANAF, indiferent de venit. Mai simplu."
+      : "⏳ Disponibilă pentru ridesharing doar din 2026; pentru anul curent se aplică sistem real.";
     wizShell("Cum te impozitezi?", `
       <div class="hint" style="margin-bottom:12px">Regimul de impunere — îl poți schimba ulterior.</div>
-      ${card("NORMA_VENIT","📌","Normă de venit","Sumă fixă stabilită de ANAF, indiferent de venit. Mai simplu. (Disponibil pentru ridesharing în 2026.)")}
+      ${card("NORMA_VENIT","📌","Normă de venit",normaDesc,!normaPermisa)}
       ${card("SISTEM_REAL","📊","Sistem real","Impozit pe venitul efectiv (venituri − cheltuieli deductibile). Mai flexibil.")}
+      <div id="wiz-norma-box"></div>
       ${wizBtns(true)}`);
-    const nb=document.getElementById("wiz-next"); if(nb && !sel){ nb.disabled=true; nb.style.opacity=".5"; }
+    if(sel==="NORMA_VENIT" && normaPermisa) wizNormaTip();
+    wizRegimBtn();
   }
-  function wizPickRegim(v){ WIZ.data.regim_impunere=v; wizRegim(); }
-  window.wizPickRegim=wizPickRegim;
+  function wizPickRegim(v){
+    WIZ.data.regim_impunere=v;
+    if(v!=="NORMA_VENIT"){ WIZ.data.norma_venit_anuala=0; WIZ.data._norma_tip=""; WIZ.data._norma_manual=false; }
+    wizRegim();
+  }
+  // Sub-pas NORMĂ: tip localitate → lookup nomenclator → valoare (sau manual la județ necunoscut)
+  function _wizNormaRezHtml(){
+    if(WIZ.data._norma_manual){
+      return `<div class="hint" style="color:var(--gold);margin-bottom:6px">Nu am norma pentru județul tău în nomenclator — introdu valoarea din Decizia AJFP a județului (norma anuală, CAEN 4933):</div>
+        <input class="set-inp" id="wiz-norma-val" type="number" inputmode="numeric" placeholder="ex. 54300" value="${WIZ.data.norma_venit_anuala||""}" oninput="wizNormaInput(this.value)">`;
+    }
+    if(WIZ.data.norma_venit_anuala>0){
+      const s=WIZ.data._norma_sursa;
+      return `<div class="hint" style="color:var(--pos-br);font-weight:600">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
+    }
+    return "";
+  }
+  function wizNormaTip(){
+    const box=document.getElementById("wiz-norma-box"); if(!box) return;
+    const tip=WIZ.data._norma_tip||"";
+    const chip=(v,lbl)=>`<button class="btn ${tip===v?"btn-primary":"btn-ghost"}" onclick="wizPickTipLoc('${v}')" style="flex:1;min-height:40px">${lbl}</button>`;
+    box.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0 0 10px">
+      <div class="hint" style="margin-bottom:8px">Tipul localității (norma diferă pe nivel):</div>
+      <div style="display:flex;gap:8px">${chip("municipiu","Municipiu")}${chip("oras","Oraș")}${chip("comuna","Comună")}</div>
+      <div id="wiz-norma-rez" style="margin-top:10px">${_wizNormaRezHtml()}</div></div>`;
+  }
+  async function wizPickTipLoc(tip){
+    WIZ.data._norma_tip=tip; WIZ.data._norma_manual=false; WIZ.data.norma_venit_anuala=0; WIZ.data._norma_sursa="";
+    wizNormaTip();
+    const rez=document.getElementById("wiz-norma-rez"); if(rez) rez.innerHTML='<div class="hint">⏳ Caut norma în nomenclator…</div>';
+    try{
+      const r=await authFetch("/api/v1/norma-lookup?judet="+encodeURIComponent(WIZ.data.judet||"")+"&tip="+encodeURIComponent(tip));
+      const d=await r.json();
+      if(d.found){ WIZ.data.norma_venit_anuala=d.norma; WIZ.data._norma_sursa=d.sursa||""; WIZ.data._norma_manual=false; }
+      else { WIZ.data._norma_manual=true; }
+    }catch(e){ console.error(e); WIZ.data._norma_manual=true; }
+    const rez2=document.getElementById("wiz-norma-rez"); if(rez2) rez2.innerHTML=_wizNormaRezHtml();
+    wizRegimBtn();
+  }
+  function wizNormaInput(v){ WIZ.data.norma_venit_anuala=parseFloat(v)||0; WIZ.data._norma_manual=true; wizRegimBtn(); }
+  function wizRegimBtn(){
+    const nb=document.getElementById("wiz-next"); if(!nb) return;
+    const sel=WIZ.data.regim_impunere;
+    const ok = sel==="SISTEM_REAL" || (sel==="NORMA_VENIT" && WIZ.data.norma_venit_anuala>0);
+    nb.disabled=!ok; nb.style.opacity=ok?"1":".5";
+  }
+  window.wizPickRegim=wizPickRegim; window.wizPickTipLoc=wizPickTipLoc; window.wizNormaInput=wizNormaInput;
 
   // ── Pas MAȘINĂ ──
   function wizMasina(){
@@ -2340,7 +2401,12 @@
         }
       } else if(step==="regim"){
         if(!WIZ.data.regim_impunere){ wizMsg("Alege un regim.",true); return; }
-        await wizSave({regim_impunere:WIZ.data.regim_impunere});
+        if(WIZ.data.regim_impunere==="NORMA_VENIT"){
+          if(!(WIZ.data.norma_venit_anuala>0)){ wizMsg("Completează norma de venit (alege tipul localității sau introdu manual).",true); return; }
+          await wizSave({regim_impunere:"NORMA_VENIT", norma_venit_anuala:WIZ.data.norma_venit_anuala});
+        } else {
+          await wizSave({regim_impunere:WIZ.data.regim_impunere});
+        }
       } else if(step==="masina"){
         const nr=(document.getElementById("wiz-nr")||{}).value||"";
         if(!nr.trim()){ wizMsg("Numărul de înmatriculare e obligatoriu.",true); return; }
