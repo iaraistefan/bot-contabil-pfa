@@ -1847,6 +1847,11 @@
       if(s.regim_impunere==="NORMA_VENIT" && s.norma_venit_anuala>0){
         formaTxt+=" ("+Number(s.norma_venit_anuala).toLocaleString("ro-RO")+" lei/an)";
       }
+      // Situație personală (PAS 2) — afectează CAS/CASS
+      const sit=[];
+      if(s.is_pensionar) sit.push("pensionar · CAS scutit");
+      if(s.is_salariat) sit.push("angajat · CASS pe venit real");
+      if(sit.length) formaTxt+=" · "+sit.join(" · ");
       setTxt("set-forma", formaTxt);
       const banca=document.getElementById("set-banca");
       const iban=document.getElementById("set-iban");
@@ -2034,7 +2039,7 @@
   function wizHasBolt(){ return WIZ.data._platforme==="BOLT" || WIZ.data._platforme==="AMBELE"; }
   function wizHasUber(){ return WIZ.data._platforme==="UBER" || WIZ.data._platforme==="AMBELE"; }
   function wizSteps(){
-    const s=["nume","cui","regim","masina"];
+    const s=["nume","cui","regim","situatie","masina"];
     if(WIZ.data.is_ridesharing){
       s.push("platforme","nerezident");
       if(wizHasBolt()) s.push("apibolt");   // Uber n-are sync API → fără pas de conectare
@@ -2101,6 +2106,7 @@
     const rand=(emoji,txt)=>`<div style="display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><span>${emoji}</span><div class="hint" style="color:var(--ink)">${txt}</div></div>`;
     let rez=rand("🏢", e(d.firma_nume||d.firma_cui||"Firma ta"));
     if(d.regim_impunere) rez+=rand("🧾", "Regim: "+(WIZ_REGIM_LBL[d.regim_impunere]||d.regim_impunere));
+    if(d.is_pensionar||d.is_salariat){ const sit=[]; if(d.is_pensionar)sit.push("pensionar"); if(d.is_salariat)sit.push("angajat"); rez+=rand("👤","Situație: "+sit.join(" · ")); }
     if(d.veh_nr) rez+=rand("🚗", e(d.veh_nr)+(d.veh_marca?" · "+e(d.veh_marca):""));
     if(d.is_ridesharing){
       const plat=[]; if(d.regim_nerezident_bolt)plat.push(WIZ_NEREZ_LBL[d.regim_nerezident_bolt]||"Bolt");
@@ -2143,6 +2149,7 @@
     if(step==="nume") return wizNume();
     if(step==="cui") return wizCui();
     if(step==="regim") return wizRegim();
+    if(step==="situatie") return wizSituatie();
     if(step==="masina") return wizMasina();
     if(step==="platforme") return wizPlatforme();
     if(step==="nerezident") return wizNerezident();
@@ -2280,6 +2287,23 @@
   }
   window.wizPickRegim=wizPickRegim; window.wizPickTipLoc=wizPickTipLoc; window.wizNormaInput=wizNormaInput;
 
+  // ── Pas SITUAȚIE PERSONALĂ (PAS 2) — afectează CAS/CASS ──
+  function wizSituatie(){
+    const tog=(key,emoji,tit,desc)=>{
+      const on=!!WIZ.data[key];
+      return `<div onclick="wizToggleSituatie('${key}')" style="cursor:pointer;border:2px solid ${on?"var(--emerald)":"var(--line-2)"};border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:11px;align-items:flex-start">
+        <span style="font-size:1.3rem">${emoji}</span>
+        <div style="flex:1"><div style="font-weight:600">${tit} ${on?"✓":""}</div><div class="hint" style="margin-top:4px">${desc}</div></div></div>`;
+    };
+    wizShell("Situația ta personală", `
+      <div class="hint" style="margin-bottom:12px">Bifează ce ți se aplică — afectează contribuțiile (CAS/CASS). Opțional; dacă niciuna nu se aplică, treci mai departe.</div>
+      ${tog("is_pensionar","🧓","Sunt pensionar","Pensionarii NU plătesc CAS (pensie) pe activitatea PFA. CASS se aplică pe venitul real.")}
+      ${tog("is_salariat","💼","Sunt angajat cu normă întreagă altundeva","Ca asigurat prin salariu, CASS pe PFA se calculează pe venitul real (fără baza minimă). CAS pe PFA rămâne după prag.")}
+      ${wizBtns(true)}`);
+  }
+  function wizToggleSituatie(key){ WIZ.data[key]=!WIZ.data[key]; wizSituatie(); }
+  window.wizToggleSituatie=wizToggleSituatie;
+
   // ── Pas MAȘINĂ ──
   function wizMasina(){
     const d=WIZ.data;
@@ -2407,6 +2431,9 @@
         } else {
           await wizSave({regim_impunere:WIZ.data.regim_impunere});
         }
+      } else if(step==="situatie"){
+        // opțional — salvăm ambele flag-uri (default false). Afectează CAS/CASS.
+        await wizSave({is_pensionar:!!WIZ.data.is_pensionar, is_salariat:!!WIZ.data.is_salariat});
       } else if(step==="masina"){
         const nr=(document.getElementById("wiz-nr")||{}).value||"";
         if(!nr.trim()){ wizMsg("Numărul de înmatriculare e obligatoriu.",true); return; }

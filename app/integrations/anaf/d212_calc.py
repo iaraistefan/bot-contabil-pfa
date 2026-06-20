@@ -94,6 +94,8 @@ def calculeaza_d212(
     *,
     regim: str = "SISTEM_REAL",
     norma_anuala: float = 0.0,
+    pensionar: bool = False,
+    asigurat_salariat: bool = False,
 ) -> RezultatD212:
     """
     Calculeaza impozitul + CAS + CASS pentru un PFA, REGIM-AWARE.
@@ -138,12 +140,18 @@ def calculeaza_d212(
 
     # --- CAS (pensie 25%) + CASS (sanatate 10%) — sursa unica: contributii ---
     # salariu_minim pasat explicit pentru a pastra exact comportamentul anterior.
-    cas_r = contributii.calcul_cas(baza_contrib, an, salariu_minim=salariu_minim)
+    # Cazuri-limita (PAS 2): pensionar -> CAS 0 (art. 150). Pentru CASS, „asigurat prin
+    # alta sursa" = salariat SAU pensionar (ambii sunt deja asigurati) -> 10% pe net real
+    # sub 6 SMB (nu urca la baza minima). Default ambele False -> comportament neschimbat.
+    cas_r = contributii.calcul_cas(baza_contrib, an, salariu_minim=salariu_minim,
+                                   pensionar=pensionar)
     cas = cas_r["valoare"]
     cas_baza = cas_r["baza"]
     cas_expl = cas_r["nota"]
 
-    cass_r = contributii.calcul_cass(baza_contrib, an, salariu_minim=salariu_minim)
+    asigurat_cass = bool(asigurat_salariat or pensionar)
+    cass_r = contributii.calcul_cass(baza_contrib, an, salariu_minim=salariu_minim,
+                                     asigurat_salariat=asigurat_cass)
     cass = cass_r["valoare"]
     cass_baza = cass_r["baza"]
     cass_expl = cass_r["nota"]

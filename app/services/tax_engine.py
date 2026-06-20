@@ -457,6 +457,8 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     # SISTEM_REAL (comportament istoric neschimbat → regresie 0).
     regim = "SISTEM_REAL"
     norma = 0.0
+    pensionar = False
+    asigurat_salariat = False
     warn_tranzitie: Optional[str] = None
     if session is not None:
         try:
@@ -465,6 +467,11 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
             regim_raw = pd.get("regim_impunere") or "SISTEM_REAL"
             activity = pd.get("activity_code")
             norma = float(pd.get("norma_venit_anuala") or 0.0)
+            # Cazuri-limita (PAS 2): pensionar -> CAS 0; salariat -> CASS pe net real
+            # sub prag. Default False -> regresie 0. (pensionar e tratat ca asigurat
+            # pentru CASS in d212_calc.)
+            pensionar = bool(pd.get("is_pensionar"))
+            asigurat_salariat = bool(pd.get("is_salariat"))
             if regim_raw == "NORMA_VENIT" and not norma_venit.norma_permisa(an, activity):
                 # GARDIAN TRANZITIE: ridesharing pe normă doar din 2026 → pentru
                 # anii anteriori cădem pe sistem real + avertizăm (NU aplicăm normă).
@@ -478,11 +485,12 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
                 regim = regim_raw
         except Exception:
             logger.exception(f"D212 regim lookup failed user={user_id} — fallback SISTEM_REAL")
-            regim, norma = "SISTEM_REAL", 0.0
+            regim, norma, pensionar, asigurat_salariat = "SISTEM_REAL", 0.0, False, False
 
     res = _decl.genereaza_d212(
         an, round(venit_brut, 2), round(cheltuieli, 2),
         regim=regim, norma_anuala=norma,
+        pensionar=pensionar, asigurat_salariat=asigurat_salariat,
     )
     if warn_tranzitie:
         res.avertismente = [warn_tranzitie] + list(res.avertismente or [])
