@@ -69,6 +69,10 @@ class User(Base):
     # (CAS pe PFA ramane prag-based pe net PFA, neafectat).
     is_pensionar = Column(Boolean, nullable=True)
     is_salariat = Column(Boolean, nullable=True)
+    # Casă de marcat (PAS 3): userul a DECLARAT că încasează numerar de la pasageri.
+    # Semnalul „ai nevoie de AMEF" = declarat SAU income_cash>0 (date reale au prioritate).
+    # NULL/False = nedeclarat (semnalul se poate aprinde din date oricum).
+    incaseaza_numerar = Column(Boolean, nullable=True)
 
     # === Stare ===
     data_inceput_activitate = Column(Date, nullable=True)
