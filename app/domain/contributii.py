@@ -25,7 +25,8 @@ REGULI:
 - CASS (10%):
     venit net <= 0               -> 0
     0 < venit net < 6 SMB        -> baza MINIMA 6 SMB (NU 0!)
-                                    exceptie: asigurat_salariat -> 0
+                                    exceptie asigurat_salariat (salariat/pensionar):
+                                    10% pe VENITUL NET REAL (NU urca la 6 SMB, NU 0)
     6 SMB <= venit net <= 60 SMB -> 10% pe venit net real
     venit net > 60 SMB           -> plafon 60 SMB
 
@@ -141,7 +142,8 @@ def calcul_cass(venit_net: float, an: int, *,
     CASS (contributia la sanatate), cota 10%, pentru PFA sistem real.
 
     Vezi regulile in docstring-ul modulului. Punct critic: sub 6 SMB baza e
-    MINIMA 6 SMB (nu 0), exceptand cazul asigurat prin alta sursa (salariu).
+    MINIMA 6 SMB (nu 0) pentru NEASIGURATI; pentru asigurati prin alta sursa
+    (salariat/pensionar) = 10% pe venitul net REAL (nu urca la 6 SMB, nu 0).
 
     Args:
         salariu_minim: override optional al SMB pe an (vezi calcul_cas).
@@ -162,13 +164,22 @@ def calcul_cass(venit_net: float, an: int, *,
 
     if venit_net < prag_jos:
         if asigurat_salariat:
-            return {"valoare": 0.0, "baza": 0.0, "cota_pct": cota,
-                    "aplicabil": False,
-                    "nota": (f"Sub {p['cass_jos']} salarii minime, dar asigurat "
-                             f"prin alta sursa (salariu/pensie) — CASS 0.")}
-        baza = float(prag_jos)
-        nota = (f"Venit net sub {p['cass_jos']} salarii minime — baza CASS "
-                f"minima {baza:.0f} lei ({p['cass_jos']} SMB).")
+            # CORECTIE (varianta b): asigurat prin alta sursa (salariat SAU pensionar)
+            # NU urca la baza minima de 6 SMB — plateste 10% pe VENITUL NET REAL (nu 0,
+            # nu 2.430). Confirmare numerica: net 13.950 -> CASS 1.395 (= 10% × 13.950).
+            # Regula PFA difera de veniturile pasive: podeaua de 6 SMB se aplica DOAR
+            # neasiguratilor altfel; cei deja asigurati platesc pe net real efectiv.
+            # ⚠️ Zona "CASS asigurat sub prag" — surse secundare convergente (ContApp /
+            # declaratie-unica.ro / Red Moonlight), NU text primar Cod Fiscal. De
+            # RE-VALIDAT cu un contabil CECCAR daca apare ambiguitate.
+            baza = float(venit_net)
+            nota = (f"Sub {p['cass_jos']} salarii minime, dar asigurat prin alta sursa "
+                    f"(salariu/pensie) — CASS 10% pe venitul net real (fara urcare la "
+                    f"baza minima de {p['cass_jos']} SMB).")
+        else:
+            baza = float(prag_jos)
+            nota = (f"Venit net sub {p['cass_jos']} salarii minime — baza CASS "
+                    f"minima {baza:.0f} lei ({p['cass_jos']} SMB).")
     elif venit_net <= prag_sus:
         baza = float(venit_net)
         nota = "CASS 10% din venitul net realizat."

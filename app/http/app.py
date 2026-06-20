@@ -733,6 +733,8 @@ def onboarding_status():
             "_platforme": platforme,
             "_boltConnected": bool(profile.get("bolt_client_id")),
             "norma_venit_anuala": profile.get("norma_venit_anuala"),
+            "is_pensionar": bool(profile.get("is_pensionar")),
+            "is_salariat": bool(profile.get("is_salariat")),
             # An fiscal curent — pentru gardianul de selecție normă (ridesharing pe
             # normă doar din 2026; sub-pas PAS 1-UI). Sursa regulii = norma_venit.norma_permisa.
             "_an_fiscal": date.today().year,
@@ -794,6 +796,7 @@ _ONBOARDING_SAVE_FIELDS = {
     "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
+    "is_pensionar", "is_salariat",
 }
 
 
@@ -1257,6 +1260,8 @@ def setari_get():
             "firma_forma_juridica": profile.get("firma_forma_juridica") or "PFA",
             "regim_impunere": profile.get("regim_impunere") or "",
             "norma_venit_anuala": profile.get("norma_venit_anuala"),
+            "is_pensionar": bool(profile.get("is_pensionar")),
+            "is_salariat": bool(profile.get("is_salariat")),
             "cod_special_tva": profile.get("cod_special_tva") or "",
             # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
             # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.

@@ -63,6 +63,12 @@ class User(Base):
     # AJFP a judetului (OMF 1960/2025), dupa judet + tip localitate. NULL = necompletat
     # (impozitul pe norma nu se poate calcula -> prompt, NU presupunem o cifra).
     norma_venit_anuala = Column(Float, nullable=True)
+    # Cazuri-limita CAS/CASS (PAS 2). NULL/False = caz standard (regresie 0).
+    # is_pensionar: scutit de CAS pe PFA (art. 150) + CASS pe net real sub prag.
+    # is_salariat: angajat cu norma intreaga altundeva -> CASS pe net real sub prag
+    # (CAS pe PFA ramane prag-based pe net PFA, neafectat).
+    is_pensionar = Column(Boolean, nullable=True)
+    is_salariat = Column(Boolean, nullable=True)
 
     # === Stare ===
     data_inceput_activitate = Column(Date, nullable=True)

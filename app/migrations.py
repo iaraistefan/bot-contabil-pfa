@@ -393,6 +393,18 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS norma_venit_anuala DOUBLE PRECISION",
         ],
     },
+    {
+        "id": "017_user_cazuri_limita_cas_cass",
+        "description": (
+            "Cazuri-limita CAS/CASS (PAS 2): is_pensionar (scutit CAS pe PFA, art. 150) si "
+            "is_salariat (angajat altundeva -> CASS pe net real sub prag). Nullable: NULL/False "
+            "= caz standard (motorul D212 e flag-aware si trateaza NULL ca False -> regresie 0)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pensionar BOOLEAN",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_salariat BOOLEAN",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

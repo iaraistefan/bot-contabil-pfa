@@ -510,6 +510,8 @@ def genereaza_d212(
     *,
     regim: str = "SISTEM_REAL",
     norma_anuala: float = 0.0,
+    pensionar: bool = False,
+    asigurat_salariat: bool = False,
 ) -> RezultatD212Service:
     """
     Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
@@ -529,6 +531,8 @@ def genereaza_d212(
         salariu_minim=salariu_minim,
         regim=regim,
         norma_anuala=norma_anuala,
+        pensionar=pensionar,
+        asigurat_salariat=asigurat_salariat,
     )
     return RezultatD212Service(
         an=r.an,

@@ -78,10 +78,15 @@ def test_cass_sub_prag_nu_e_zero():
     assert r["aplicabil"] is True
 
 
-def test_cass_asigurat_salariat_sub_prag_scutit():
-    r = calcul_cass(15_000, 2026, asigurat_salariat=True)
-    assert r["valoare"] == 0.0
-    assert r["aplicabil"] is False
+def test_cass_asigurat_salariat_sub_prag_pe_net_real():
+    # CORECTIE (varianta b): asigurat prin alta sursa + sub 6 SMB → 10% × net REAL
+    # (NU 0, NU minimul 2.430). Confirmare numerica: 13.950 → 1.395.
+    r = calcul_cass(13_950, 2026, asigurat_salariat=True)
+    assert r["valoare"] == 1_395.0
+    assert r["baza"] == 13_950.0
+    assert r["aplicabil"] is True
+    # generic: 15.000 → 1.500
+    assert calcul_cass(15_000, 2026, asigurat_salariat=True)["valoare"] == 1_500.0
 
 
 def test_cass_venit_zero_sau_pierdere():
