@@ -499,6 +499,7 @@ class RezultatD212Service:
     ghid_telegram: str
     ghid_plain: str
     avertismente: List[str] = field(default_factory=list)
+    regim: str = "SISTEM_REAL"  # SISTEM_REAL / NORMA_VENIT (pentru afisare)
 
 
 def genereaza_d212(
@@ -506,6 +507,9 @@ def genereaza_d212(
     venit_brut_anual: float,
     cheltuieli_anuale: float,
     salariu_minim: int = 4050,
+    *,
+    regim: str = "SISTEM_REAL",
+    norma_anuala: float = 0.0,
 ) -> RezultatD212Service:
     """
     Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
@@ -515,12 +519,16 @@ def genereaza_d212(
         venit_brut_anual: total incasari pe an (din motorul fiscal, 12 luni)
         cheltuieli_anuale: total cheltuieli deductibile pe an
         salariu_minim: salariul minim de referinta (default 4050)
+        regim: "SISTEM_REAL" / "NORMA_VENIT" (motorul e regim-aware)
+        norma_anuala: norma de venit (lei/an) — folosita DOAR pe NORMA_VENIT
     """
     r = d212.calculeaza_d212(
         venit_brut=venit_brut_anual,
         cheltuieli_deductibile=cheltuieli_anuale,
         an=an,
         salariu_minim=salariu_minim,
+        regim=regim,
+        norma_anuala=norma_anuala,
     )
     return RezultatD212Service(
         an=r.an,
@@ -531,6 +539,7 @@ def genereaza_d212(
         ghid_telegram=d212.genereaza_ghid_d212(r, plain=False),
         ghid_plain=d212.genereaza_ghid_d212(r, plain=True),
         avertismente=r.avertismente,
+        regim=r.regim,
     )
 
 

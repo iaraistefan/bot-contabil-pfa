@@ -732,6 +732,10 @@ def onboarding_status():
             "is_ridesharing": profile.get("activity_code") == "ridesharing",
             "_platforme": platforme,
             "_boltConnected": bool(profile.get("bolt_client_id")),
+            "norma_venit_anuala": profile.get("norma_venit_anuala"),
+            # An fiscal curent — pentru gardianul de selecție normă (ridesharing pe
+            # normă doar din 2026; sub-pas PAS 1-UI). Sursa regulii = norma_venit.norma_permisa.
+            "_an_fiscal": date.today().year,
             "veh_nr": veh.nr_inmatriculare if veh else None,
             "veh_marca": veh.marca_model if veh else None,
             "veh_consum": veh.norma_consum if veh else None,
@@ -789,8 +793,32 @@ def cui_lookup():
 _ONBOARDING_SAVE_FIELDS = {
     "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
-    "caen_principal", "activity_code", "judet", "localitate",
+    "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
 }
+
+
+@flask_app.route("/api/v1/norma-lookup")
+def norma_lookup():
+    """
+    Norma anuală de venit pentru județ + tip localitate (PAS 1-UI). Wrap subțire peste
+    `norma_venit.norma_anuala` (sursă unică). Județ/tip neacoperit → found=False → frontend-ul
+    cere valoarea manual (NU presupunem o cifră la ANAF). Per-user (auth).
+    """
+    _, err = _require_user()
+    if err:
+        return err
+    from app.domain import norma_venit
+    judet = (request.args.get("judet") or "").strip()
+    tip = (request.args.get("tip") or "").strip()
+    caen = (request.args.get("caen") or "4933").strip()
+    an = int(request.args.get("an") or date.today().year)
+    val = norma_venit.norma_anuala(judet, tip, an=an, caen=caen)
+    if val is None:
+        return jsonify({"found": False, "norma": None, "sursa": None})
+    # sursa (trasabilitate) — din nomenclator, dacă există
+    cod = norma_venit._normalize_judet(judet)
+    sursa = (norma_venit.NORMA_VENIT_4933.get(an, {}).get(cod, {}) or {}).get("_sursa")
+    return jsonify({"found": True, "norma": val, "sursa": sursa})
 
 
 @flask_app.route("/api/v1/onboarding/save", methods=["POST"])
@@ -1226,6 +1254,9 @@ def setari_get():
             "iban": profile.get("iban") or "",
             "firma_nume": profile.get("firma_nume") or "",
             "firma_cui": profile.get("firma_cui") or "",
+            "firma_forma_juridica": profile.get("firma_forma_juridica") or "PFA",
+            "regim_impunere": profile.get("regim_impunere") or "",
+            "norma_venit_anuala": profile.get("norma_venit_anuala"),
             "cod_special_tva": profile.get("cod_special_tva") or "",
             # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
             # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.

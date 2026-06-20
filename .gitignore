@@ -5,3 +5,6 @@ storage/
 
 # Artefact de verificare echivalenta D212 (nu intra in repo)
 .d212_baseline.json
+
+# Artefact DB de test (SQLite local) — nu intra in repo
+test_data.db
