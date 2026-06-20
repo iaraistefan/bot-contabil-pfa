@@ -71,6 +71,7 @@ def update_profile(
     activity_code: Optional[str] = None,
     judet: Optional[str] = None,
     localitate: Optional[str] = None,
+    norma_venit_anuala: Optional[float] = None,
     data_inceput_activitate: Optional[date] = None,
     email: Optional[str] = None,
     telefon: Optional[str] = None,
@@ -119,6 +120,13 @@ def update_profile(
         user.judet = judet
     if localitate is not None:
         user.localitate = localitate
+    if norma_venit_anuala is not None:
+        # Norma anuala (lei) pentru NORMA_VENIT. 0 / negativ -> NULL (necompletat).
+        try:
+            nv = float(norma_venit_anuala)
+        except (TypeError, ValueError):
+            nv = 0.0
+        user.norma_venit_anuala = nv if nv > 0 else None
     if data_inceput_activitate is not None:
         user.data_inceput_activitate = data_inceput_activitate
     if email is not None:
@@ -258,6 +266,7 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "activity_code": user.activity_code,
         "judet": user.judet,
         "localitate": user.localitate,
+        "norma_venit_anuala": user.norma_venit_anuala,
         "data_inceput_activitate": (
             user.data_inceput_activitate.isoformat()
             if user.data_inceput_activitate else None

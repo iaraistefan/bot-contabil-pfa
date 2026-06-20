@@ -59,6 +59,10 @@ class User(Base):
     # === Locatie ===
     judet = Column(String(50), nullable=True)
     localitate = Column(String(100), nullable=True)
+    # Norma anuala de venit (lei) pentru PFA pe NORMA_VENIT — valoarea din decizia
+    # AJFP a judetului (OMF 1960/2025), dupa judet + tip localitate. NULL = necompletat
+    # (impozitul pe norma nu se poate calcula -> prompt, NU presupunem o cifra).
+    norma_venit_anuala = Column(Float, nullable=True)
 
     # === Stare ===
     data_inceput_activitate = Column(Date, nullable=True)

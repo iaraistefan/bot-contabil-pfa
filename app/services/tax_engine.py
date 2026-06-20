@@ -440,6 +440,7 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     """
     # import lazy pentru a evita orice ciclu de import la incarcarea modulului
     from app.integrations.anaf import declaratii_service as _decl
+    from app.domain import norma_venit
 
     venit_brut = 0.0
     cheltuieli = 0.0
@@ -450,7 +451,42 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
             cheltuieli += float(t.get("expense_deductible_total") or 0.0)
         except Exception:
             continue
-    return _decl.genereaza_d212(an, round(venit_brut, 2), round(cheltuieli, 2))
+
+    # REGIM-AWARE: motorul D212 trateaza diferit NORMA vs SISTEM_REAL. Citim regimul
+    # + norma + activitatea din profil. Fara sesiune (apeluri pure de test) → ramane
+    # SISTEM_REAL (comportament istoric neschimbat → regresie 0).
+    regim = "SISTEM_REAL"
+    norma = 0.0
+    warn_tranzitie: Optional[str] = None
+    if session is not None:
+        try:
+            from app.repositories import users as users_repo
+            pd = users_repo.get_profile_dict(session, user_id) or {}
+            regim_raw = pd.get("regim_impunere") or "SISTEM_REAL"
+            activity = pd.get("activity_code")
+            norma = float(pd.get("norma_venit_anuala") or 0.0)
+            if regim_raw == "NORMA_VENIT" and not norma_venit.norma_permisa(an, activity):
+                # GARDIAN TRANZITIE: ridesharing pe normă doar din 2026 → pentru
+                # anii anteriori cădem pe sistem real + avertizăm (NU aplicăm normă).
+                regim = "SISTEM_REAL"
+                warn_tranzitie = (
+                    f"Pentru anul {an} se aplica SISTEM REAL: norma de venit e "
+                    f"disponibila pentru ridesharing doar din "
+                    f"{norma_venit.AN_START_NORMA_RIDESHARING}."
+                )
+            else:
+                regim = regim_raw
+        except Exception:
+            logger.exception(f"D212 regim lookup failed user={user_id} — fallback SISTEM_REAL")
+            regim, norma = "SISTEM_REAL", 0.0
+
+    res = _decl.genereaza_d212(
+        an, round(venit_brut, 2), round(cheltuieli, 2),
+        regim=regim, norma_anuala=norma,
+    )
+    if warn_tranzitie:
+        res.avertismente = [warn_tranzitie] + list(res.avertismente or [])
+    return res
 
 
 def compute_d212_anual(session: Session, *, user_id: int, an: int):

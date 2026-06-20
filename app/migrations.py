@@ -381,6 +381,18 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS bolt_connected_at TIMESTAMP",
         ],
     },
+    {
+        "id": "016_user_norma_venit",
+        "description": (
+            "Norma anuala de venit (lei) pentru PFA pe NORMA_VENIT — valoarea din "
+            "decizia AJFP a judetului (OMF 1960/2025), dupa judet + tip localitate. "
+            "Nullable: userii pe sistem real / fara norma completata = NULL (motorul "
+            "D212 e regim-aware si trateaza NULL ca norma necompletata, fara cifra presupusa)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS norma_venit_anuala DOUBLE PRECISION",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

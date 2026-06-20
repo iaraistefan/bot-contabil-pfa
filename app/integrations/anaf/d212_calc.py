@@ -79,6 +79,7 @@ class RezultatD212:
     total_cu_bonificatie: float
 
     avertismente: List[str] = field(default_factory=list)
+    regim: str = "SISTEM_REAL"  # SISTEM_REAL / NORMA_VENIT (transparenta calcul)
 
 
 # ============================================================
@@ -90,49 +91,87 @@ def calculeaza_d212(
     cheltuieli_deductibile: float,
     an: int = 2025,
     salariu_minim: int = SALARIU_MINIM_2025,
+    *,
+    regim: str = "SISTEM_REAL",
+    norma_anuala: float = 0.0,
 ) -> RezultatD212:
     """
-    Calculeaza impozitul + CAS + CASS pentru un PFA in sistem real.
+    Calculeaza impozitul + CAS + CASS pentru un PFA, REGIM-AWARE.
+
+    SISTEM_REAL (default): venit net = venit brut − cheltuieli deductibile;
+      impozit 10% × (venit net − CAS − CASS). Comportament NESCHIMBAT (regresie 0).
+
+    NORMA_VENIT: impozitarea e pe NORMA fixa, nu pe venitul real:
+      - impozit = 10% × norma anuala (cheltuielile NU se scad);
+      - CAS/CASS pe BAZA = norma (venitul net considerat = norma);
+      - venitul brut/cheltuielile reale raman doar informativ (nu intra in calcul).
 
     Args:
         venit_brut: total incasari din activitate (pe an)
         cheltuieli_deductibile: total cheltuieli deductibile (pe an)
         an: anul pentru care se face declaratia (default 2025)
         salariu_minim: salariul minim de referinta (default 4050)
+        regim: "SISTEM_REAL" / "NORMA_VENIT"
+        norma_anuala: norma de venit (lei/an) — folosita DOAR pe NORMA_VENIT
 
     Returns:
         RezultatD212 cu toate componentele + explicatii + avertismente.
     """
     venit_brut = max(0.0, float(venit_brut))
     cheltuieli = max(0.0, float(cheltuieli_deductibile))
-    venit_net = round(venit_brut - cheltuieli, 2)
+    norma_anuala = max(0.0, float(norma_anuala or 0.0))
+    pe_norma = (str(regim) == "NORMA_VENIT")
 
     avert = [
         "Calcul ORIENTATIV. Verifica cu un contabil inainte de depunere — "
         "regulile D212 au exceptii si se schimba des.",
     ]
 
+    if pe_norma:
+        # Pe NORMA: baza de impozit + de contributii = norma fixa. Venitul net
+        # raportat = norma (cheltuielile reale NU sunt deductibile pe norma).
+        venit_net = round(norma_anuala, 2)
+        baza_contrib = norma_anuala
+    else:
+        venit_net = round(venit_brut - cheltuieli, 2)
+        baza_contrib = venit_net
+
     # --- CAS (pensie 25%) + CASS (sanatate 10%) — sursa unica: contributii ---
     # salariu_minim pasat explicit pentru a pastra exact comportamentul anterior.
-    cas_r = contributii.calcul_cas(venit_net, an, salariu_minim=salariu_minim)
+    cas_r = contributii.calcul_cas(baza_contrib, an, salariu_minim=salariu_minim)
     cas = cas_r["valoare"]
     cas_baza = cas_r["baza"]
     cas_expl = cas_r["nota"]
 
-    cass_r = contributii.calcul_cass(venit_net, an, salariu_minim=salariu_minim)
+    cass_r = contributii.calcul_cass(baza_contrib, an, salariu_minim=salariu_minim)
     cass = cass_r["valoare"]
     cass_baza = cass_r["baza"]
     cass_expl = cass_r["nota"]
 
-    # --- Impozit (10% pe venit net - CAS - CASS) ---
-    venit_impozabil = max(0.0, round(venit_net - cas - cass, 2))
+    # --- Impozit ---
+    if pe_norma:
+        # Pe NORMA: impozit = 10% × norma (NU se deduc CAS/CASS din norma).
+        venit_impozabil = max(0.0, round(norma_anuala, 2))
+    else:
+        # Sistem real: impozit 10% pe (venit net − CAS − CASS).
+        venit_impozabil = max(0.0, round(venit_net - cas - cass, 2))
     impozit = round(venit_impozabil * COTA_IMPOZIT, 2)
 
     total = round(cas + cass + impozit, 2)
     bonificatie = round(impozit * COTA_BONIFICATIE, 2)
     total_cu_bonif = round(total - bonificatie, 2)
 
-    if venit_net <= 0:
+    if pe_norma:
+        avert.append(
+            "Impozitare pe NORMA de venit: impozit 10% × norma anuala; "
+            "cheltuielile NU sunt deductibile, iar CAS/CASS se calculeaza pe norma."
+        )
+        if norma_anuala <= 0:
+            avert.append(
+                "Norma anuala nu e completata in profil — impozitul apare 0. "
+                "Completeaza valoarea normei (din decizia AJFP a judetului)."
+            )
+    elif venit_net <= 0:
         avert.append("Venit net 0 sau pierdere: depui D212 cu valori 0 "
                      "(daca PFA-ul nu e suspendat).")
 
@@ -145,6 +184,7 @@ def calculeaza_d212(
         total_plata=total, bonificatie=bonificatie,
         total_cu_bonificatie=total_cu_bonif,
         avertismente=avert,
+        regim=("NORMA_VENIT" if pe_norma else "SISTEM_REAL"),
     )
 
 
