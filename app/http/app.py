@@ -738,6 +738,9 @@ def onboarding_status():
             "is_pensionar": bool(profile.get("is_pensionar")),
             "is_salariat": bool(profile.get("is_salariat")),
             "incaseaza_numerar": bool(profile.get("incaseaza_numerar")),
+            # Proportionalizare mid-an (PAS 4a) — date activitate (optionale, ISO str/None).
+            "data_inceput_activitate": profile.get("data_inceput_activitate"),
+            "data_sfarsit_activitate": profile.get("data_sfarsit_activitate"),
             # An fiscal curent — pentru gardianul de selecție normă (ridesharing pe
             # normă doar din 2026; sub-pas PAS 1-UI). Sursa regulii = norma_venit.norma_permisa.
             "_an_fiscal": date.today().year,
@@ -800,7 +803,24 @@ _ONBOARDING_SAVE_FIELDS = {
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
     "is_pensionar", "is_salariat", "incaseaza_numerar",
+    # Proportionalizare mid-an (PAS 4a): date activitate (optionale). Vin ca ISO
+    # str din JSON → parsate la `date` inainte de update_profile (vezi _parse_date_field).
+    "data_inceput_activitate", "data_sfarsit_activitate",
 }
+
+# Campurile de tip DATA din allowlist — primite ca ISO „YYYY-MM-DD" si convertite la
+# obiect `date` (string gol → None = sterge data, util la corectarea unei greseli).
+_ONBOARDING_DATE_FIELDS = {"data_inceput_activitate", "data_sfarsit_activitate"}
+
+
+def _parse_date_field(val):
+    """ISO „YYYY-MM-DD" → date | None. Valoare goala/invalida → None (necompletat)."""
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(str(val)[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 @flask_app.route("/api/v1/norma-lookup")
@@ -871,6 +891,13 @@ def onboarding_save():
         return err
     body = request.get_json(silent=True) or {}
     fields = {k: v for k, v in body.items() if k in _ONBOARDING_SAVE_FIELDS}
+    # Datele de activitate (PAS 4a) vin ca ISO str → convertim la `date` pentru ORM.
+    # String gol/invalid → None: update_profile aplica DOAR non-None, deci o data goala
+    # lasa valoarea neschimbata (setarea unei date noi functioneaza; capturarea e optionala).
+    for k in _ONBOARDING_DATE_FIELDS:
+        if k in fields:
+            fields[k] = _parse_date_field(fields[k])
+    fields = {k: v for k, v in fields.items() if not (k in _ONBOARDING_DATE_FIELDS and v is None)}
     step = body.get("step")
     session = get_session()
     try:

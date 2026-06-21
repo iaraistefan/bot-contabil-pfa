@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.domain import contributii
+from app.domain import proportionalizare
 
 
 # ============================================================
@@ -96,6 +97,8 @@ def calculeaza_d212(
     norma_anuala: float = 0.0,
     pensionar: bool = False,
     asigurat_salariat: bool = False,
+    data_inceput=None,
+    data_sfarsit=None,
 ) -> RezultatD212:
     """
     Calculeaza impozitul + CAS + CASS pentru un PFA, REGIM-AWARE.
@@ -108,6 +111,16 @@ def calculeaza_d212(
       - CAS/CASS pe BAZA = norma (venitul net considerat = norma);
       - venitul brut/cheltuielile reale raman doar informativ (nu intra in calcul).
 
+    PROPORTIONALIZARE MID-AN (PAS 4a, sursa ANAF Cluj „Completarea D212", 22 apr 2026):
+      - NORMA prorata pe zile: cand activitatea acopera doar o parte din an
+        (incepere SAU incetare mid-an), norma se inmulteste cu zile/365.
+      - CAS la INCEPERE mid-an: plafonul de 12 SMB se recalculeaza proportional
+        (12 SMB × luni/12); sub plafonul recalculat → CAS 0, peste → CAS pe baza
+        recalculata. La INCETARE NU fortam o formula (zona legal ambigua) — doar
+        semnalam sa se verifice cu un contabil.
+      - CASS: praguri INTREGI, NEatins.
+      - Fara date mid-an (default) → totul identic cu calculul actual (regresie 0).
+
     Args:
         venit_brut: total incasari din activitate (pe an)
         cheltuieli_deductibile: total cheltuieli deductibile (pe an)
@@ -115,6 +128,8 @@ def calculeaza_d212(
         salariu_minim: salariul minim de referinta (default 4050)
         regim: "SISTEM_REAL" / "NORMA_VENIT"
         norma_anuala: norma de venit (lei/an) — folosita DOAR pe NORMA_VENIT
+        data_inceput: data inceperii activitatii (date | ISO str | None)
+        data_sfarsit: data incetarii activitatii (date | ISO str | None)
 
     Returns:
         RezultatD212 cu toate componentele + explicatii + avertismente.
@@ -124,6 +139,15 @@ def calculeaza_d212(
     norma_anuala = max(0.0, float(norma_anuala or 0.0))
     pe_norma = (str(regim) == "NORMA_VENIT")
 
+    # --- Context proportionalizare mid-an (sursa unica: app.domain.proportionalizare) ---
+    # Fara date / activitate pe tot anul → incepere/incetare False, zile=365, luni=12
+    # → toate ramurile de mai jos sunt identice cu calculul actual (regresie 0).
+    incepere_mid_an = proportionalizare.este_incepere_mid_an(data_inceput, an)
+    incetare = proportionalizare.este_incetare(data_sfarsit, an)
+    partial = incepere_mid_an or incetare
+    zile = proportionalizare.zile_activitate(data_inceput, data_sfarsit, an)
+    luni = proportionalizare.luni_activitate(data_inceput, data_sfarsit, an)
+
     avert = [
         "Calcul ORIENTATIV. Verifica cu un contabil inainte de depunere — "
         "regulile D212 au exceptii si se schimba des.",
@@ -132,8 +156,14 @@ def calculeaza_d212(
     if pe_norma:
         # Pe NORMA: baza de impozit + de contributii = norma fixa. Venitul net
         # raportat = norma (cheltuielile reale NU sunt deductibile pe norma).
-        venit_net = round(norma_anuala, 2)
-        baza_contrib = norma_anuala
+        # MID-AN: norma se prorata pe zile/365 DOAR cand anul e partial (altfel
+        # norma intreaga, bit-identic cu inainte).
+        norma_efectiva = (
+            proportionalizare.prorata_norma(norma_anuala, zile, an)
+            if partial else norma_anuala
+        )
+        venit_net = round(norma_efectiva, 2)
+        baza_contrib = norma_efectiva
     else:
         venit_net = round(venit_brut - cheltuieli, 2)
         baza_contrib = venit_net
@@ -143,8 +173,16 @@ def calculeaza_d212(
     # Cazuri-limita (PAS 2): pensionar -> CAS 0 (art. 150). Pentru CASS, „asigurat prin
     # alta sursa" = salariat SAU pensionar (ambii sunt deja asigurati) -> 10% pe net real
     # sub 6 SMB (nu urca la baza minima). Default ambele False -> comportament neschimbat.
+    #
+    # MID-AN incepere (PAS 4a): plafonul CAS de 12 SMB se recalculeaza proportional
+    # (12 SMB × luni/12, ANAF Cluj). plafon_recalc=None cand NU e incepere mid-an →
+    # contributii ramane pe logica standard (regresie 0). La incetare NU recalculam.
+    plafon_recalc = None
+    if incepere_mid_an:
+        plafon_anual_cas = contributii.plafon_cas_jos(an, salariu_minim)
+        plafon_recalc = proportionalizare.plafon_cas_recalculat(plafon_anual_cas, luni)
     cas_r = contributii.calcul_cas(baza_contrib, an, salariu_minim=salariu_minim,
-                                   pensionar=pensionar)
+                                   pensionar=pensionar, plafon_recalculat=plafon_recalc)
     cas = cas_r["valoare"]
     cas_baza = cas_r["baza"]
     cas_expl = cas_r["nota"]
@@ -159,7 +197,9 @@ def calculeaza_d212(
     # --- Impozit ---
     if pe_norma:
         # Pe NORMA: impozit = 10% × norma (NU se deduc CAS/CASS din norma).
-        venit_impozabil = max(0.0, round(norma_anuala, 2))
+        # MID-AN: baza = norma PRORATA (= venit_net), nu norma intreaga. Pe an
+        # intreg venit_net == norma_anuala (regresie 0).
+        venit_impozabil = max(0.0, round(venit_net, 2))
     else:
         # Sistem real: impozit 10% pe (venit net − CAS − CASS).
         venit_impozabil = max(0.0, round(venit_net - cas - cass, 2))
@@ -182,6 +222,29 @@ def calculeaza_d212(
     elif venit_net <= 0:
         avert.append("Venit net 0 sau pierdere: depui D212 cu valori 0 "
                      "(daca PFA-ul nu e suspendat).")
+
+    # --- Proportionalizare mid-an (PAS 4a) — avertismente ---
+    if partial and pe_norma:
+        avert.append(
+            f"Activitate partiala in {an}: norma s-a prorata pe {zile} zile "
+            f"({zile}/365 din norma anuala)."
+        )
+    if incepere_mid_an:
+        avert.append(
+            f"Incepere activitate in cursul anului ({luni} luni active): plafonul CAS "
+            f"s-a recalculat proportional la {plafon_recalc:.0f} lei (12 SMB × {luni}/12). "
+            f"⚠️ Surse oficiale CONTRADICTORII: Legea 296/2023 a eliminat recalcularea "
+            f"CAS la incepere mid-an din 2024, dar documentul ANAF Cluj «Completarea D212» "
+            f"(2026) o descrie ca activa. Aplicam recalcularea (sursa ANAF cea mai recenta), "
+            f"dar RE-VALIDEAZA cu un contabil CECCAR inainte de a te baza pe ea."
+        )
+    if incetare:
+        avert.append(
+            "Incetare activitate in cursul anului: recalcularea CAS la incetare e o "
+            "zona legal AMBIGUA (ANAF a recunoscut ca normele nu-s actualizate). "
+            "Norma s-a prorata pe zilele de activitate, dar pentru CAS verifica "
+            "recalcularea cu un contabil — NU am fortat o formula."
+        )
 
     return RezultatD212(
         an=an, salariu_minim=salariu_minim,

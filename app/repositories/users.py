@@ -76,6 +76,7 @@ def update_profile(
     is_salariat: Optional[bool] = None,
     incaseaza_numerar: Optional[bool] = None,
     data_inceput_activitate: Optional[date] = None,
+    data_sfarsit_activitate: Optional[date] = None,
     email: Optional[str] = None,
     telefon: Optional[str] = None,
     banca: Optional[str] = None,
@@ -138,6 +139,8 @@ def update_profile(
         user.incaseaza_numerar = bool(incaseaza_numerar)
     if data_inceput_activitate is not None:
         user.data_inceput_activitate = data_inceput_activitate
+    if data_sfarsit_activitate is not None:
+        user.data_sfarsit_activitate = data_sfarsit_activitate
     if email is not None:
         user.email = email.strip().lower() if email else None
     if telefon is not None:
@@ -282,6 +285,10 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "data_inceput_activitate": (
             user.data_inceput_activitate.isoformat()
             if user.data_inceput_activitate else None
+        ),
+        "data_sfarsit_activitate": (
+            user.data_sfarsit_activitate.isoformat()
+            if user.data_sfarsit_activitate else None
         ),
         "onboarding_completed": user.onboarding_completed,
         "onboarding_step": user.onboarding_step,

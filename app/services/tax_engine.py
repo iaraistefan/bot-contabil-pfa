@@ -459,6 +459,8 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     norma = 0.0
     pensionar = False
     asigurat_salariat = False
+    data_inceput = None
+    data_sfarsit = None
     warn_tranzitie: Optional[str] = None
     if session is not None:
         try:
@@ -472,6 +474,10 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
             # pentru CASS in d212_calc.)
             pensionar = bool(pd.get("is_pensionar"))
             asigurat_salariat = bool(pd.get("is_salariat"))
+            # Proportionalizare mid-an (PAS 4a): date inceput/sfarsit activitate
+            # (ISO str din profil; motorul le parseaza). NULL/an intreg -> regresie 0.
+            data_inceput = pd.get("data_inceput_activitate")
+            data_sfarsit = pd.get("data_sfarsit_activitate")
             if regim_raw == "NORMA_VENIT" and not norma_venit.norma_permisa(an, activity):
                 # GARDIAN TRANZITIE: ridesharing pe normă doar din 2026 → pentru
                 # anii anteriori cădem pe sistem real + avertizăm (NU aplicăm normă).
@@ -491,6 +497,7 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
         an, round(venit_brut, 2), round(cheltuieli, 2),
         regim=regim, norma_anuala=norma,
         pensionar=pensionar, asigurat_salariat=asigurat_salariat,
+        data_inceput=data_inceput, data_sfarsit=data_sfarsit,
     )
     if warn_tranzitie:
         res.avertismente = [warn_tranzitie] + list(res.avertismente or [])

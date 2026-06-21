@@ -75,6 +75,17 @@ def salariu_minim(an: int) -> int:
     return _params(an)["salariu_minim"]
 
 
+def plafon_cas_jos(an: int, salariu_minim: int = None) -> float:
+    """
+    Plafonul CAS INFERIOR in lei (12 SMB) — pragul sub care CAS e optional si baza
+    minima cand devine obligatoriu. Expus ca sursa unica pentru proportionalizarea
+    mid-an (d212_calc recalculeaza acest plafon × luni/12 la incepere de activitate).
+    """
+    p = _params(an)
+    sm = salariu_minim if salariu_minim is not None else p["salariu_minim"]
+    return float(p["cas_jos"] * sm)
+
+
 # ============================================================
 #                       CAS (pensie 25%)
 # ============================================================
@@ -82,7 +93,8 @@ def salariu_minim(an: int) -> int:
 def calcul_cas(venit_net: float, an: int, *,
                baza_aleasa: float = None,
                pensionar: bool = False,
-               salariu_minim: int = None) -> dict:
+               salariu_minim: int = None,
+               plafon_recalculat: float = None) -> dict:
     """
     CAS (contributia la pensie), cota 25%, pentru PFA sistem real.
 
@@ -92,6 +104,11 @@ def calcul_cas(venit_net: float, an: int, *,
         salariu_minim: override optional al SMB pe an (default: valoarea din
             PARAMETRI_CONTRIBUTII). Folosit de d212_calc pentru compatibilitate
             cu apeluri care pasau explicit salariul minim.
+        plafon_recalculat: la INCEPERE de activitate mid-an, plafonul CAS de 12 SMB
+            se recalculeaza proportional (12 SMB × luni/12, sursa ANAF Cluj). Cand e
+            setat, INLOCUIESTE logica standard pe doua trepte (12/24 SMB): venit ≤
+            plafon recalculat → CAS 0; peste → baza CAS = plafonul recalculat. None
+            (default) → comportament standard neschimbat (regresie 0).
 
     Returns:
         dict cu: valoare, baza, cota_pct, nota, aplicabil.
@@ -105,6 +122,26 @@ def calcul_cas(venit_net: float, an: int, *,
     if pensionar:
         return {"valoare": 0.0, "baza": 0.0, "cota_pct": cota,
                 "aplicabil": False, "nota": "Pensionar — scutit de CAS."}
+
+    if plafon_recalculat is not None:
+        # INCEPERE mid-an: plafonul de 12 SMB e prorata-recalculat (ANAF Cluj,
+        # „(plafon/12) × nr luni"). Treapta de 24 SMB NU se aplica la incepere —
+        # baza, cand venitul depaseste plafonul, ESTE plafonul recalculat.
+        prag = float(plafon_recalculat)
+        if venit_net <= prag:
+            return {"valoare": 0.0, "baza": 0.0, "cota_pct": cota,
+                    "aplicabil": False,
+                    "nota": (f"Incepere activitate mid-an: venit net sub plafonul CAS "
+                             f"recalculat proportional ({prag:.0f} lei = 12 SMB × luni/12) "
+                             f"— CAS optional (implicit 0).")}
+        baza = prag
+        if baza_aleasa is not None and baza_aleasa > baza:
+            baza = float(baza_aleasa)
+        valoare = round(baza * cota / 100, 2)
+        return {"valoare": valoare, "baza": baza, "cota_pct": cota,
+                "aplicabil": True,
+                "nota": (f"Incepere activitate mid-an: baza CAS = plafonul recalculat "
+                         f"proportional ({prag:.0f} lei = 12 SMB × luni/12).")}
 
     if venit_net < prag_jos:
         return {"valoare": 0.0, "baza": 0.0, "cota_pct": cota,
