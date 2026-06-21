@@ -2328,6 +2328,13 @@
       ${tog("is_pensionar","🧓","Sunt pensionar","Pensionarii NU plătesc CAS (pensie) pe activitatea PFA. CASS se aplică pe venitul real.")}
       ${tog("is_salariat","💼","Sunt angajat cu normă întreagă altundeva","Ca asigurat prin salariu, CASS pe PFA se calculează pe venitul real (fără baza minimă). CAS pe PFA rămâne după prag.")}
       ${cashTog}
+      <div style="margin-top:6px;border-top:1px solid var(--line-2);padding-top:12px">
+        <div class="hint" style="margin-bottom:8px">📅 Ai început activitatea în cursul anului (nu de la 1 ianuarie) sau o vei înceta? Opțional — lasă gol dacă PFA-ul e activ tot anul. La <b>începere</b>, plafonul CAS se recalculează proporțional; norma de venit se prorata pe zile.</div>
+        <label class="set-lbl">Data început activitate</label>
+        <input class="set-inp" id="wiz-data-inceput" type="date" value="${WIZ.data.data_inceput_activitate||''}" oninput="WIZ.data.data_inceput_activitate=this.value">
+        <label class="set-lbl" style="margin-top:8px">Data încetare activitate</label>
+        <input class="set-inp" id="wiz-data-sfarsit" type="date" value="${WIZ.data.data_sfarsit_activitate||''}" oninput="WIZ.data.data_sfarsit_activitate=this.value">
+      </div>
       ${wizBtns(true)}`);
   }
   function wizToggleSituatie(key){ WIZ.data[key]=!WIZ.data[key]; wizSituatie(); }
@@ -2462,8 +2469,12 @@
         }
       } else if(step==="situatie"){
         // opțional — salvăm flag-urile (default false). Afectează CAS/CASS + casa de marcat.
-        await wizSave({is_pensionar:!!WIZ.data.is_pensionar, is_salariat:!!WIZ.data.is_salariat,
-          incaseaza_numerar:!!WIZ.data.incaseaza_numerar});
+        // Datele de activitate (PAS 4a) merg doar dacă au valoare (gol → necompletat, neschimbat).
+        const sit={is_pensionar:!!WIZ.data.is_pensionar, is_salariat:!!WIZ.data.is_salariat,
+          incaseaza_numerar:!!WIZ.data.incaseaza_numerar};
+        if(WIZ.data.data_inceput_activitate) sit.data_inceput_activitate=WIZ.data.data_inceput_activitate;
+        if(WIZ.data.data_sfarsit_activitate) sit.data_sfarsit_activitate=WIZ.data.data_sfarsit_activitate;
+        await wizSave(sit);
       } else if(step==="masina"){
         const nr=(document.getElementById("wiz-nr")||{}).value||"";
         if(!nr.trim()){ wizMsg("Numărul de înmatriculare e obligatoriu.",true); return; }

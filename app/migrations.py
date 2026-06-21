@@ -416,6 +416,19 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS incaseaza_numerar BOOLEAN",
         ],
     },
+    {
+        "id": "019_user_data_sfarsit_activitate",
+        "description": (
+            "Proportionalizare mid-an (PAS 4a): data_sfarsit_activitate — incetarea "
+            "activitatii in cursul anului. data_inceput_activitate exista deja (#001). "
+            "La incepere mid-an plafonul CAS se recalculeaza proportional (12 SMB × "
+            "luni/12, sursa ANAF Cluj); la incetare doar semnalam (zona ambigua). "
+            "Nullable, aditiva ca 016/017/018 (NULL = activitate pe tot anul -> regresie 0)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_sfarsit_activitate DATE",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

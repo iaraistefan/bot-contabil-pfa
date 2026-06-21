@@ -76,6 +76,11 @@ class User(Base):
 
     # === Stare ===
     data_inceput_activitate = Column(Date, nullable=True)
+    # Proportionalizare mid-an (PAS 4a): incetarea activitatii in cursul anului.
+    # La INCEPERE mid-an plafonul CAS se recalculeaza proportional (12 SMB × luni/12);
+    # la INCETARE doar semnalam (zona legal ambigua). NULL = activitate pe tot anul
+    # (regresie 0). Norma se prorata pe zilele de activitate in ambele cazuri.
+    data_sfarsit_activitate = Column(Date, nullable=True)
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     onboarding_step = Column(Integer, nullable=False, default=0)
 

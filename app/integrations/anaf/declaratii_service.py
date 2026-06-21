@@ -512,6 +512,8 @@ def genereaza_d212(
     norma_anuala: float = 0.0,
     pensionar: bool = False,
     asigurat_salariat: bool = False,
+    data_inceput=None,
+    data_sfarsit=None,
 ) -> RezultatD212Service:
     """
     Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
@@ -523,6 +525,8 @@ def genereaza_d212(
         salariu_minim: salariul minim de referinta (default 4050)
         regim: "SISTEM_REAL" / "NORMA_VENIT" (motorul e regim-aware)
         norma_anuala: norma de venit (lei/an) — folosita DOAR pe NORMA_VENIT
+        data_inceput/data_sfarsit: date activitate pentru proportionalizare mid-an
+            (date | ISO str | None). None = activitate pe tot anul (regresie 0).
     """
     r = d212.calculeaza_d212(
         venit_brut=venit_brut_anual,
@@ -533,6 +537,8 @@ def genereaza_d212(
         norma_anuala=norma_anuala,
         pensionar=pensionar,
         asigurat_salariat=asigurat_salariat,
+        data_inceput=data_inceput,
+        data_sfarsit=data_sfarsit,
     )
     return RezultatD212Service(
         an=r.an,
