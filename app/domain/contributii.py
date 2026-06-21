@@ -234,15 +234,17 @@ def calcul_cass(venit_net: float, an: int, *,
 #           PRAGURI — STATUS pentru alerte „aproape de plafon"
 # ============================================================
 
-def _prag_core(value: float, threshold: float) -> dict:
+def prag_core(value: float, threshold: float) -> dict:
     """
     Partea NUMERICĂ comună a tuturor statusurilor de prag (CAS 12, CAS 24,
-    CASS 60): status + utilized_pct + remaining_ron + threshold_ron.
+    CASS 60, plafon normă): status + utilized_pct + remaining_ron + threshold_ron.
 
-    Mesajul NU se construiește aici — îl adaugă fiecare funcție publică, pentru
-    că semantica diferă (12 = CAS obligatoriu, 24 = baza se dublează „rău",
-    60 = CASS plafonat „bine"). Matematica e o singură dată (DRY); mesajele,
-    separate. status: OK (<80%) / APROAPE_PLAFON (≥80%) / DEPASIT_PLAFON (≥100%).
+    PUBLIC (DRY) — refolosit și de `norma_venit.prag_norma_status` (plafonul de
+    normă, PAS trackere). Mesajul NU se construiește aici — îl adaugă fiecare funcție
+    publică, pentru că semantica diferă (12 = CAS obligatoriu, 24 = baza se dublează
+    „rău", 60 = CASS plafonat „bine", normă = trecere la sistem real). Matematica e o
+    singură dată; mesajele, separate. status: OK (<80%) / APROAPE_PLAFON (≥80%) /
+    DEPASIT_PLAFON (≥100%).
     """
     utilized_pct = (value / threshold * 100) if threshold else 0.0
     remaining = max(0.0, round(threshold - value, 2))
@@ -273,7 +275,7 @@ def prag_cas_status(venit_net: float, an: int) -> dict:
     sm = p["salariu_minim"]
     threshold = float(p["cas_jos"] * sm)                 # 12 × 4050 = 48.600
     cas_obligatoriu = round(threshold * p["cota_cas"] / 100, 2)  # 12.150 la 4050
-    core = _prag_core(venit_net, threshold)
+    core = prag_core(venit_net, threshold)
     status = core["status"]
     utilized_pct = core["utilized_pct"]
     remaining = core["remaining_ron"]
@@ -313,7 +315,7 @@ def prag_cas24_status(venit_net: float, an: int) -> dict:
     threshold = float(p["cas_sus"] * sm)                       # 24 × 4050 = 97.200
     cas_jos_val = round(p["cas_jos"] * sm * p["cota_cas"] / 100, 2)   # ~12.150
     cas_sus_val = round(threshold * p["cota_cas"] / 100, 2)          # ~24.300
-    core = _prag_core(venit_net, threshold)
+    core = prag_core(venit_net, threshold)
     status = core["status"]
     utilized_pct = core["utilized_pct"]
     remaining = core["remaining_ron"]
@@ -353,7 +355,7 @@ def prag_cass6_status(venit_net: float, an: int) -> dict:
     sm = p["salariu_minim"]
     threshold = float(p["cass_jos"] * sm)                  # 6 × 4050 = 24.300
     cass_min = round(threshold * p["cota_cass"] / 100, 2)  # ~2.430
-    core = _prag_core(venit_net, threshold)
+    core = prag_core(venit_net, threshold)
     status = core["status"]
     utilized_pct = core["utilized_pct"]
 
@@ -391,7 +393,7 @@ def prag_cass60_status(venit_net: float, an: int) -> dict:
     sm = p["salariu_minim"]
     threshold = float(p["cass_sus"] * sm)                  # 60 × 4050 = 243.000
     cass_max = round(threshold * p["cota_cass"] / 100, 2)  # ~24.300
-    core = _prag_core(venit_net, threshold)
+    core = prag_core(venit_net, threshold)
     status = core["status"]
     utilized_pct = core["utilized_pct"]
 

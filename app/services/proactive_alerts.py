@@ -485,6 +485,7 @@ def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
             return 0                          # departe de orice plafon
         from app.services import tax_engine
         from app.domain import contributii
+        from app.domain import norma_venit
         r = tax_engine.compute_d212_anual(session, user_id=user.id, an=year)
         sent = 0
         # TVA — doar dacă NU e deja plătitor
@@ -494,6 +495,16 @@ def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
                 session, bot_token, user, year, "PLAFON_TVA",
                 st, _tva_plafon_message(st, r.venit_brut),
             )
+        # PLAFON NORMĂ — DOAR pe regim NORMA_VENIT (depășire → din anul viitor sistem
+        # real obligatoriu, art. 69 CF). Pe venit BRUT încasat YTD (nu net). Plafon pe
+        # an necunoscut → prag_norma_status None → nicio alertă (fără cifră presupusă).
+        if ctx.get("profile_dict", {}).get("regim_impunere") == "NORMA_VENIT":
+            st_norma = norma_venit.prag_norma_status(r.venit_brut, year)
+            if st_norma is not None:
+                sent += _maybe_send_plafon(
+                    session, bot_token, user, year, "PLAFON_NORMA",
+                    st_norma, st_norma["message"],
+                )
         # CAS 12 SMB — CAS devine obligatoriu
         st_cas = contributii.prag_cas_status(r.venit_net, year)
         sent += _maybe_send_plafon(
