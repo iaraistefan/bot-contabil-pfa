@@ -16,7 +16,10 @@ Modul PUR (fără I/O, fără DB). Două responsabilități:
    atât la selecție (onboarding/Setări), cât și la calcul (motorul D212).
 """
 
+from datetime import date
 from typing import Optional
+
+from app.domain import proportionalizare
 
 # Tipurile de localitate din deciziile AJFP (norma diferă pe nivel administrativ).
 TIPURI_LOCALITATE = ("municipiu", "oras", "comuna")
@@ -118,3 +121,50 @@ def norma_permisa(an: int, activity_code: Optional[str]) -> bool:
     if activity_code in _ACTIVITATI_TRANZITIE_2026:
         return an >= AN_START_NORMA_RIDESHARING
     return True
+
+
+def activitate_mixta_split_de_la(
+    regim: Optional[str],
+    are_activitate_neeligibila: Optional[bool],
+    data_adaugare,
+    an: int,
+) -> Optional[date]:
+    """
+    Gardian ACTIVITATE MIXTĂ (PAS 4b) — sursă UNICĂ a regulii de split temporal.
+
+    Regula OPANAF (formular D212, pct. 3.5.11): un contribuabil pe NORMĂ care își
+    completează obiectul de activitate în cursul anului cu o activitate NEeligibilă
+    pentru normă (neinclusă în nomenclator) → impunere în SISTEM REAL **de la data
+    respectivă**. Venitul net anual = fracțiunea din normă (perioada pe normă, până
+    la data adăugării) + venitul net real (perioada de după). NU retroactiv tot anul.
+
+    Returnează DATA de la care impunerea trece pe sistem real (granița split-ului),
+    sau None dacă split-ul NU se aplică:
+      - regim ≠ NORMA_VENIT (pe real deja → fără split);
+      - flag neactivat (nu a declarat activitate neeligibilă);
+      - data lipsă / neparsabilă / în alt an (fără dată nu putem face split exact —
+        apelantul afișează un avertisment „treci pe sistem real", fără cifră presupusă);
+      - data = 1 ianuarie (real pe tot anul, nu există fracțiune de normă → nu e split).
+
+    Variantă a gardianului de tranziție (`norma_permisa`): aceeași formă (predicat →
+    decizie regim), dar întoarce o DATĂ (split), nu un bool.
+
+    >>> activitate_mixta_split_de_la("NORMA_VENIT", True, "2026-09-01", 2026)
+    datetime.date(2026, 9, 1)
+    >>> activitate_mixta_split_de_la("SISTEM_REAL", True, "2026-09-01", 2026) is None
+    True
+    >>> activitate_mixta_split_de_la("NORMA_VENIT", False, "2026-09-01", 2026) is None
+    True
+    >>> activitate_mixta_split_de_la("NORMA_VENIT", True, None, 2026) is None
+    True
+    """
+    if str(regim) != "NORMA_VENIT":
+        return None
+    if not are_activitate_neeligibila:
+        return None
+    d = proportionalizare.to_date(data_adaugare)
+    if d is None or d.year != an:
+        return None
+    if (d.month, d.day) <= (1, 1):     # adăugare de la 1 ian → real tot anul, fără fracțiune normă
+        return None
+    return d

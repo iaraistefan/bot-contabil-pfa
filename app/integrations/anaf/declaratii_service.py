@@ -514,6 +514,10 @@ def genereaza_d212(
     asigurat_salariat: bool = False,
     data_inceput=None,
     data_sfarsit=None,
+    are_activitate_neeligibila: bool = False,
+    data_adaugare=None,
+    venit_brut_post: float = 0.0,
+    cheltuieli_post: float = 0.0,
 ) -> RezultatD212Service:
     """
     Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
@@ -539,6 +543,10 @@ def genereaza_d212(
         asigurat_salariat=asigurat_salariat,
         data_inceput=data_inceput,
         data_sfarsit=data_sfarsit,
+        are_activitate_neeligibila=are_activitate_neeligibila,
+        data_adaugare=data_adaugare,
+        venit_brut_post=venit_brut_post,
+        cheltuieli_post=cheltuieli_post,
     )
     return RezultatD212Service(
         an=r.an,

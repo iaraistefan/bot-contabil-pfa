@@ -429,6 +429,19 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_sfarsit_activitate DATE",
         ],
     },
+    {
+        "id": "020_user_activitate_mixta",
+        "description": (
+            "Activitate mixta (PAS 4b): are_activitate_neeligibila_norma (a adaugat in "
+            "cursul anului o activitate neeligibila pentru norma) + data_activitate_neeligibila "
+            "(granita split-ului normă→real, OPANAF D212 pct. 3.5.11). Nullable, aditive ca "
+            "016-019 (NULL/False = fara activitate mixta -> regresie 0)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS are_activitate_neeligibila_norma BOOLEAN",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_activitate_neeligibila DATE",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

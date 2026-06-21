@@ -77,6 +77,8 @@ def update_profile(
     incaseaza_numerar: Optional[bool] = None,
     data_inceput_activitate: Optional[date] = None,
     data_sfarsit_activitate: Optional[date] = None,
+    are_activitate_neeligibila_norma: Optional[bool] = None,
+    data_activitate_neeligibila: Optional[date] = None,
     email: Optional[str] = None,
     telefon: Optional[str] = None,
     banca: Optional[str] = None,
@@ -141,6 +143,10 @@ def update_profile(
         user.data_inceput_activitate = data_inceput_activitate
     if data_sfarsit_activitate is not None:
         user.data_sfarsit_activitate = data_sfarsit_activitate
+    if are_activitate_neeligibila_norma is not None:
+        user.are_activitate_neeligibila_norma = bool(are_activitate_neeligibila_norma)
+    if data_activitate_neeligibila is not None:
+        user.data_activitate_neeligibila = data_activitate_neeligibila
     if email is not None:
         user.email = email.strip().lower() if email else None
     if telefon is not None:
@@ -289,6 +295,11 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "data_sfarsit_activitate": (
             user.data_sfarsit_activitate.isoformat()
             if user.data_sfarsit_activitate else None
+        ),
+        "are_activitate_neeligibila_norma": user.are_activitate_neeligibila_norma,
+        "data_activitate_neeligibila": (
+            user.data_activitate_neeligibila.isoformat()
+            if user.data_activitate_neeligibila else None
         ),
         "onboarding_completed": user.onboarding_completed,
         "onboarding_step": user.onboarding_step,

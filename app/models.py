@@ -81,6 +81,12 @@ class User(Base):
     # la INCETARE doar semnalam (zona legal ambigua). NULL = activitate pe tot anul
     # (regresie 0). Norma se prorata pe zilele de activitate in ambele cazuri.
     data_sfarsit_activitate = Column(Date, nullable=True)
+    # Activitate mixta (PAS 4b, OPANAF D212 pct. 3.5.11): userul pe NORMA a adaugat in
+    # cursul anului o activitate NEeligibila pentru norma -> sistem real DE LA DATA
+    # adaugarii. Venit net anual = fractiune norma (pana la data) + venit real (dupa).
+    # NULL/False = fara activitate mixta (regresie 0).
+    are_activitate_neeligibila_norma = Column(Boolean, nullable=True)
+    data_activitate_neeligibila = Column(Date, nullable=True)
     onboarding_completed = Column(Boolean, nullable=False, default=False)
     onboarding_step = Column(Integer, nullable=False, default=0)
 

@@ -37,6 +37,7 @@ from typing import List, Optional
 
 from app.domain import contributii
 from app.domain import proportionalizare
+from app.domain import norma_venit
 
 
 # ============================================================
@@ -99,6 +100,10 @@ def calculeaza_d212(
     asigurat_salariat: bool = False,
     data_inceput=None,
     data_sfarsit=None,
+    are_activitate_neeligibila: bool = False,
+    data_adaugare=None,
+    venit_brut_post: float = 0.0,
+    cheltuieli_post: float = 0.0,
 ) -> RezultatD212:
     """
     Calculeaza impozitul + CAS + CASS pentru un PFA, REGIM-AWARE.
@@ -130,6 +135,19 @@ def calculeaza_d212(
         norma_anuala: norma de venit (lei/an) — folosita DOAR pe NORMA_VENIT
         data_inceput: data inceperii activitatii (date | ISO str | None)
         data_sfarsit: data incetarii activitatii (date | ISO str | None)
+        are_activitate_neeligibila: userul a adaugat o activitate NEeligibila pentru
+            norma in cursul anului (PAS 4b — activitate mixta)
+        data_adaugare: data adaugarii activitatii neeligibile (granita split-ului)
+        venit_brut_post: incasari reale DOAR pe perioada de dupa data_adaugare
+            (jumatatea pe sistem real; insumate de tax_engine pe lunile post-adaugare)
+        cheltuieli_post: cheltuieli deductibile reale pe perioada de dupa data_adaugare
+
+    ACTIVITATE MIXTA (PAS 4b, OPANAF formular D212 pct. 3.5.11): norma + activitate
+    neeligibila adaugata in cursul anului → SISTEM REAL de la data adaugarii. Venit net
+    anual = fractiunea din norma (prorata pe zilele pana la data adaugarii) + venitul net
+    real (perioada de dupa). CAS/CASS pe net-ul COMBINAT; impozit pe combinat (jumatatea
+    norma fara deducere CAS/CASS, jumatatea reala cu deducere — vezi nota in cod). Fara
+    flag/data → fara split (regresie 0).
 
     Returns:
         RezultatD212 cu toate componentele + explicatii + avertismente.
@@ -148,12 +166,32 @@ def calculeaza_d212(
     zile = proportionalizare.zile_activitate(data_inceput, data_sfarsit, an)
     luni = proportionalizare.luni_activitate(data_inceput, data_sfarsit, an)
 
+    # --- Activitate mixta (PAS 4b): split temporal norma → real ---
+    # Sursa UNICA a regulii: norma_venit.activitate_mixta_split_de_la (OPANAF 3.5.11).
+    # split_date = data de la care se trece pe real; None → fara split (regresie 0).
+    split_date = norma_venit.activitate_mixta_split_de_la(
+        regim, are_activitate_neeligibila, data_adaugare, an)
+    mixt = pe_norma and split_date is not None
+    norma_prorata_mixt = 0.0
+    real_net_post = 0.0
+
     avert = [
         "Calcul ORIENTATIV. Verifica cu un contabil inainte de depunere — "
         "regulile D212 au exceptii si se schimba des.",
     ]
 
-    if pe_norma:
+    if mixt:
+        # ACTIVITATE MIXTA: venit net anual = fractiune norma (zile pana la data
+        # adaugarii, EXCLUSIV) + venit net real (perioada de dupa). Granularitate:
+        # norma pe ZILE (ANAF), real pe LUNI (insumat de tax_engine de la luna
+        # data_adaugare). Inconsistenta de cateva zile la granita — acceptata si notata.
+        # Refoloseste prorata_norma din PAS 4a EXACT (apelata pe sub-intervalul normei).
+        zile_pre = proportionalizare.zile_pe_norma_pana_la(data_inceput, split_date, an)
+        norma_prorata_mixt = proportionalizare.prorata_norma(norma_anuala, zile_pre, an)
+        real_net_post = round(float(venit_brut_post) - float(cheltuieli_post), 2)
+        venit_net = round(norma_prorata_mixt + real_net_post, 2)
+        baza_contrib = venit_net
+    elif pe_norma:
         # Pe NORMA: baza de impozit + de contributii = norma fixa. Venitul net
         # raportat = norma (cheltuielile reale NU sunt deductibile pe norma).
         # MID-AN: norma se prorata pe zile/365 DOAR cand anul e partial (altfel
@@ -195,7 +233,17 @@ def calculeaza_d212(
     cass_expl = cass_r["nota"]
 
     # --- Impozit ---
-    if pe_norma:
+    if mixt:
+        # ACTIVITATE MIXTA: fiecare jumatate impozitata dupa REGULA EI:
+        #   - jumatatea NORMA → 10% × norma prorata (FARA deducere CAS/CASS — regula normei);
+        #   - jumatatea REALA → 10% × (venit real post − CAS − CASS) (regula sistemului real).
+        # CAS/CASS sunt calculate pe net-ul COMBINAT (sursa unica contributii) si deduse
+        # din jumatatea reala. Sursa (OPANAF 3.5.11) da split-ul NET; interactiunea
+        # impozit↔contributii pe an mixt NU e detaliata explicit → alegere documentata,
+        # conservatoare (deducem tot CAS/CASS din partea reala), de re-validat CECCAR.
+        venit_impozabil = max(0.0, round(
+            norma_prorata_mixt + max(0.0, real_net_post - cas - cass), 2))
+    elif pe_norma:
         # Pe NORMA: impozit = 10% × norma (NU se deduc CAS/CASS din norma).
         # MID-AN: baza = norma PRORATA (= venit_net), nu norma intreaga. Pe an
         # intreg venit_net == norma_anuala (regresie 0).
@@ -209,7 +257,17 @@ def calculeaza_d212(
     bonificatie = round(impozit * COTA_BONIFICATIE, 2)
     total_cu_bonif = round(total - bonificatie, 2)
 
-    if pe_norma:
+    if mixt:
+        avert.append(
+            f"ACTIVITATE MIXTA: ai adaugat o activitate neeligibila pentru norma la "
+            f"{split_date.isoformat()} → de la acea data esti pe SISTEM REAL (OPANAF, "
+            f"D212 pct. 3.5.11). Venit net anual = fractiune norma {norma_prorata_mixt:.0f} "
+            f"lei (perioada pe norma) + venit net real {real_net_post:.0f} lei (perioada de "
+            f"dupa). CAS/CASS pe net-ul combinat; impozit: norma fara deducere, real cu "
+            f"deducere CAS/CASS. ⚠️ Interactiunea impozit↔contributii pe an mixt nu e "
+            f"detaliata in sursa — re-valideaza split-ul cu un contabil CECCAR."
+        )
+    elif pe_norma:
         avert.append(
             "Impozitare pe NORMA de venit: impozit 10% × norma anuala; "
             "cheltuielile NU sunt deductibile, iar CAS/CASS se calculeaza pe norma."
@@ -224,7 +282,7 @@ def calculeaza_d212(
                      "(daca PFA-ul nu e suspendat).")
 
     # --- Proportionalizare mid-an (PAS 4a) — avertismente ---
-    if partial and pe_norma:
+    if partial and pe_norma and not mixt:
         avert.append(
             f"Activitate partiala in {an}: norma s-a prorata pe {zile} zile "
             f"({zile}/365 din norma anuala)."
