@@ -80,11 +80,37 @@ def _get_user_activity(session: Session, user_id: int) -> Type[BaseActivity]:
 
 
 def _is_user_vat_payer(session: Session, user_id: int) -> bool:
-    """True dacă user-ul e plătitor TVA (din profil)."""
+    """
+    True dacă user-ul COLECTEAZĂ TVA pe vânzările proprii (din profil).
+
+    Include SPECIAL_INTRACOM (cod special art. 317) pentru tratamentul vânzărilor.
+    ⚠️ NU folosi pentru dreptul de DEDUCERE — vezi `_can_deduct_vat` (gard separat:
+    neplătitorul ȘI codul special datorează reverse-charge dar NU deduc).
+    """
     user = session.query(User).filter(User.id == user_id).first()
     if not user:
         return False
     return user.regim_tva in ("PLATITOR_21", "SPECIAL_INTRACOM")
+
+
+def _can_deduct_vat(session: Session, user_id: int) -> bool:
+    """
+    SURSĂ UNICĂ — are user-ul drept de DEDUCERE a TVA (PLATITOR_21 EXCLUSIV)?
+
+    Distinct de `_is_user_vat_payer` (care servește colectarea pe vânzări proprii):
+    - PLATITOR_21    → plătitor normal: deduce TVA (inclusiv reverse-charge) → True.
+    - NEPLATITOR     → datorează reverse-charge pe achiziții intra-UE (D301) dar NU
+                       deduce → False.
+    - SPECIAL_INTRACOM (art. 317) → înregistrat DOAR pentru achiziții intra-UE, fără
+                       drept de deducere → False (se grupează cu neplătitorul).
+
+    Folosit la postarea FACTURA_COMISION: VAT_IN (oglinda deductibilă) se creează DOAR
+    pentru cei care pot deduce; VAT_OUT (datorat, D301) se creează pentru toți.
+    """
+    user = session.query(User).filter(User.id == user_id).first()
+    if not user:
+        return False
+    return user.regim_tva == "PLATITOR_21"
 
 
 def _detect_expense_category(
@@ -238,9 +264,11 @@ def post_document(
     # Încărcăm activitatea + statusul TVA al user-ului o singură dată
     activity = _get_user_activity(session, user_id)
     user_is_vat_payer = _is_user_vat_payer(session, user_id)
+    user_can_deduct_vat = _can_deduct_vat(session, user_id)
     logger.info(
         f"post_document: doc_id={document_id} user_id={user_id} "
-        f"activity={activity.code} tip={tip} vat_payer={user_is_vat_payer}"
+        f"activity={activity.code} tip={tip} vat_payer={user_is_vat_payer} "
+        f"can_deduct={user_can_deduct_vat}"
     )
 
     try:
@@ -269,6 +297,7 @@ def post_document(
             tx_ids += _post_factura_comision(
                 session, user_id=user_id,
                 user_is_vat_payer=user_is_vat_payer,
+                user_can_deduct_vat=user_can_deduct_vat,
                 document_id=document_id,
                 platforma=platforma, detalii=detalii,
                 comision=comision,
@@ -507,18 +536,24 @@ def _post_cheltuiala(
 # ============================================================
 
 def _post_factura_comision(
-    session, *, user_id, user_is_vat_payer, document_id,
+    session, *, user_id, user_is_vat_payer, user_can_deduct_vat=False, document_id,
     platforma, detalii, comision,
     occurred_on, period_year, period_month,
 ) -> List[int]:
     """
-    FACTURA_COMISION → 2 tranzacții TVA (VAT_OUT + VAT_IN).
+    FACTURA_COMISION → tranzacții TVA (taxare inversă).
 
     Tratament determinat de vat_engine:
     - UE (Bolt EE / Uber NL / Etsy IE) → REVERSE_CHARGE (D301 + D390)
     - Non-UE (AWS US / OpenAI US) → IMPORT_NON_EU (doar D301, fără D390)
     - RO (rar pentru facturi comision) → STANDARD_21
     - Necunoscut → fallback REVERSE_CHARGE (compatibilitate cu logica veche)
+
+    VAT_OUT (TVA datorat, D301) se creează MEREU — datorat de TOȚI (inclusiv neplătitori,
+    care au reverse-charge pe achiziții intra-UE). VAT_IN (oglinda deductibilă) se creează
+    DOAR dacă userul poate deduce (`user_can_deduct_vat` = PLATITOR_21). Pentru neplătitor
+    / SPECIAL_INTRACOM: fără VAT_IN → Net TVA = VAT_OUT (de plată real), nu 0.
+    Corectură golul TVA neplătitor (forward-only; istoricul NU se rescrie).
     """
     # ════════════════════════════════════════════════════════
     # === Analiză VAT (înainte de orice calcul) ===
@@ -568,7 +603,18 @@ def _post_factura_comision(
         period_month=period_month,
     )
 
-    # ── 2. VAT_IN (TVA deductibil — oglindă) ──
+    # ── 2. VAT_IN (TVA deductibil — oglindă) — DOAR pentru cei cu drept de deducere ──
+    # Neplătitor / SPECIAL_INTRACOM datorează reverse-charge (VAT_OUT) dar NU deduc →
+    # fără VAT_IN → Net TVA = VAT_OUT (de plată), nu 0. Corectură gol TVA neplătitor.
+    if not user_can_deduct_vat:
+        logger.info(
+            f"FACTURA_COMISION doc_id={document_id}: "
+            f"factura={comision} RON, VAT_OUT={vat_amount} RON (D301 datorat), "
+            f"VAT_IN OMIS (neplatitor/cod special — fara deducere), "
+            f"treatment={vat_treatment}, country={country_group.value}"
+        )
+        return [tx_vat_out.id]
+
     tx_vat_in = tx_repo.create(
         session,
         user_id=user_id,
@@ -590,7 +636,7 @@ def _post_factura_comision(
 
     logger.info(
         f"FACTURA_COMISION doc_id={document_id}: "
-        f"factura={comision} RON, VAT={vat_amount} RON, "
+        f"factura={comision} RON, VAT={vat_amount} RON (colectat+deductibil), "
         f"treatment={vat_treatment}, country={country_group.value}"
     )
 

@@ -139,6 +139,13 @@ def compute_period(
     vat_net = round(vat_out - vat_in, 2)
     profit_estimated = round(income_total - expense_deductible_total, 2)
 
+    # Corectura gol TVA neplatitor (forward-only): semnaleaza userii fara drept de
+    # deducere (NEPLATITOR / SPECIAL_INTRACOM) care au reverse-charge datorat. Pentru ei,
+    # Net TVA = VAT_OUT (de plata). Lunile DINAINTE de corectura pot avea VAT_IN istoric
+    # (vat_net aparea 0) — NU rescriem trecutul, doar informam. Sursa regulii = regim_tva.
+    regim_tva_user = session.query(User.regim_tva).filter(User.id == user_id).scalar()
+    vat_poate_deduce = (regim_tva_user == "PLATITOR_21")
+
     # ════════════════════════════════════════════════════════
     # === NEW (Pas 8.4a) — Estimare fiscală inteligentă ===
     # ════════════════════════════════════════════════════════
@@ -180,6 +187,8 @@ def compute_period(
         "vat_out_total": round(vat_out, 2),
         "vat_in_total": round(vat_in, 2),
         "vat_net": vat_net,
+        # Corectura gol TVA neplatitor: False → fara deducere (Net TVA = VAT_OUT datorat).
+        "vat_poate_deduce": vat_poate_deduce,
         # Cota TVA a perioadei (sursă unică de adevăr; folosită la inversarea
         # bază = vat_out / cota_tva, pe backend și în dashboard).
         "cota_tva": cota_tva(date(year, month, 1)),
@@ -695,8 +704,17 @@ def format_report_message(totals: Dict[str, Any], d212=None) -> str:
             f"  TVA colectat (D301): `{t['vat_out_total']:.2f} RON`",
             f"  TVA deductibil: `{t['vat_in_total']:.2f} RON`",
             f"  *Net TVA de plătit: {t['vat_net']:.2f} RON*",
-            "",
         ]
+        # Semnal forward (corectura gol TVA): neplatitor / cod special → datorezi
+        # reverse-charge dar NU deduci → Net TVA = TVA datorat. Daca pe luni ANTERIOARE
+        # Net TVA aparea 0, era o eroare (corectata acum) — re-verifica cu contabilul.
+        if not t.get("vat_poate_deduce", True):
+            lines.append(
+                "  ⚠️ _Neplatitor TVA: datorezi taxarea inversa (reverse-charge) dar NU o "
+                "deduci → Net TVA = TVA datorat. Daca pe luni anterioare Net TVA aparea 0, "
+                "era o eroare (corectata acum); re-verifica istoricul cu contabilul._"
+            )
+        lines.append("")
 
     lines += [
         "━━━━━━━━━━━━━━━━━━━━",
