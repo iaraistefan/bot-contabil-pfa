@@ -741,6 +741,9 @@ def onboarding_status():
             # Proportionalizare mid-an (PAS 4a) — date activitate (optionale, ISO str/None).
             "data_inceput_activitate": profile.get("data_inceput_activitate"),
             "data_sfarsit_activitate": profile.get("data_sfarsit_activitate"),
+            # Activitate mixta (PAS 4b) — flag + data adaugare activitate neeligibila.
+            "are_activitate_neeligibila_norma": bool(profile.get("are_activitate_neeligibila_norma")),
+            "data_activitate_neeligibila": profile.get("data_activitate_neeligibila"),
             # An fiscal curent — pentru gardianul de selecție normă (ridesharing pe
             # normă doar din 2026; sub-pas PAS 1-UI). Sursa regulii = norma_venit.norma_permisa.
             "_an_fiscal": date.today().year,
@@ -806,11 +809,15 @@ _ONBOARDING_SAVE_FIELDS = {
     # Proportionalizare mid-an (PAS 4a): date activitate (optionale). Vin ca ISO
     # str din JSON → parsate la `date` inainte de update_profile (vezi _parse_date_field).
     "data_inceput_activitate", "data_sfarsit_activitate",
+    # Activitate mixta (PAS 4b): flag + data adaugare activitate neeligibila pentru norma.
+    "are_activitate_neeligibila_norma", "data_activitate_neeligibila",
 }
 
 # Campurile de tip DATA din allowlist — primite ca ISO „YYYY-MM-DD" si convertite la
 # obiect `date` (string gol → None = sterge data, util la corectarea unei greseli).
-_ONBOARDING_DATE_FIELDS = {"data_inceput_activitate", "data_sfarsit_activitate"}
+_ONBOARDING_DATE_FIELDS = {
+    "data_inceput_activitate", "data_sfarsit_activitate", "data_activitate_neeligibila",
+}
 
 
 def _parse_date_field(val):
@@ -1324,6 +1331,9 @@ def setari_get():
             "norma_venit_anuala": profile.get("norma_venit_anuala"),
             "is_pensionar": bool(profile.get("is_pensionar")),
             "is_salariat": bool(profile.get("is_salariat")),
+            # Activitate mixta (PAS 4b) — split temporal normă→real (afisare).
+            "are_activitate_neeligibila_norma": bool(profile.get("are_activitate_neeligibila_norma")),
+            "data_activitate_neeligibila": profile.get("data_activitate_neeligibila"),
             "cod_special_tva": profile.get("cod_special_tva") or "",
             # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
             # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.

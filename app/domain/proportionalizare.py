@@ -37,7 +37,7 @@ pentru veniturile 2026):
    A presupune o cifra fara temei e exact bug-ul fiscal pe care il evitam sistematic.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 # Denominatorul FIX pentru prorata normei (confirmat ANAF/SOLO). NU folosim numarul
 # real de zile al anului (365/366) — ar varia pe ani bisecti si ar diverge de cifra
@@ -46,11 +46,13 @@ ZILE_AN = 365
 LUNI_AN = 12
 
 
-def _to_date(d):
+def to_date(d):
     """
     Normalizeaza intrarea la `date` | None. Accepta `date`, `datetime` sau string
     ISO „YYYY-MM-DD" (profilul expune ISO; testele paseaza obiecte `date`). Orice
     valoare neparsabila → None (tratat ca „necompletat", fara cifra presupusa).
+
+    Public: refolosit de gardianul activitatii mixte (PAS 4b) ca parser comun de date.
     """
     if d is None:
         return None
@@ -71,8 +73,8 @@ def _margini_an(inceput, sfarsit, an):
     """
     jan1 = date(an, 1, 1)
     dec31 = date(an, 12, 31)
-    i = _to_date(inceput)
-    s = _to_date(sfarsit)
+    i = to_date(inceput)
+    s = to_date(sfarsit)
     start = i if (i is not None and i > jan1) else jan1
     end = s if (s is not None and s < dec31) else dec31
     return start, end
@@ -89,7 +91,7 @@ def este_incepere_mid_an(inceput, an) -> bool:
     Daca a inceput intr-un an anterior → an intreg pentru `an` (False). Sursa
     unica pentru decizia „aplic recalcularea CAS la incepere".
     """
-    i = _to_date(inceput)
+    i = to_date(inceput)
     return i is not None and i.year == an and (i.month, i.day) > (1, 1)
 
 
@@ -99,7 +101,7 @@ def este_incetare(sfarsit, an) -> bool:
 
     Sursa unica pentru semnalul de prudenta „verifica recalcularea CAS la incetare".
     """
-    s = _to_date(sfarsit)
+    s = to_date(sfarsit)
     return s is not None and s.year == an and (s.month, s.day) < (12, 31)
 
 
@@ -128,6 +130,25 @@ def zile_activitate(inceput, sfarsit, an) -> int:
     if end < start:
         return 0
     return (end - start).days + 1
+
+
+def zile_pe_norma_pana_la(inceput, data_split, an) -> int:
+    """
+    Zilele de activitate pe NORMA, de la inceput (sau 1 ian) pana in ziua DINAINTEA
+    `data_split` (data adaugarii activitatii neeligibile, EXCLUSIV). Sub-perioada pe
+    norma a activitatii mixte (PAS 4b): [start, data_split). Restul anului = real.
+
+    Compunere cu PAS 4a: `inceput` poate fi data de incepere mid-an a activitatii —
+    sub-intervalul normei e atunci [data_inceput, data_split). Refoloseste
+    zile_activitate pe interval arbitrar (NU reimplementeaza nimic).
+
+    >>> zile_pe_norma_pana_la(None, date(2026, 9, 1), 2026)   # 1 ian → 31 aug
+    243
+    """
+    d = to_date(data_split)
+    if d is None:
+        return zile_activitate(inceput, None, an)   # fara split → tot anul pe norma
+    return zile_activitate(inceput, d - timedelta(days=1), an)
 
 
 def luni_activitate(inceput, sfarsit, an) -> int:

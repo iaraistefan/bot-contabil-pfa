@@ -442,15 +442,21 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     from app.integrations.anaf import declaratii_service as _decl
     from app.domain import norma_venit
 
+    # Colectam pe LUNA (income, cheltuieli deductibile) ca sa putem bucketa post-adaugare
+    # la activitate mixta (PAS 4b). Totalul anual = suma tuturor lunilor (cale normala).
+    lunar = {}
     venit_brut = 0.0
     cheltuieli = 0.0
     for m in range(1, 13):
         try:
             t = compute_period(session, user_id=user_id, year=an, month=m)
-            venit_brut += float(t.get("income_total") or 0.0)
-            cheltuieli += float(t.get("expense_deductible_total") or 0.0)
+            inc = float(t.get("income_total") or 0.0)
+            exp = float(t.get("expense_deductible_total") or 0.0)
         except Exception:
-            continue
+            inc, exp = 0.0, 0.0
+        lunar[m] = (inc, exp)
+        venit_brut += inc
+        cheltuieli += exp
 
     # REGIM-AWARE: motorul D212 trateaza diferit NORMA vs SISTEM_REAL. Citim regimul
     # + norma + activitatea din profil. Fara sesiune (apeluri pure de test) → ramane
@@ -461,6 +467,8 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
     asigurat_salariat = False
     data_inceput = None
     data_sfarsit = None
+    are_neeligibila = False
+    data_adaugare = None
     warn_tranzitie: Optional[str] = None
     if session is not None:
         try:
@@ -478,6 +486,9 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
             # (ISO str din profil; motorul le parseaza). NULL/an intreg -> regresie 0.
             data_inceput = pd.get("data_inceput_activitate")
             data_sfarsit = pd.get("data_sfarsit_activitate")
+            # Activitate mixta (PAS 4b): flag + data adaugare activitate neeligibila.
+            are_neeligibila = bool(pd.get("are_activitate_neeligibila_norma"))
+            data_adaugare = pd.get("data_activitate_neeligibila")
             if regim_raw == "NORMA_VENIT" and not norma_venit.norma_permisa(an, activity):
                 # GARDIAN TRANZITIE: ridesharing pe normă doar din 2026 → pentru
                 # anii anteriori cădem pe sistem real + avertizăm (NU aplicăm normă).
@@ -492,12 +503,28 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
         except Exception:
             logger.exception(f"D212 regim lookup failed user={user_id} — fallback SISTEM_REAL")
             regim, norma, pensionar, asigurat_salariat = "SISTEM_REAL", 0.0, False, False
+            are_neeligibila, data_adaugare = False, None
+
+    # Activitate mixta (PAS 4b): daca regula de split se aplica, insumam venitul real
+    # DOAR pe lunile de la luna data_adaugare incolo (jumatatea pe sistem real). Sursa
+    # unica a regulii: norma_venit.activitate_mixta_split_de_la. Fara split → buckets 0.
+    venit_brut_post = 0.0
+    cheltuieli_post = 0.0
+    split_date = norma_venit.activitate_mixta_split_de_la(
+        regim, are_neeligibila, data_adaugare, an)
+    if split_date is not None:
+        for m, (inc, exp) in lunar.items():
+            if m >= split_date.month:      # granita pe LUNA (real lunar) — documentat
+                venit_brut_post += inc
+                cheltuieli_post += exp
 
     res = _decl.genereaza_d212(
         an, round(venit_brut, 2), round(cheltuieli, 2),
         regim=regim, norma_anuala=norma,
         pensionar=pensionar, asigurat_salariat=asigurat_salariat,
         data_inceput=data_inceput, data_sfarsit=data_sfarsit,
+        are_activitate_neeligibila=are_neeligibila, data_adaugare=data_adaugare,
+        venit_brut_post=round(venit_brut_post, 2), cheltuieli_post=round(cheltuieli_post, 2),
     )
     if warn_tranzitie:
         res.avertismente = [warn_tranzitie] + list(res.avertismente or [])
