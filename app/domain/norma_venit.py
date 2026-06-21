@@ -20,12 +20,26 @@ from datetime import date
 from typing import Optional
 
 from app.domain import proportionalizare
+from app.domain import contributii
 
 # Tipurile de localitate din deciziile AJFP (norma diferă pe nivel administrativ).
 TIPURI_LOCALITATE = ("municipiu", "oras", "comuna")
 
 # Anul de la care ridesharing (CAEN 4933) e eligibil pentru normă de venit.
 AN_START_NORMA_RIDESHARING = 2026
+
+
+# ============================================================
+#   PLAFON NORMĂ DE VENIT — trecere OBLIGATORIE la sistem real (art. 69 CF)
+# ============================================================
+# Plafon de venit BRUT încasat (lei): peste el, din ANUL URMĂTOR impunerea e
+# OBLIGATORIU în sistem real (nu mai poți rămâne pe normă). 25.000 EUR convertit la
+# cursul mediu BNR al anului ANTERIOR. Structură PE AN (cursul se schimbă anual, ca
+# nomenclatorul normei) — NU constantă universală. An lipsă → None (fără alertă, NU
+# presupunem o cifră — filosofia PAS 1).
+PLAFON_NORMA_VENIT = {
+    2026: 126_038.0,   # 25.000 EUR × 5,0415 (curs mediu BNR 2025). Sursă: art. 69 Cod Fiscal.
+}
 
 # Activitățile pentru care se aplică gardianul de tranziție (normă doar din 2026).
 _ACTIVITATI_TRANZITIE_2026 = {"ridesharing"}
@@ -168,3 +182,54 @@ def activitate_mixta_split_de_la(
     if (d.month, d.day) <= (1, 1):     # adăugare de la 1 ian → real tot anul, fără fracțiune normă
         return None
     return d
+
+
+def plafon_norma_venit(an: int) -> Optional[float]:
+    """
+    Plafonul de venit BRUT (lei) peste care, din anul URMĂTOR, impunerea pe normă
+    nu mai e permisă (sistem real obligatoriu, art. 69 Cod Fiscal). An necunoscut →
+    None (fără cifră presupusă — cursul EUR se schimbă anual).
+    """
+    val = PLAFON_NORMA_VENIT.get(an)
+    return float(val) if val is not None else None
+
+
+def prag_norma_status(venit_brut: float, an: int) -> Optional[dict]:
+    """
+    Status față de plafonul de NORMĂ (venit BRUT încasat vs 25.000 EUR în lei).
+
+    Aceeași formă ca `contributii.prag_cas_status` (status + utilized_pct +
+    remaining_ron + threshold_ron + message), refolosind `contributii.prag_core`
+    (DRY). Comparația e pe venitul BRUT (nu net — plafonul normei e pe brut încasat).
+
+    status: OK (<80%) / APROAPE_PLAFON (≥80%) / DEPASIT_PLAFON (≥100%).
+    Plafon necunoscut pe `an` → None (apelantul nu trimite alertă — fără cifră presupusă).
+    """
+    threshold = plafon_norma_venit(an)
+    if threshold is None:
+        return None
+    core = contributii.prag_core(venit_brut, threshold)
+    status = core["status"]
+    pct = core["utilized_pct"]
+    remaining = core["remaining_ron"]
+
+    if status == "DEPASIT_PLAFON":
+        message = (
+            f"🔴 Ai depășit plafonul de normă de {threshold:.0f} RON venit brut "
+            f"(ai {venit_brut:.0f} RON). Din anul viitor treci OBLIGATORIU la sistem "
+            f"real (art. 69 Cod Fiscal)."
+        )
+    elif status == "APROAPE_PLAFON":
+        message = (
+            f"🟡 Te apropii de plafonul de normă: {pct:.0f}% "
+            f"({venit_brut:.0f} / {threshold:.0f} RON venit brut). Dacă-l depășești "
+            f"anul acesta, din anul viitor treci OBLIGATORIU la sistem real "
+            f"(art. 69 Cod Fiscal). Mai ai ~{remaining:.0f} lei."
+        )
+    else:
+        message = (
+            f"✅ Sub plafonul de normă: {pct:.0f}% "
+            f"({venit_brut:.0f} / {threshold:.0f} RON venit brut)."
+        )
+
+    return {**core, "message": message}
