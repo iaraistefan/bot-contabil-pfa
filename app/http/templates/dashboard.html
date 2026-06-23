@@ -555,6 +555,10 @@
         <div id="ov-onboarding"></div>
         <div id="ov-fiscal"></div>
         <div id="ov-praguri"></div>
+        <div class="panel" id="ov-simulator" style="margin-bottom:16px">
+          <div class="panel-h"><div class="t">Ce regim fiscal e mai avantajos?<span>normă de venit vs sistem real</span></div></div>
+          <div id="sim-body"><button class="btn btn-primary" onclick="loadSimulare()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v18M6 7l6-4 6 4M4 21h16M7 11l-2.5 6h5L7 11zM17 11l-2.5 6h5L17 11z" stroke-linecap="round" stroke-linejoin="round"/></svg>Află ce regim e mai avantajos</button></div>
+        </div>
         <div id="ov-amef"></div>
         <div class="hero-pay" id="ov-pay"></div>
         <div class="grid g-4" style="margin-bottom:16px">
@@ -964,6 +968,7 @@
   async function getDocs(){if(cache.docs)return cache.docs;const r=await authFetch(`/api/v1/documents`);if(!r.ok)throw new Error("docs "+r.status);const d=await r.json();cache.docs=d.documents||[];return cache.docs;}
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
+  async function getSimulare(y){const k=`sim-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/simulare-regim/${y}`);if(!r.ok)throw new Error("sim "+r.status);cache[k]=await r.json();return cache[k];}
   async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
   async function getGhid(all){const k=all?"ghid_all":"ghid_me";if(cache[k])return cache[k];const r=await authFetch("/api/v1/ghid"+(all?"?all=1":""));if(!r.ok)throw new Error("ghid "+r.status);cache[k]=await r.json();return cache[k];}
 
@@ -1214,6 +1219,68 @@
       +`<div class="bar-track"><div class="bar-fill${gold?' gold':''}" style="width:${pct}%"></div></div>`
       +`<div class="thr-cap">${cap}</div></div>`;
   }
+  // ---- A3.1: Simulator regim normă-vs-real (lazy, pe buton; consumă /api/v1/simulare-regim) ----
+  // Traducerea celor 5 coduri din avertismente_legale trăiește 100% AICI (coduri stabile din
+  // A1/A2, formatare în UI — separație curată). Pattern inline ca FLINE. RegulĂ stil: fără
+  // majuscule de accentuare; forța vine din claritate.
+  const SIM_AVERT = {
+    NORMA_INDISPONIBILA:{titlu:"Normă indisponibilă",ton:"info",
+      text:"Nu avem valoarea normei pentru profilul tău (județ + tip localitate). Completeaz-o ca să putem compara cele două regimuri."},
+    NORMA_DOAR_DIN_2026:{titlu:"Norma — doar din 2026",ton:"info",
+      text:"Pentru ridesharing, impozitarea pe normă e disponibilă abia din 2026. Anul acesta se aplică obligatoriu sistemul real."},
+    PLAFON_DEPASIT:{titlu:"Ai depășit plafonul de normă",ton:"atentie",
+      text:"Ai depășit plafonul de 126.038 lei venit brut (2026). Din anul viitor treci obligatoriu la sistem real — nu mai este o opțiune, ci o obligație legală."},
+    REVENIRE_NORMA_2ANI:{titlu:"Revenirea la normă durează",ton:"atentie",
+      text:"Ești pe sistem real. Revenirea la normă e posibilă doar după minimum 2 ani fiscali pe real — verifică de când ești pe real cu contabilul."},
+    SCHIMBARE_ANUL_URMATOR:{titlu:"Schimbarea se face de anul viitor",ton:"info",
+      text:"Decizia de regim se aplică prin Declarația Unică (termen 25 mai) și e valabilă de anul viitor, nu în cursul anului curent."},
+  };
+  function _simKpi(lab, total, recomandat){
+    const badge = recomandat ? '<span class="trend up" style="margin-left:auto">recomandat</span>' : "";
+    return `<div class="kpi${recomandat?" g":""}"><div class="top"><div class="lab">${lab}</div>${badge}</div>`
+      +`<div class="val${recomandat?" g":""} num">${RON(total)} lei</div><div class="sub">taxe estimate / an</div></div>`;
+  }
+  function renderSimulator(d){
+    const box=document.getElementById("sim-body"); if(!box) return;
+    if(!d){ box.innerHTML=""; return; }
+    if(d.fara_venituri){
+      box.innerHTML='<div class="hint">Înregistrează venituri ca simularea să devină relevantă — atunci comparăm normă vs sistem real pe cifrele tale reale.</div>';
+      return;
+    }
+    let html="";
+    if(d.norma){
+      html += `<div class="grid g-2" style="margin-bottom:14px">`
+        + _simKpi("Sistem real", d.real.total_taxe, d.recomandat==="SISTEM_REAL")
+        + _simKpi("Normă de venit", d.norma.total_taxe, d.recomandat==="NORMA_VENIT")
+        + `</div>`;
+      if(d.recomandat){
+        const nume = d.recomandat==="NORMA_VENIT" ? "normă de venit" : "sistemul real";
+        html += `<div style="background:var(--emerald-dim);color:var(--emerald-br);border-radius:12px;padding:12px 14px;font-weight:600;margin-bottom:12px">`
+          +`✅ Pe ${nume} ai plăti mai puțin — economisești ~${lei0(d.diferenta)} lei pe an.</div>`;
+      }
+    } else {
+      // normă indisponibilă / nepermisă → doar sistemul real, fără recomandare
+      html += `<div class="grid g-2" style="margin-bottom:14px">${_simKpi("Sistem real", d.real.total_taxe, false)}</div>`;
+    }
+    for(const cod of (d.avertismente_legale||[])){
+      const a=SIM_AVERT[cod]; if(!a) continue;
+      const col = a.ton==="atentie" ? "var(--gold)" : "var(--blue)";
+      const dim = a.ton==="atentie" ? "var(--gold-dim)" : "var(--blue-dim)";
+      const ic = a.ton==="atentie" ? "⚠️" : "ℹ️";
+      html += `<div style="border-left:3px solid ${col};background:${dim};border-radius:0 10px 10px 0;padding:10px 13px;margin-bottom:8px">`
+        +`<b>${ic} ${a.titlu}</b><div class="sub" style="margin-top:3px">${a.text}</div></div>`;
+    }
+    html += `<div class="synced-line" style="margin-top:6px">Estimare orientativă — verifică cu contabilul</div>`;
+    box.innerHTML=html;
+  }
+  async function loadSimulare(){
+    const box=document.getElementById("sim-body"); if(!box) return;
+    box.innerHTML='<div class="hint">Se calculează…</div>';
+    try{ renderSimulator(await getSimulare(Y)); }
+    catch(e){ console.error(e); box.innerHTML='<div class="hint" style="color:var(--red)">Nu am putut calcula simularea acum. Încearcă din nou.</div>'; }
+  }
+  window.loadSimulare=loadSimulare;
+
   function renderFiscalHero(d){
     const box=document.getElementById("ov-fiscal"); if(!box) return;
     if(!d || !Array.isArray(d.breakdown)){ box.innerHTML=""; return; }
