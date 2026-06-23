@@ -616,6 +616,10 @@
           <div class="panel-h"><div class="t">Brut vs. Net pe luni<span>2026</span></div></div>
           <div class="chart-box"><canvas id="venBars"></canvas></div>
         </div>
+        <div class="panel" id="ven-platforme-panel" style="margin-bottom:16px;display:none">
+          <div class="panel-h"><div class="t">Venit pe platformă<span>luna curentă</span></div></div>
+          <div class="chart-box sm"><canvas id="venPlatforme"></canvas></div>
+        </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Detaliu lunar Bolt</div><a class="btn btn-ghost" href="https://t.me/contabilPFA_bot"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizează în bot</a></div>
           <table>
@@ -1549,7 +1553,7 @@
         pointBackgroundColor:C.emeraldBr,pointRadius:4,pointHoverRadius:6}]},
       options:baseOpts({scales:{x:{grid:{display:false},ticks:{color:C.txt}},y:{grid:{color:C.grid},ticks:{color:C.txt}}}})});
   }
-  function drawDonut(canvasId,items,key){
+  function drawDonut(canvasId,items,key,colors){
     const labels=items.map(i=>i.label);
     const data=items.map(i=>Number(i.amount_brut||0));
     const palette=[C.emerald,C.gold,C.blue,C.emeraldBr,C.red,"#C9A14A","#7FC8A0"];
@@ -1557,7 +1561,7 @@
     const el=document.getElementById(canvasId);if(!el)return;
     if(data.length===0){return;}
     charts[canvasId]=new Chart(el,{type:"doughnut",
-      data:{labels,datasets:[{data,backgroundColor:palette.slice(0,data.length),borderColor:"#0D1524",borderWidth:3,hoverOffset:7}]},
+      data:{labels,datasets:[{data,backgroundColor:(colors||palette.slice(0,data.length)),borderColor:"#0D1524",borderWidth:3,hoverOffset:7}]},
       options:baseOpts({cutout:"66%",plugins:{legend:{display:true,position:"bottom",labels:{color:C.txt,font:{size:11,family:"Hanken Grotesk"},boxWidth:11,padding:10}},tooltip:baseOpts().plugins.tooltip}})});
   }
   const ICO={INCOME:'<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -1607,7 +1611,24 @@
         else tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:14px">Fără încasări în '+MONTHS[M]+'.</td></tr>';
       }
       buildVenBars();
+      renderVenPlatforme(p.income_by_platform||[]);
     }catch(e){console.error(e);}
+  }
+  // Donut „Venit pe platformă" (B2) — apare DOAR la ≥2 platforme REALE (brand truthy;
+  // „Altele"=neatribuit NU se numără). Când apare, include „Altele" ca felie. Culori de
+  // brand distincte (Bolt verde, Uber blue, Altele gri) — fără ierarhie funcțională.
+  const BRAND_COLOR={bolt:C.emerald, uber:C.blue};   // „Altele" (brand null) → fallback C.txt (gri)
+  function renderVenPlatforme(items){
+    const panel=document.getElementById("ven-platforme-panel"); if(!panel) return;
+    const reale=(items||[]).filter(i=>i.brand).length;   // platforme reale (null „Altele" exclus)
+    if(reale<2){
+      panel.style.display="none";
+      if(charts.venPlatforme){ charts.venPlatforme.destroy(); delete charts.venPlatforme; }
+      return;
+    }
+    panel.style.display="";
+    const colors=items.map(i=>BRAND_COLOR[i.brand]||C.txt);   // Altele → gri neutru
+    drawDonut("venPlatforme", items, "amount_brut", colors);
   }
   async function buildVenBars(){
     const labels=[],brut=[],net=[];
