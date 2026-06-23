@@ -1193,7 +1193,11 @@ def simulare_regim_endpoint(year: int):
     construiesc în UI). Orientativ.
 
     Normă = valoarea stocată în profil (None → NORMA_INDISPONIBILA, NU inventăm). Pentru
-    userii pe real fără normă completată, lookup-ul live (tip localitate) vine în A3-UI.
+    userii pe real fără normă completată, UI-ul (A3.2) caută live norma pe tip localitate
+    și o trimite via `?norma=<float>` (IPOTEZĂ — NU se scrie în profil, doar pentru simulare).
+
+    Query opțional `?norma=<float>`: prezent valid >0 → override (ipoteză); absent/gol →
+    norma stocată (regresie 0); invalid (≤0 / non-numeric) → 400.
     """
     if not (2020 <= year <= 2099):
         return jsonify({"error": "invalid year"}), 400
@@ -1201,6 +1205,18 @@ def simulare_regim_endpoint(year: int):
     user_id, err = _require_user()
     if err:
         return err
+
+    # Override normă (A3.2): ipoteză „ce-ar fi dacă", NU schimbă profilul. Gol/absent →
+    # None (folosim stocata). Prezent dar invalid (≤0 / non-numeric) → 400 explicit.
+    norma_override = None
+    norma_raw = (request.args.get("norma") or "").strip()
+    if norma_raw:
+        try:
+            norma_override = float(norma_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid norma"}), 400
+        if norma_override <= 0:
+            return jsonify({"error": "invalid norma"}), 400
 
     session = get_session()
     try:
@@ -1215,10 +1231,12 @@ def simulare_regim_endpoint(year: int):
 
     from app.integrations.anaf.simulare_regim import simulare_regim
     regim_curent = profile.get("regim_impunere") or "SISTEM_REAL"
+    # Override din param (ipoteză) are prioritate; altfel norma stocată în profil.
+    norma_anuala = norma_override if norma_override is not None else profile.get("norma_venit_anuala")
     sim = simulare_regim(
         venit_brut=r.venit_brut,
         cheltuieli=r.cheltuieli,
-        norma_anuala=profile.get("norma_venit_anuala"),   # stocată; None → NORMA_INDISPONIBILA
+        norma_anuala=norma_anuala,                        # override (ipoteză) sau stocată
         an=year,
         activity_code=profile.get("activity_code") or "",
         regim_curent=regim_curent,                        # RAW — gardianul îl aplică simulare_regim
@@ -1229,6 +1247,7 @@ def simulare_regim_endpoint(year: int):
     return jsonify({
         "an": year,
         "regim_curent": regim_curent,
+        "judet": profile.get("judet"),                    # pentru norma-lookup live (A3.2)
         # Caz prezentare (NU eroare): fără venituri YTD → flag pentru UI ("înregistrează
         # venituri ca simularea să devină relevantă"). Funcția pură A1 rămâne neatinsă.
         "fara_venituri": (r.venit_brut or 0) <= 0,
