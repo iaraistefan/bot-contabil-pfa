@@ -968,7 +968,7 @@
   async function getDocs(){if(cache.docs)return cache.docs;const r=await authFetch(`/api/v1/documents`);if(!r.ok)throw new Error("docs "+r.status);const d=await r.json();cache.docs=d.documents||[];return cache.docs;}
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
-  async function getSimulare(y){const k=`sim-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/simulare-regim/${y}`);if(!r.ok)throw new Error("sim "+r.status);cache[k]=await r.json();return cache[k];}
+  async function getSimulare(y,norma){const k=`sim-${y}-${norma||""}`;if(cache[k])return cache[k];const u=`/api/v1/simulare-regim/${y}`+(norma?`?norma=${encodeURIComponent(norma)}`:"");const r=await authFetch(u);if(!r.ok)throw new Error("sim "+r.status);cache[k]=await r.json();return cache[k];}
   async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
   async function getGhid(all){const k=all?"ghid_all":"ghid_me";if(cache[k])return cache[k];const r=await authFetch("/api/v1/ghid"+(all?"?all=1":""));if(!r.ok)throw new Error("ghid "+r.status);cache[k]=await r.json();return cache[k];}
 
@@ -1240,14 +1240,37 @@
     return `<div class="kpi${recomandat?" g":""}"><div class="top"><div class="lab">${lab}</div>${badge}</div>`
       +`<div class="val${recomandat?" g":""} num">${RON(total)} lei</div><div class="sub">taxe estimate / an</div></div>`;
   }
-  function renderSimulator(d){
+  // A3.2: ultimul payload simulare (pentru lookup-ul live de normă — avem nevoie de judet).
+  let SIM_LAST=null;
+  const TIP_LBL={municipiu:"Municipiu",oras:"Oraș",comuna:"Comună"};
+  function _simAvertBox(a){
+    const col = a.ton==="atentie" ? "var(--gold)" : "var(--blue)";
+    const dim = a.ton==="atentie" ? "var(--gold-dim)" : "var(--blue-dim)";
+    const ic = a.ton==="atentie" ? "⚠️" : "ℹ️";
+    return `<div style="border-left:3px solid ${col};background:${dim};border-radius:0 10px 10px 0;padding:10px 13px;margin-bottom:8px">`
+      +`<b>${ic} ${a.titlu}</b><div class="sub" style="margin-top:3px">${a.text}</div></div>`;
+  }
+  // Selector tip localitate — DOAR pentru NORMA_INDISPONIBILA (lipsă de date; lookup ajută).
+  // NU pentru NORMA_DOAR_DIN_2026 (interzis legal — n-am sugera ceva nepermis).
+  function _simSelectorTip(){
+    const chip=(v)=>`<button class="btn btn-ghost" onclick="simPickTip('${v}')" style="flex:1;min-height:40px">${TIP_LBL[v]}</button>`;
+    return `<div class="panel" style="background:var(--card-2);margin:0 0 8px">`
+      +`<div class="hint" style="margin-bottom:8px">Ca să comparăm pe cifrele tale, alege tipul localității (norma diferă pe nivel):</div>`
+      +`<div style="display:flex;gap:8px">${chip("municipiu")}${chip("oras")}${chip("comuna")}</div>`
+      +`<div id="sim-tip-rez" style="margin-top:10px"></div></div>`;
+  }
+  function renderSimulator(d, ipotezaNote){
     const box=document.getElementById("sim-body"); if(!box) return;
     if(!d){ box.innerHTML=""; return; }
+    SIM_LAST=d;
     if(d.fara_venituri){
       box.innerHTML='<div class="hint">Înregistrează venituri ca simularea să devină relevantă — atunci comparăm normă vs sistem real pe cifrele tale reale.</div>';
       return;
     }
     let html="";
+    if(ipotezaNote){
+      html += `<div style="background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-weight:600">🔎 ${ipotezaNote}</div>`;
+    }
     if(d.norma){
       html += `<div class="grid g-2" style="margin-bottom:14px">`
         + _simKpi("Sistem real", d.real.total_taxe, d.recomandat==="SISTEM_REAL")
@@ -1262,13 +1285,14 @@
       // normă indisponibilă / nepermisă → doar sistemul real, fără recomandare
       html += `<div class="grid g-2" style="margin-bottom:14px">${_simKpi("Sistem real", d.real.total_taxe, false)}</div>`;
     }
-    for(const cod of (d.avertismente_legale||[])){
-      const a=SIM_AVERT[cod]; if(!a) continue;
-      const col = a.ton==="atentie" ? "var(--gold)" : "var(--blue)";
-      const dim = a.ton==="atentie" ? "var(--gold-dim)" : "var(--blue-dim)";
-      const ic = a.ton==="atentie" ? "⚠️" : "ℹ️";
-      html += `<div style="border-left:3px solid ${col};background:${dim};border-radius:0 10px 10px 0;padding:10px 13px;margin-bottom:8px">`
-        +`<b>${ic} ${a.titlu}</b><div class="sub" style="margin-top:3px">${a.text}</div></div>`;
+    const av=d.avertismente_legale||[];
+    const arataSelector = av.includes("NORMA_INDISPONIBILA") && !!d.judet;  // lipsă date + avem judet
+    for(const cod of av){
+      if(cod==="NORMA_INDISPONIBILA" && arataSelector) continue;  // devine selector acționabil
+      const a=SIM_AVERT[cod]; if(a) html += _simAvertBox(a);
+    }
+    if(arataSelector){
+      html += _simAvertBox(SIM_AVERT.NORMA_INDISPONIBILA) + _simSelectorTip();
     }
     html += `<div class="synced-line" style="margin-top:6px">Estimare orientativă — verifică cu contabilul</div>`;
     box.innerHTML=html;
@@ -1279,7 +1303,24 @@
     try{ renderSimulator(await getSimulare(Y)); }
     catch(e){ console.error(e); box.innerHTML='<div class="hint" style="color:var(--red)">Nu am putut calcula simularea acum. Încearcă din nou.</div>'; }
   }
+  // A3.2: user pe real fără normă → alege tip localitate → lookup live → re-simulare cu
+  // norma ca IPOTEZĂ (?norma=). NU scrie în profil, NU schimbă regimul.
+  async function simPickTip(tip){
+    const rez=document.getElementById("sim-tip-rez"); if(rez) rez.innerHTML='<div class="hint">⏳ Caut norma în nomenclator…</div>';
+    const judet=(SIM_LAST&&SIM_LAST.judet)||"";
+    try{
+      const r=await authFetch(`/api/v1/norma-lookup?judet=${encodeURIComponent(judet)}&tip=${tip}&an=${Y}`);
+      const d=await r.json();
+      if(d.found && d.norma>0){
+        const note=`Simulare pe norma de ${TIP_LBL[tip]} (${lei0(d.norma)} lei) — ești pe sistem real, deci e o ipoteză (ce-ar fi dacă).`;
+        renderSimulator(await getSimulare(Y, d.norma), note);
+      } else if(rez){
+        rez.innerHTML='<div class="hint" style="color:var(--gold)">Nu există o normă pentru această combinație (județ + tip). Verifică decizia AJFP a județului tău.</div>';
+      }
+    }catch(e){ console.error(e); if(rez) rez.innerHTML='<div class="hint" style="color:var(--red)">Nu am putut căuta norma acum. Încearcă din nou.</div>'; }
+  }
   window.loadSimulare=loadSimulare;
+  window.simPickTip=simPickTip;
 
   function renderFiscalHero(d){
     const box=document.getElementById("ov-fiscal"); if(!box) return;

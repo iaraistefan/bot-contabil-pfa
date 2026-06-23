@@ -103,3 +103,49 @@ def test_an_invalid_400(monkeypatch, tmp_path):
     webapp, client, uid = _web(monkeypatch, tmp_path, regim_impunere="SISTEM_REAL")
     r = client.get("/api/v1/simulare-regim/1999")
     assert r.status_code == 400
+
+
+# ════════════════════════════════════════════════════════════
+#   A3.2 — override ?norma= (ipoteză) + judet în răspuns
+# ════════════════════════════════════════════════════════════
+
+def test_judet_in_raspuns(monkeypatch, tmp_path):
+    webapp, client, uid = _web(monkeypatch, tmp_path, regim_impunere="SISTEM_REAL",
+                               norma_venit_anuala=None, activity_code="ridesharing", judet="SJ")
+    _mock_ytd(monkeypatch, webapp, 90_000, 30_000)
+    d = client.get(f"/api/v1/simulare-regim/{AN}").get_json()
+    assert d["judet"] == "SJ"                              # pentru norma-lookup live
+
+
+def test_override_norma_deblocheaza_comparatia(monkeypatch, tmp_path):
+    # user pe real FĂRĂ normă stocată → fără param = indisponibilă; cu ?norma= → comparație
+    webapp, client, uid = _web(monkeypatch, tmp_path, regim_impunere="SISTEM_REAL",
+                               norma_venit_anuala=None, activity_code="ridesharing", judet="SJ")
+    _mock_ytd(monkeypatch, webapp, 200_000, 20_000)
+    fara = client.get(f"/api/v1/simulare-regim/{AN}").get_json()
+    assert fara["norma"] is None and "NORMA_INDISPONIBILA" in fara["avertismente_legale"]
+    cu = client.get(f"/api/v1/simulare-regim/{AN}?norma=50000").get_json()
+    assert cu["norma"] is not None                        # override (ipoteză) → comparație
+    assert cu["recomandat"] is not None
+    assert "NORMA_INDISPONIBILA" not in cu["avertismente_legale"]
+
+
+def test_override_nu_scrie_in_profil(monkeypatch, tmp_path):
+    # IPOTEZĂ: ?norma NU modifică profilul userului
+    webapp, client, uid = _web(monkeypatch, tmp_path, regim_impunere="SISTEM_REAL",
+                               norma_venit_anuala=None, activity_code="ridesharing", judet="SJ")
+    _mock_ytd(monkeypatch, webapp, 200_000, 20_000)
+    client.get(f"/api/v1/simulare-regim/{AN}?norma=50000")
+    from app.http import app as webapp2
+    s = webapp.get_session(); u = s.get(User, uid)
+    assert u.norma_venit_anuala is None                   # profilul NEatins
+    s.close()
+
+
+def test_norma_invalida_400(monkeypatch, tmp_path):
+    webapp, client, uid = _web(monkeypatch, tmp_path, regim_impunere="SISTEM_REAL",
+                               norma_venit_anuala=None, activity_code="ridesharing")
+    _mock_ytd(monkeypatch, webapp, 90_000, 30_000)
+    assert client.get(f"/api/v1/simulare-regim/{AN}?norma=abc").status_code == 400   # non-numeric
+    assert client.get(f"/api/v1/simulare-regim/{AN}?norma=-5").status_code == 400    # ≤0
+    assert client.get(f"/api/v1/simulare-regim/{AN}?norma=").status_code == 200      # gol → stocata
