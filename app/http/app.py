@@ -1181,6 +1181,65 @@ def declaratie_unica_d212(year: int):
         })
 
 
+@flask_app.route("/api/v1/simulare-regim/<int:year>")
+def simulare_regim_endpoint(year: int):
+    """
+    Simulator regim NORMĂ vs SISTEM REAL pentru userul curent (A2).
+
+    Refolosește venit_brut/cheltuieli YTD din `compute_d212_anual` (SURSĂ UNICĂ — exact
+    aceeași cale ca /api/v1/declaratie-unica, deci cifrele se potrivesc) + profilul
+    (normă STOCATĂ, activitate, regim curent, pensionar/salariat) → cheamă funcția pură
+    `simulare_regim`. Întoarce DOAR date + coduri de avertisment (mesajele lizibile se
+    construiesc în UI). Orientativ.
+
+    Normă = valoarea stocată în profil (None → NORMA_INDISPONIBILA, NU inventăm). Pentru
+    userii pe real fără normă completată, lookup-ul live (tip localitate) vine în A3-UI.
+    """
+    if not (2020 <= year <= 2099):
+        return jsonify({"error": "invalid year"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    session = get_session()
+    try:
+        # Sursă unică: aceleași venit_brut/cheltuieli YTD ca declarația reală.
+        r = tax_engine.compute_d212_anual(session, user_id=user_id, an=year)
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    except Exception as e:
+        logger.error(f"API simulare-regim error {year} user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    from app.integrations.anaf.simulare_regim import simulare_regim
+    regim_curent = profile.get("regim_impunere") or "SISTEM_REAL"
+    sim = simulare_regim(
+        venit_brut=r.venit_brut,
+        cheltuieli=r.cheltuieli,
+        norma_anuala=profile.get("norma_venit_anuala"),   # stocată; None → NORMA_INDISPONIBILA
+        an=year,
+        activity_code=profile.get("activity_code") or "",
+        regim_curent=regim_curent,                        # RAW — gardianul îl aplică simulare_regim
+        pensionar=bool(profile.get("is_pensionar")),
+        asigurat_salariat=bool(profile.get("is_salariat")),
+    )
+
+    return jsonify({
+        "an": year,
+        "regim_curent": regim_curent,
+        # Caz prezentare (NU eroare): fără venituri YTD → flag pentru UI ("înregistrează
+        # venituri ca simularea să devină relevantă"). Funcția pură A1 rămâne neatinsă.
+        "fara_venituri": (r.venit_brut or 0) <= 0,
+        "real": sim.real,
+        "norma": sim.norma,
+        "recomandat": sim.recomandat,
+        "diferenta": sim.diferenta,
+        "avertismente_legale": sim.avertismente_legale,
+    })
+
+
 @flask_app.route("/api/v1/declaratie/<tip>/<int:year>/<int:month>")
 def genereaza_declaratie(tip: str, year: int, month: int):
     """
