@@ -135,6 +135,10 @@
   .kpi .trend{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:20px}
   .kpi .trend.up{background:var(--pos-dim);color:var(--pos-br)} .kpi .trend.up::before{content:"▲ "}
   .kpi .trend.down{background:var(--red-dim);color:var(--red)} .kpi .trend.down::before{content:"▼ "}
+  /* MoM (C2): culoare decuplată de săgeată — săgeata e în text, culoarea = polaritate (favorabil/nefavorabil/neutru). */
+  .kpi .trend.good{background:var(--pos-dim);color:var(--pos-br)}
+  .kpi .trend.bad{background:var(--red-dim);color:var(--red)}
+  .kpi .trend.neutral{background:rgba(143,160,184,.14);color:var(--muted)}
   .kpi .lab{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:5px}
   .kpi .val{font-family:var(--display);font-weight:700;font-size:1.62rem;letter-spacing:-.02em;line-height:1}
   .kpi .val.g{color:var(--pos-br)} .kpi .val.gold{color:var(--gold)} .kpi .val.r{color:var(--red)}
@@ -567,11 +571,11 @@
             <div class="lab">Venit net</div><div class="val g num" id="ov-net">—</div><div class="sub" id="ov-net-sub">RON · la zi</div>
           </div>
           <div class="kpi r">
-            <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round"/></svg></div></div>
+            <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round"/></svg></div><span class="trend" id="ov-chelt-trend" style="display:none"></span></div>
             <div class="lab">Cheltuieli</div><div class="val r num" id="ov-chelt">—</div><div class="sub">doar partea deductibilă</div>
           </div>
           <div class="kpi gold">
-            <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+            <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="trend" id="ov-tva-trend" style="display:none"></span></div>
             <div class="lab">TVA de declarat</div><div class="val gold num" id="ov-tva">—</div><div class="sub">D301 · pe comisionul Bolt</div>
           </div>
           <div class="kpi b">
@@ -607,7 +611,7 @@
       <!-- ===== VENITURI ===== -->
       <section class="page" id="page-venituri">
         <div class="grid g-4" style="margin-bottom:16px">
-          <div class="kpi g"><div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round"/></svg></div></div><div class="lab">Brut</div><div class="val g num" id="ven-brut">—</div><div class="sub">total încasări</div></div>
+          <div class="kpi g"><div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round"/></svg></div><span class="trend" id="ven-brut-trend" style="display:none"></span></div><div class="lab">Brut</div><div class="val g num" id="ven-brut">—</div><div class="sub">total încasări</div></div>
           <div class="kpi b"><div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/></svg></div></div><div class="lab">Card / app</div><div class="val num" id="ven-card">—</div><div class="sub">virat în cont</div></div>
           <div class="kpi gold"><div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 10h6" stroke-linecap="round"/></svg></div></div><div class="lab">Cash în mână</div><div class="val gold num" id="ven-cash">—</div><div class="sub">numerar</div></div>
           <div class="kpi r"><div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round"/></svg></div></div><div class="lab">Comision Bolt</div><div class="val r num" id="ven-comision">—</div><div class="sub">cheltuială 100%</div></div>
@@ -973,6 +977,39 @@
   async function getObligatii(y,m){const k=`ob${y}-${m}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/obligatii/${y}/${m}`);if(!r.ok)throw new Error("obligatii "+r.status);cache[k]=await r.json();return cache[k];}
   async function getD212(y){const k=`d212-${y}`;if(cache[k])return cache[k];const r=await authFetch(`/api/v1/declaratie-unica/${y}`);if(!r.ok)throw new Error("d212 "+r.status);cache[k]=await r.json();return cache[k];}
   async function getSimulare(y,norma){const k=`sim-${y}-${norma||""}`;if(cache[k])return cache[k];const u=`/api/v1/simulare-regim/${y}`+(norma?`?norma=${encodeURIComponent(norma)}`:"");const r=await authFetch(u);if(!r.ok)throw new Error("sim "+r.status);cache[k]=await r.json();return cache[k];}
+  // MoM (C2): blocul mom pentru ULTIMA LUNĂ COMPLETĂ relativ la AZI (independent de luna
+  // vizualizată — badge = tendință confirmată). getMonth() 0-indexat = luna trecută 1-indexat;
+  // ianuarie (0) → decembrie an precedent. Cerut cu ?mom=1 (opt-in C1). Cache-uit o dată.
+  async function getMom(){
+    if("mom" in cache) return cache.mom;
+    const now=new Date(); let lm=now.getMonth(), ly=now.getFullYear();
+    if(lm===0){ lm=12; ly--; }
+    try{ const r=await authFetch(`/api/v1/period/${ly}/${lm}?mom=1`); const d=await r.json(); cache.mom=(d&&d.mom)||null; }
+    catch(e){ cache.mom=null; }
+    return cache.mom;
+  }
+  // Polaritate: culoarea reflectă SEMNIFICAȚIA pentru user, nu direcția. venit up=bun,
+  // cost up=rău (invers), tva neutru. Săgeata (▲/▼) arată mereu direcția reală.
+  const MOM_POL={income_total:"venit", expense_deductible_total:"cost", vat_out_total:"neutru"};
+  function applyMomBadge(elId, metricKey){
+    const el=document.getElementById(elId); if(!el) return;
+    getMom().then(mom=>{
+      const m=mom&&mom[metricKey];
+      if(!m||!m.comparabil){ el.style.display="none"; return; }   // necomparabil → ascuns (nu badge gol)
+      const pol=MOM_POL[metricKey];
+      const arrow=m.dir==="up"?"▲":m.dir==="down"?"▼":"";
+      let cls="neutral";
+      if(m.dir!=="flat" && pol!=="neutru"){
+        const fav=(pol==="venit")?(m.dir==="up"):(m.dir==="down");  // cost: scădere = favorabil
+        cls=fav?"good":"bad";
+      }
+      const txt=(arrow?arrow+" ":"")+Math.abs(m.delta_pct)+"%";
+      el.className="trend "+cls;
+      el.textContent=txt;                                          // compact pe badge
+      el.title=txt+" față de luna trecută";                        // text complet la hover
+      el.style.display="";
+    }).catch(()=>{ el.style.display="none"; });
+  }
   async function getSetari(){if(cache.setari)return cache.setari;const r=await authFetch("/api/v1/setari");if(!r.ok)throw new Error("setari "+r.status);cache.setari=await r.json();return cache.setari;}
   async function getGhid(all){const k=all?"ghid_all":"ghid_me";if(cache[k])return cache[k];const r=await authFetch("/api/v1/ghid"+(all?"?all=1":""));if(!r.ok)throw new Error("ghid "+r.status);cache[k]=await r.json();return cache[k];}
 
@@ -1129,6 +1166,8 @@
       // pe luna curentă incompletă ieșea fals-negativ = −cheltuieli). #6
       setNum("ov-chelt", p.expense_deductible_total, RON);
       setNum("ov-tva", p.vat_out_total, RON);
+      applyMomBadge("ov-chelt-trend", "expense_deductible_total");   // cost: ▲=roșu
+      applyMomBadge("ov-tva-trend", "vat_out_total");                // neutru: gri
       // km cu pasager din parcurs (cache-only, nu lovește API Bolt)
       try{const pc=await getParcurs(Y,M);setNum("ov-km", pc.km_bolt_pasager, KM);setTxt("ov-km-sub",`${MONTHS[M]} · ${pc.nr_ture||0} ture`);}catch(e){setTxt("ov-km","—");}
       // donut distribuție din expense_breakdown
@@ -1591,6 +1630,7 @@
       const brut = Number(p.income_total||0);
       setNum("ven-brut", brut, RON);
       setNum("ven-comision", comision, RON);
+      applyMomBadge("ven-brut-trend", "income_total");              // venit: ▲=verde
       // cash/card nu sunt în period — le lăsăm estimate din tranzacții dacă apar; altfel —
       setTxt("ven-cash", "—");
       setTxt("ven-card", "—");
