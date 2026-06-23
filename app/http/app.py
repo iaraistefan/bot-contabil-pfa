@@ -323,6 +323,13 @@ def period_totals(year: int, month: int):
             session, user_id=user_id, year=year, month=month
         )
         totals["d100"] = _d100_block(session, user_id, year, month, totals)
+        # Deltă month-over-month — OPT-IN (?mom=1). Aditiv: apelurile existente (fără param)
+        # rămân neatinse (regresie 0 + fără compute_period extra). Frontend-ul cere ?mom=1
+        # doar pentru ultima lună completă (badge tendință confirmată).
+        if request.args.get("mom") == "1":
+            totals["mom"] = tax_engine.compute_mom(
+                session, user_id=user_id, year=year, month=month
+            )
         return jsonify(totals)
     except Exception as e:
         logger.error(f"API period error {year}/{month} user={user_id}: {e}")

@@ -217,6 +217,40 @@ def compute_period(
     }
 
 
+# Metricile LUNARE pe care le comparăm month-over-month (NU venit net anual YTD).
+_MOM_METRICI = ("income_total", "expense_deductible_total", "vat_out_total")
+
+
+def compute_mom(session: Session, *, user_id: int, year: int, month: int) -> Dict[str, Any]:
+    """
+    Deltă month-over-month: luna (year, month) vs luna PRECEDENTĂ, pe metricile LUNARE
+    (income/expense/vat). Opțiunea (b): apelantul pasează ULTIMA LUNĂ COMPLETĂ → comparăm
+    două luni complete (cifră corectă fără asterisc, NU luna curentă parțială).
+
+    Pentru fiecare metrică: {curr, prev, delta_pct, dir, comparabil}.
+      - comparabil=False dacă prev<=0 (user nou / prima lună / fără bază) → NU inventăm %.
+      - dir: "up" (delta>0) / "down" (delta<0) / "flat" (delta==0).
+    Ianuarie → comparat cu decembrie anul precedent.
+    """
+    py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+    cur = compute_period(session, user_id=user_id, year=year, month=month)
+    prev = compute_period(session, user_id=user_id, year=py, month=pm)
+
+    out: Dict[str, Any] = {}
+    for k in _MOM_METRICI:
+        c = round(float(cur.get(k) or 0.0), 2)
+        p = round(float(prev.get(k) or 0.0), 2)
+        if p <= 0:
+            out[k] = {"curr": c, "prev": p, "delta_pct": None,
+                      "dir": None, "comparabil": False}
+        else:
+            d = (c - p) / p * 100.0
+            out[k] = {"curr": c, "prev": p, "delta_pct": round(d, 1),
+                      "dir": ("up" if d > 0 else "down" if d < 0 else "flat"),
+                      "comparabil": True}
+    return out
+
+
 # ════════════════════════════════════════════════════════
 # === Uber sub-pas B — split D100 per-platformă (per-brand) ===
 # ════════════════════════════════════════════════════════
