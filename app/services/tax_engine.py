@@ -75,6 +75,10 @@ def compute_period(
     )
 
     income_by_cat: Dict[str, float] = defaultdict(float)
+    # Venit per PLATFORMĂ (Bolt/Uber/Altele) — aceeași buclă + filtru ca income_by_cat,
+    # deci INVARIANT garantat prin construcție: Σ == income_total. Brand din counterparty
+    # via _d100_brand_key (sursă unică, ca vat_out_by_brand). None → „Altele" (neatribuit).
+    income_by_brand_acc: Dict[Optional[str], float] = defaultdict(float)
     expense_brut_by_cat: Dict[str, float] = defaultdict(float)
     expense_deductible_by_cat: Dict[str, float] = defaultdict(float)
     expense_pct_by_cat: Dict[str, int] = {}
@@ -87,6 +91,7 @@ def compute_period(
     for tx in txs:
         if tx.tx_type == "INCOME":
             income_by_cat[tx.category] += tx.amount_brut
+            income_by_brand_acc[_d100_brand_key(tx.counterparty)] += tx.amount_brut
 
             if tx.payment_method == "CASH":
                 income_cash += tx.amount_brut
@@ -115,6 +120,19 @@ def compute_period(
             "icon": cat.icon if cat else "💰",
             "amount": round(amount, 2),
         })
+
+    # Defalcare venit pe PLATFORMĂ (UI-ready: {brand, label, amount_brut}), sortată desc,
+    # fără felii zero. None → „Altele" (venit neatribuit unei platforme — cash/bancă/APP).
+    # `amount_brut` (nu `amount`) ca să refolosească exact `drawDonut` din dashboard.
+    _BRAND_LABEL = {"bolt": "Bolt", "uber": "Uber", None: "Altele"}
+    income_by_platform: List[Dict[str, Any]] = sorted(
+        (
+            {"brand": b, "label": _BRAND_LABEL.get(b, "Altele"),
+             "amount_brut": round(v, 2)}
+            for b, v in income_by_brand_acc.items() if round(v, 2) != 0
+        ),
+        key=lambda x: -x["amount_brut"],
+    )
 
     expense_breakdown: List[Dict[str, Any]] = []
     for code, brut in expense_brut_by_cat.items():
@@ -179,6 +197,7 @@ def compute_period(
         "activity_icon": activity.icon,
         "income_total": income_total,
         "income_breakdown": income_breakdown,
+        "income_by_platform": income_by_platform,   # defalcare venit pe platformă (Bolt/Uber/Altele)
         "income_cash": round(income_cash, 2),
         "income_bank": round(income_bank, 2),
         "expense_total_brut": expense_total_brut,
