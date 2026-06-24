@@ -31,6 +31,14 @@ from xml.sax.saxutils import escape
 import unicodedata
 import re
 
+try:
+    from app.domain.tax_rules import BOLT_VAT_ID_NUMERIC   # cod TVA Bolt — sursă unică
+except ImportError:                                        # rulare standalone (__main__)
+    import os
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    from app.domain.tax_rules import BOLT_VAT_ID_NUMERIC
+
 
 # ============================================================
 #                    CONSTANTE
@@ -254,7 +262,7 @@ def operator_bolt(baza_lei: int) -> OperatorIntracom:
     return OperatorIntracom(
         tip="S",                       # achizitie intracomunitara de servicii
         tara="EE",                     # Estonia
-        cod_operator="102090374",      # VAT Bolt Operations OU
+        cod_operator=BOLT_VAT_ID_NUMERIC,   # VAT Bolt Operations OU — sursă unică
         denumire="BOLT OPERATIONS OU",
         baza=int(round(baza_lei)),
     )

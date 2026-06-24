@@ -14,7 +14,7 @@ comisionului, fara drept de deducere (fiind neplatitor) - deci TVA datorata
 
 from datetime import date
 
-from app.domain.tax_rules import cota_tva, VAT_STANDARD_PCT
+from app.domain.tax_rules import cota_tva, VAT_STANDARD_PCT, BOLT_VAT_ID
 
 LUNI = {
     1: "Ianuarie", 2: "Februarie", 3: "Martie", 4: "Aprilie",
@@ -548,7 +548,7 @@ def nume_fisier_d301_pdf(an: int, luna: int) -> str:
 
 # Partener implicit pentru ridesharing (Bolt). Se poate suprascrie din profil.
 BOLT_TARA = "EE"
-BOLT_COD_TVA = "EE102090374"          # Bolt Operations OU (verifica pe factura)
+BOLT_COD_TVA = BOLT_VAT_ID            # Bolt Operations OU — sursă unică (tax_rules)
 BOLT_DENUMIRE = "BOLT OPERATIONS OU"
 
 
