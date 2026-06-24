@@ -43,7 +43,6 @@ from app.integrations.exports.registru import (
 from app.integrations import bolt_sync  # Bolt API - venituri automate (/bolt)
 from app.http.app import start_http_server
 from app.domain import fiscal_calendar
-from app.domain import declaratii_spv  # Faza 1.3: fisa completare D301 (PDF vechi)
 from app.integrations.anaf import declaratii_service as decl_nou  # noile generatoare (XML + ghid)
 from app.migrations import run_migrations
 from app.migrare_coduri import ensure_coduri_fiscale_columns

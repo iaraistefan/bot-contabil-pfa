@@ -34,7 +34,7 @@ PRAG_TVA_21 = date(2025, 8, 1)
 # --- Cod TVA Bolt — SURSĂ UNICĂ (golden rule) ---
 # Confirmat la sursă: registrul eston e-Äriregister + pagina oficială Bolt pentru
 # șoferi (declararea comisionului în declarația TVA UE / D390). Entitate: Bolt
-# Operations OÜ (Estonia). Toate suprafețele (vat_engine, declaratii_spv, D390)
+# Operations OÜ (Estonia). Toate suprafețele (vat_engine, d390_generator)
 # referențiază aceste constante → fizic imposibil să mai divergă.
 BOLT_VAT_ID = "EE102090374"                # forma completă (cu prefix țară EE)
 BOLT_VAT_ID_NUMERIC = BOLT_VAT_ID[2:]      # "102090374" — fără prefix (D390 codO)

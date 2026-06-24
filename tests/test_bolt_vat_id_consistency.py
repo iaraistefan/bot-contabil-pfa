@@ -14,7 +14,6 @@ from pathlib import Path
 from app.domain.tax_rules import BOLT_VAT_ID, BOLT_VAT_ID_NUMERIC
 from app.domain.vat_engine import BRAND_DATABASE
 from app.domain import vat_engine
-from app.domain.declaratii_spv import BOLT_COD_TVA
 from app.integrations.anaf import d390_generator as d390
 
 COD_CORECT = "EE102090374"
@@ -32,7 +31,6 @@ def test_toate_suprafetele_consistente():
     # CHEIA: toate locurile care expun codul Bolt → aceeași valoare unică
     assert BRAND_DATABASE["bolt operations"][1] == COD_CORECT
     assert BRAND_DATABASE["bolt technology"][1] == COD_CORECT
-    assert BOLT_COD_TVA == COD_CORECT
     assert d390.operator_bolt(baza_lei=657).cod_operator == COD_NUMERIC
 
 
