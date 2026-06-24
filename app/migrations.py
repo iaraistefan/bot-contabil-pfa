@@ -442,6 +442,19 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_activitate_neeligibila DATE",
         ],
     },
+    {
+        "id": "021_documents_fix_bolt_vat_id",
+        "description": (
+            "Aliniaza document.vat_id vechi: typo EE102094445 -> EE102090374 (cod "
+            "TVA Bolt corect, audit #2). Documentele Bolt postate INAINTE de fix-ul "
+            "din motor (PR #25) au typo-ul stocat; codul previne deja viitoarele. "
+            "Idempotent (0 randuri -> nimic; >0 -> aliniaza). Impact ZERO la ANAF "
+            "(D390 nu citeste document.vat_id, genereaza din sursa unica BOLT_VAT_ID)."
+        ),
+        "sql": [
+            "UPDATE documents SET vat_id = 'EE102090374' WHERE vat_id = 'EE102094445'",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

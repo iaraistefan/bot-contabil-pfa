@@ -37,11 +37,16 @@ def test_toate_suprafetele_consistente():
 
 
 def test_anti_typo_in_tot_codul_sursa():
-    # gardian permanent: typo-ul (cod Bolt greșit) NU apare în niciun .py din app/
+    # gardian permanent: typo-ul (cod Bolt greșit) NU apare ca VALOARE în niciun .py din app/.
+    # Excepție: migrations.py — migrarea de date (021) referențiază INTENȚIONAT typo-ul în
+    # clauza WHERE ca să-l ELIMINE din `documents.vat_id` (opusul bug-ului). E o eliminare,
+    # nu o folosire ca valoare → permisă.
     root = Path(__file__).resolve().parent.parent / "app"
     vinovate = []
     for py in root.rglob("*.py"):
         if "__pycache__" in str(py):
+            continue
+        if py.name == "migrations.py":
             continue
         if TYPO in py.read_text(encoding="utf-8"):
             vinovate.append(str(py.relative_to(root.parent)))
