@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List
 
+from app.domain.tax_rules import BOLT_VAT_ID   # cod TVA Bolt — sursă unică
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,8 +84,8 @@ VAT_ID_MIN_LENGTH = 4
 
 BRAND_DATABASE = {
     # ─── 🇪🇺 UE — MARKETPLACE-URI & RIDESHARING ─────────────
-    "bolt operations": ("EE", "EE102094445", "Bolt"),
-    "bolt technology": ("EE", "EE102094445", "Bolt"),
+    "bolt operations": ("EE", BOLT_VAT_ID, "Bolt"),
+    "bolt technology": ("EE", BOLT_VAT_ID, "Bolt"),
     "uber bv": ("NL", "NL852071589B01", "Uber"),
     "uber b.v": ("NL", "NL852071589B01", "Uber"),
     "uber eats": ("NL", "NL852071589B01", "Uber Eats"),
@@ -259,15 +261,15 @@ def extract_vat_id(text: Optional[str]) -> Optional[str]:
     Extrage VAT_ID dintr-un text liber (factură, descriere).
 
     Recunoaște formate:
-    - "EE102094445" / "EE 102094445" / "EE-102094445"
-    - "VAT: EE102094445"
+    - "EE102090374" / "EE 102090374" / "EE-102090374"
+    - "VAT: EE102090374"
     - "CUI: RO12345678"
 
     Validare strictă (Pas 8.4b-fix):
     - Prefix trebuie să fie țară cunoscută (RO/UE/non-UE specific)
     - Lungime minimă: 4 caractere alfanumerice după prefix
     - CEL PUȚIN 2 CIFRE (anti false-positive: "ROMPETROL" rejectat,
-      "ROBINSON" rejectat, "EE102094445" acceptat)
+      "ROBINSON" rejectat, "EE102090374" acceptat)
 
     Returnează VAT_ID-ul în format normalizat (FĂRĂ spații/dash-uri).
     """
@@ -305,7 +307,7 @@ def detect_country_from_vat_id(vat_id: Optional[str]) -> Tuple[Optional[str], Co
     Determină țara și grupul (RO/UE/non-UE) din VAT_ID.
 
     Returnează (country_code, country_group).
-    Ex: "EE102094445" → ("EE", CountryGroup.EU)
+    Ex: "EE102090374" → ("EE", CountryGroup.EU)
     Ex: "RO12345678" → ("RO", CountryGroup.ROMANIA)
     Ex: None → (None, CountryGroup.UNKNOWN)
     """

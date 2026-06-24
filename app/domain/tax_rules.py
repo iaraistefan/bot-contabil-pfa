@@ -31,6 +31,14 @@ WITHHOLDING_TAX_PCT = 2        # Impozit nerezidenți (informativ)
 # Pragul de la care se aplică 21% (înainte: 19%). OUG aplicabilă din 01.08.2025.
 PRAG_TVA_21 = date(2025, 8, 1)
 
+# --- Cod TVA Bolt — SURSĂ UNICĂ (golden rule) ---
+# Confirmat la sursă: registrul eston e-Äriregister + pagina oficială Bolt pentru
+# șoferi (declararea comisionului în declarația TVA UE / D390). Entitate: Bolt
+# Operations OÜ (Estonia). Toate suprafețele (vat_engine, declaratii_spv, D390)
+# referențiază aceste constante → fizic imposibil să mai divergă.
+BOLT_VAT_ID = "EE102090374"                # forma completă (cu prefix țară EE)
+BOLT_VAT_ID_NUMERIC = BOLT_VAT_ID[2:]      # "102090374" — fără prefix (D390 codO)
+
 
 def cota_tva(data: date) -> float:
     """
@@ -124,7 +132,7 @@ def is_intra_eu_commission(vendor_vat_id: Optional[str]) -> bool:
     Returnează True dacă VAT ID-ul furnizorului indică un serviciu intracomunitar.
 
     Logică: primele 2 caractere ale VAT ID = codul de țară.
-    Ex: "EE102094445" → "EE" → Estonia → UE → True (Bolt Operations OÜ).
+    Ex: "EE102090374" → "EE" → Estonia → UE → True (Bolt Operations OÜ).
     Ex: "RO12345678"  → "RO" → România → False.
     Ex: None          → False (nu știm, tratăm conservator).
 
@@ -134,7 +142,7 @@ def is_intra_eu_commission(vendor_vat_id: Optional[str]) -> bool:
     Returns:
         bool
 
-    >>> is_intra_eu_commission("EE102094445")
+    >>> is_intra_eu_commission("EE102090374")
     True
     >>> is_intra_eu_commission("RO12345678")
     False
