@@ -468,7 +468,7 @@ def _maybe_send_plafon(session, bot_token, user, year, code, st, message) -> int
 def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
     """
     Alerte „aproape de plafon" pe realizat YTD: TVA 300k + CAS 12 SMB
-    (obligatoriu) + CAS 24 SMB (baza se dublează) + CASS 60 SMB (plafonare).
+    (obligatoriu) + CAS 24 SMB (baza se dublează) + CASS plafon superior (plafonare).
 
     Pre-check ieftin: dacă CA YTD < PLAFON_PRECHECK_RON → skip (nu rulăm
     compute_d212_anual). Gate-ul 38.880 (= 80% din cel mai MIC prag, CAS 12)
@@ -517,7 +517,7 @@ def _check_plafon_alerts(session, bot_token, user, ctx, today) -> int:
             session, bot_token, user, year, "PLAFON_CAS24",
             st_cas24, st_cas24["message"],
         )
-        # CASS 60 SMB — CASS se plafonează (informativ)
+        # CASS plafon superior (60 SMB 2025 / 72 SMB 2026) — CASS se plafonează (informativ)
         st_cass60 = contributii.prag_cass60_status(r.venit_net, year)
         sent += _maybe_send_plafon(
             session, bot_token, user, year, "PLAFON_CASS60",

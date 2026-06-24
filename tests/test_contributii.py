@@ -3,7 +3,9 @@ Teste pentru sursa unica de contributii CAS/CASS (Problema #3).
 
 Sursa: app.domain.contributii.
 Valori de referinta (SMB plafoane = 4050, valabil 2025 SI 2026):
-  6 SMB = 24.300 | 12 SMB = 48.600 | 24 SMB = 97.200 | 60 SMB = 243.000
+  6 SMB = 24.300 | 12 SMB = 48.600 | 24 SMB = 97.200
+Plafon SUPERIOR CASS depinde de an (Legea 141/2025):
+  60 SMB = 243.000 (venituri 2025) | 72 SMB = 291.600 (venituri 2026+)
 """
 
 import pytest
@@ -55,18 +57,25 @@ def test_cas_baza_aleasa_sub_minim_ignorata():
 
 
 # ────────────────────────────────────────────────────────────
-# B. CASS — praguri (an 2026, SMB 4050)
+# B. CASS — praguri. Plafonul SUPERIOR depinde de an (Legea 141/2025):
+#    60 SMB = 243.000 (2025) | 72 SMB = 291.600 (2026+). SMB plafoane = 4050.
 # ────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("venit, asteptat, baza_ast", [
-    (15_000, 2_430.0, 24_300),   # < 6 SMB -> baza MINIMA 6 SMB (NU 0!)
-    (24_300, 2_430.0, 24_300),   # = 6 SMB -> venit real = 6 SMB
-    (60_000, 6_000.0, 60_000),   # 6-60 SMB -> 10% pe venit real
-    (243_000, 24_300.0, 243_000),# = 60 SMB
-    (500_000, 24_300.0, 243_000),# > 60 SMB -> plafon 60 SMB
+@pytest.mark.parametrize("venit, an, asteptat, baza_ast", [
+    # sub plafon — identic pe ambii ani
+    (15_000, 2026, 2_430.0, 24_300),    # < 6 SMB -> baza MINIMA 6 SMB (NU 0!)
+    (24_300, 2026, 2_430.0, 24_300),    # = 6 SMB -> venit real = 6 SMB
+    (60_000, 2026, 6_000.0, 60_000),    # peste podea, sub plafon -> 10% pe venit real
+    # plafon 2025 = 60 SMB = 243.000 -> CASS max 24.300 (REGRESIE 0)
+    (243_000, 2025, 24_300.0, 243_000), # = 60 SMB (2025)
+    (500_000, 2025, 24_300.0, 243_000), # > 60 SMB -> plafonat la 60 SMB (2025)
+    # plafon 2026 = 72 SMB = 291.600 -> CASS max 29.160 (Legea 141/2025)
+    (243_000, 2026, 24_300.0, 243_000), # sub plafonul 2026 -> 10% pe real (DIFERA de 2025)
+    (291_600, 2026, 29_160.0, 291_600), # = 72 SMB (2026)
+    (500_000, 2026, 29_160.0, 291_600), # > 72 SMB -> plafonat la 72 SMB (2026)
 ])
-def test_cass_praguri(venit, asteptat, baza_ast):
-    r = calcul_cass(venit, 2026)
+def test_cass_praguri(venit, an, asteptat, baza_ast):
+    r = calcul_cass(venit, an)
     assert r["valoare"] == asteptat
     assert r["baza"] == baza_ast
 
@@ -110,10 +119,19 @@ def test_cas_60k_2026_e_12150_nu_12975():
     assert r["valoare"] != 12_975.0  # = ce ar da 4325 (gresit)
 
 
-def test_2025_si_2026_identice():
-    for venit in (15_000, 60_000, 300_000):
+def test_2025_si_2026_difera_doar_plafon_cass():
+    # 2025 si 2026 au parametri IDENTICI cu o singura exceptie: plafonul superior
+    # CASS urca 60->72 SMB pentru venituri 2026+ (Legea 141/2025). Sub plafonul
+    # 2025 (243.000) totul e identic; CAS ramane identic pe orice venit (plafon
+    # CAS 24 SMB neschimbat).
+    for venit in (15_000, 60_000, 200_000):   # toate sub 243.000
         assert calcul_cas(venit, 2025) == calcul_cas(venit, 2026)
         assert calcul_cass(venit, 2025) == calcul_cass(venit, 2026)
+    # CAS — identic chiar si la venit mare (plafon CAS neschimbat)
+    assert calcul_cas(300_000, 2025) == calcul_cas(300_000, 2026)
+    # CASS — DIFERA peste plafonul 2025: 2025 plafonat la 24.300, 2026 urca la 29.160
+    assert calcul_cass(300_000, 2025)["valoare"] == 24_300.0
+    assert calcul_cass(300_000, 2026)["valoare"] == 29_160.0
 
 
 def test_an_necunoscut_fallback_ultim():
