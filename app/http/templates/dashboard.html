@@ -924,6 +924,9 @@
   }
 
   // ---- helpers ----
+  // SECURITATE (XSS): escape robust pe date user/AI înainte de innerHTML — text-safe
+  // ȘI attribute-safe (& < > " ' /), null/number-safe. Sursă UNICĂ pentru tot escape-ul.
+  const escHtml = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/\//g,"&#47;");
   const RON=v=>(v==null?"—":Number(v).toLocaleString("ro-RO",{minimumFractionDigits:2,maximumFractionDigits:2}));
   const KM=v=>(v==null?"—":Number(v).toLocaleString("ro-RO",{maximumFractionDigits:1}));
   const MONTHS={1:"Ianuarie",2:"Februarie",3:"Martie",4:"Aprilie",5:"Mai",6:"Iunie",7:"Iulie",8:"August",9:"Septembrie",10:"Octombrie",11:"Noiembrie",12:"Decembrie"};
@@ -1103,7 +1106,7 @@
   // Default = personalizat (ale userului); toggle „vezi toate". Profil incomplet → toate+nudge.
   function loadGhid(all){
     const box=document.getElementById("ghid-continut");
-    const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    const esc=escHtml;   // sursă unică de escape (vezi escHtml sus)
     const field=(icon,label,val)=> val?`<div style="margin:10px 0"><b>${icon} ${label}</b><br><span style="color:var(--muted)">${esc(val)}</span></div>`:"";
     box.innerHTML='<div class="hint" style="padding:10px">Se încarcă…</div>';
     getGhid(!!all).then(d=>{
@@ -1186,7 +1189,7 @@
         const r=await authFetch("/api/v1/casa-marcat?year="+Y); const cm=await r.json();
         const box=document.getElementById("ov-amef");
         if(box){
-          const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+          const esc=escHtml;   // sursă unică de escape (vezi escHtml sus)
           box.innerHTML = cm.necesita
             ? `<div class="alert" style="margin-bottom:16px;cursor:pointer" onclick="nav('ghid')">
                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
@@ -1519,7 +1522,7 @@
     const {plati,declar,estimari,total,overdue,near}=_splitObligatii(obl);
     box.className="hero-pay";
     const head=`<div class="hp-head"><div class="hp-title">Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
-    const estLine = estimari.map(o=>`<div class="hp-decl" style="color:var(--blue)">ⓘ <b>${o.cod}</b> — se calculează pe parcursul anului (încă fără venituri pe ${o.estimare_an||Y})</div>`).join("");
+    const estLine = estimari.map(o=>`<div class="hp-decl" style="color:var(--blue)">ⓘ <b>${escHtml(o.cod)}</b> — se calculează pe parcursul anului (încă fără venituri pe ${o.estimare_an||Y})</div>`).join("");
 
     // Stare 4 — gol complet (nimic de plătit, de depus sau de estimat)
     if(plati.length===0 && declar.length===0 && estimari.length===0){
@@ -1533,7 +1536,7 @@
       box.classList.add("is-clean");
       const declBlock = declar.length
         ? `<div class="hp-decl" style="margin-top:15px">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
-          +`<div class="hp-break">${declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("")}</div>`
+          +`<div class="hp-break">${declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("")}</div>`
         : "";
       box.innerHTML=head
         +`<div class="hp-main"><div><div class="hp-total">0 <span class="cur">RON</span></div><div class="hp-total-lab">total de plată</div></div><div class="hp-deadline"><div class="d-lab"><span class="dot ok"></span>nimic de plătit ✓</div></div></div>`
@@ -1547,9 +1550,9 @@
       ? `<div class="hp-deadline"><span class="hp-badge">⚠ RESTANȚĂ</span><div class="d-when">${termenRo(near.termen)} · ${zileRo(near.zile_ramase)}</div></div>`
       : `<div class="hp-deadline"><div class="d-lab"><span class="dot ${DOT[near.status]||'ok'}"></span>cel mai apropiat termen</div><div class="d-when">${termenRo(near.termen)} · ${zileRo(near.zile_ramase)}</div></div>`;
     const platiSorted=[...plati].sort((a,b)=>a.zile_ramase-b.zile_ramase);
-    const lines=platiSorted.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${o.cod} — ${o.nume}</div><div class="r"><b>${RON(o.suma_estimata)} RON</b> · ${o.zile_ramase<0?zileRo(o.zile_ramase):termenRo(o.termen)}</div></div>`).join("");
+    const lines=platiSorted.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="r"><b>${RON(o.suma_estimata)} RON</b> · ${o.zile_ramase<0?zileRo(o.zile_ramase):termenRo(o.termen)}</div></div>`).join("");
     const declLine = declar.length
-      ? `<div class="hp-decl">+ ${declar.length===1?"1 declarație de depus":declar.length+" declarații de depus"} (fără plată): ${declar.map(o=>`<b>${o.cod}</b> — ${o.nume} · ${termenRo(o.termen)}`).join(", ")}</div>`
+      ? `<div class="hp-decl">+ ${declar.length===1?"1 declarație de depus":declar.length+" declarații de depus"} (fără plată): ${declar.map(o=>`<b>${escHtml(o.cod)}</b> — ${escHtml(o.nume)} · ${termenRo(o.termen)}`).join(", ")}</div>`
       : "";
     const note = overdue
       ? `<div class="hp-note">⚠ <span>Se acumulează penalități cât timp nu e plătit. Depune și plătește cât mai curând.</span></div>`
@@ -1575,7 +1578,7 @@
     box.innerHTML=sorted.map(o=>{
       const dot=DOT[o.status]||"ok";
       const suma=o.estimare_in_curs?" · estimare în curs":((o.suma_estimata!=null&&o.suma_estimata>0)?` · ${RON(o.suma_estimata)} RON`:" · fără plată");
-      return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
+      return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="tl-desc">${escHtml((o.descriere||"").slice(0,90))}${suma}</div></div>`;
     }).join("");
   }
   async function drawEvolution(){
@@ -1615,7 +1618,7 @@
       const col=inc?"green":(t.tx_type==="VAT_OUT"?"gold":"red");
       const sign=inc?"+":"−";
       const cls=inc?"pos":"neg";
-      return `<div class="row"><div class="ic ${col}">${ICO[t.tx_type]||ICO.EXPENSE}</div><div class="info"><div class="t">${t.category_ro||t.category||"—"}</div><div class="m">${dmy(t.occurred_on)} · ${t.counterparty||"—"}</div></div><div class="amt ${cls} num">${sign}${RON(t.amount_brut)}</div></div>`;
+      return `<div class="row"><div class="ic ${col}">${ICO[t.tx_type]||ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(t.category_ro||t.category||"—")}</div><div class="m">${dmy(t.occurred_on)} · ${escHtml(t.counterparty||"—")}</div></div><div class="amt ${cls} num">${sign}${RON(t.amount_brut)}</div></div>`;
     }).join("");
   }
 
@@ -1694,7 +1697,7 @@
         box.innerHTML = items.length? items.map(i=>{
           const w=Math.round(Number(i.amount_brut||0)/max*100);
           const ded=i.deductibility_pct<100?`${i.deductibility_pct}% deductibil`:"100% deductibil";
-          return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:1rem">'+i.icon+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${i.label}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
+          return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:1rem">'+escHtml(i.icon)+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
         }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:14px">Nicio cheltuială în '+MONTHS[M]+'.</div>');
       }
       drawDonut("chDonut", items);
@@ -1718,7 +1721,7 @@
       const isNew=await isNewUser();
       if(tb){
         tb.innerHTML = ture.length? ture.map(t=>{
-          const interval=(t.ora_start||"—")+" → "+(t.ora_stop||"—");
+          const interval=escHtml(t.ora_start||"—")+" → "+escHtml(t.ora_stop||"—");
           return `<tr><td>${dmy(t.trip_date)}</td><td>${interval}</td><td class="r num">${t.odometer_start??"—"}</td><td class="r num">${t.odometer_end??"—"}</td><td class="r num pos">${KM(t.km)}</td></tr>`;
         }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio tură în '+MONTHS[M]+'.</td></tr>');
       }
@@ -1728,8 +1731,8 @@
         const v=pc.vehicul||{};
         const f=pc.combustibil||{};
         vb.innerHTML=`
-          <div class="row"><div class="info"><div class="t">${v.marca_model||"Vehicul"}</div><div class="m">${v.nr_inmatriculare||"—"}</div></div></div>
-          <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">${v.norma_consum||"7,5"} L / 100 km</div></div></div>
+          <div class="row"><div class="info"><div class="t">${escHtml(v.marca_model||"Vehicul")}</div><div class="m">${escHtml(v.nr_inmatriculare||"—")}</div></div></div>
+          <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">${escHtml(v.norma_consum||"7,5")} L / 100 km</div></div></div>
           <div class="row"><div class="info"><div class="t">Consum teoretic</div><div class="m">${KM(pc.km_business)} km × normă</div></div><div class="amt neu num">${f.plafon_litri?KM(f.plafon_litri)+" L":"—"}</div></div>
           <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${f.depasit===true?'neg':f.depasit===false?'pos':'neu'} num">${f.depasit===true?'peste plafon':f.depasit===false?'în normă':'scrie litrii'}</div></div>`;
       }
@@ -1801,7 +1804,7 @@
         const val=Number(t.amount_brut||0);
         if(isInc){inc+=val;sold+=val;}else{plati+=val;sold-=val;}
         n++;
-        return `<tr><td>${n}</td><td>${dmy(t.occurred_on)}</td><td>${t.category_ro||t.category||"—"}</td><td>${t.counterparty||"—"}</td><td class="r num pos">${isInc?RON(val):"—"}</td><td class="r num neg">${isInc?"—":RON(val)}</td><td class="r num">${RON(sold)}</td></tr>`;
+        return `<tr><td>${n}</td><td>${dmy(t.occurred_on)}</td><td>${escHtml(t.category_ro||t.category||"—")}</td><td>${escHtml(t.counterparty||"—")}</td><td class="r num pos">${isInc?RON(val):"—"}</td><td class="r num neg">${isInc?"—":RON(val)}</td><td class="r num">${RON(sold)}</td></tr>`;
       });
       const tb=document.getElementById("reg-tbody");
       const isNew=await isNewUser();
@@ -1847,9 +1850,9 @@
       keys.forEach(k=>{
         html+=`<tr class="doc-group"><td colspan="6">${groups[k].label}</td></tr>`;
         groups[k].items.forEach(d=>{
-          const st=d.status==="posted"||d.status==="postat"?'<span class="badge-st ok">postat</span>':`<span class="badge-st warn">${d.status||"—"}</span>`;
+          const st=d.status==="posted"||d.status==="postat"?'<span class="badge-st ok">postat</span>':`<span class="badge-st warn">${escHtml(d.status||"—")}</span>`;
           const dl=d.has_file?`<button class="doc-dl" title="Descarcă originalul" onclick="downloadDoc(${d.id})">${DL_ICO}</button>`:"";
-          html+=`<tr><td>${d.data_doc||"—"}</td><td>${d.platforma||"—"}</td><td>${d.tip||"—"}</td><td class="r num">${RON(d.brut)}</td><td class="r">${st}</td><td class="r">${dl}</td></tr>`;
+          html+=`<tr><td>${escHtml(d.data_doc||"—")}</td><td>${escHtml(d.platforma||"—")}</td><td>${escHtml(d.tip||"—")}</td><td class="r num">${RON(d.brut)}</td><td class="r">${st}</td><td class="r">${dl}</td></tr>`;
         });
       });
       tb.innerHTML=html;
@@ -1890,7 +1893,7 @@
         tl.innerHTML = obl.length ? obl.map(o=>{
           const dot=DOT[o.status]||"ok";
           const suma=o.suma_estimata!=null?` · ${RON(o.suma_estimata)} RON`:"";
-          return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${o.cod} — ${o.nume}</div><div class="tl-desc">${(o.descriere||"").slice(0,90)}${suma}</div></div>`;
+          return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="tl-desc">${escHtml((o.descriere||"").slice(0,90))}${suma}</div></div>`;
         }).join("") : '<div class="hint" style="padding:10px">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✅</div>';
       }
 
@@ -1904,10 +1907,13 @@
           const sumaJs=o.suma_estimata!=null?RON(o.suma_estimata):"—";
           const identif=(o.cod_buget||"").includes("55.04")||/D212/.test(o.cod)?"CNP":"CUI";
           const termen=termenRo(o.termen);
+          // NB: onclick = context JS-string (NU innerHTML-text); o.cod/o.nume sunt
+          // constante fiscale server (D212 etc.), iar ' e deja eliminat pt. JS. Escape-ul
+          // HTML (escHtml) ar fi unealta greșită aici → lăsat intenționat.
           const btn = o.suma_estimata!=null && o.suma_estimata>0
             ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
             : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
-          return `<tr><td data-label="Obligație"><b>${o.cod}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${o.nume.slice(0,28)}</div></td><td class="num" data-label="Cont" style="font-size:.78rem">${cont}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
+          return `<tr><td data-label="Obligație"><b>${escHtml(o.cod)}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${escHtml(o.nume.slice(0,28))}</div></td><td class="num" data-label="Cont" style="font-size:.78rem">${escHtml(cont)}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
         }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
       }
     }catch(e){
@@ -2074,7 +2080,7 @@
       const r=await authFetch("/api/v1/bolt/status"); const s=await r.json();
       if(s.connected){
         const dt=s.connected_at?new Date(String(s.connected_at).replace(" ","T")).toLocaleDateString("ro-RO"):"—";
-        box.innerHTML=`<div class="hint" style="margin-bottom:10px">✅ <b>Conectat</b> la ${dt} · Client ID: <code>${(s.client_id||"").slice(0,10)}…</code> · secret: ${s.secret_masked}</div>`
+        box.innerHTML=`<div class="hint" style="margin-bottom:10px">✅ <b>Conectat</b> la ${dt} · Client ID: <code>${escHtml((s.client_id||"").slice(0,10))}…</code> · secret: ${escHtml(s.secret_masked)}</div>`
           +`<div class="hint" style="margin-bottom:10px">Sincronizăm automat cursele tale Bolt (la închiderea zilei) → îți propunem să le adaugi în Registru.</div>`
           +`<button class="btn btn-ghost" onclick="boltReconecteaza()">Reconectează (schimbă cheile)</button>`;
       }else{
@@ -2118,7 +2124,7 @@
   async function loadCertificat(){
     const box=document.getElementById("cert-continut");
     if(!box) return;
-    const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    const esc=escHtml;   // sursă unică de escape (vezi escHtml sus)
     const md=s=>esc(s).replace(/\*(.+?)\*/g,"<b>$1</b>").replace(/_(.+?)_/g,"<i>$1</i>").replace(/\n/g,"<br>");
     try{
       const r=await authFetch("/api/v1/certificat"); const c=await r.json();
@@ -2233,7 +2239,7 @@
   // State-machine: pași de bază (nume → CUI+ANAF → normă/real → mașină), apoi — DOAR dacă
   // is_ridesharing (B2) — platforme → regim nerezident → API Bolt (dacă Bolt selectat).
   // Resume prin onboarding_step (numerotare proprie wizard). Fiecare pas salvează la „Înainte".
-  const WIZ = { i:0, data:{}, esc:s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;") };
+  const WIZ = { i:0, data:{}, esc:escHtml };   // sursă unică de escape (vezi escHtml sus)
   // Pașii de bază (B1) + pașii ridesharing (B2) inserați DOAR dacă is_ridesharing.
   // Lista e dinamică: apibolt apare doar după ce userul alege o platformă cu Bolt.
   function wizHasBolt(){ return WIZ.data._platforme==="BOLT" || WIZ.data._platforme==="AMBELE"; }

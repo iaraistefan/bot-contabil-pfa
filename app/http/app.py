@@ -16,6 +16,7 @@ import os as _os
 import hmac
 import hashlib
 import logging
+import time
 from datetime import datetime, date
 from app.domain.tax_rules import cota_tva  # sursă unică cotă TVA pe dată (fiscal #1)
 from threading import Thread
@@ -52,15 +53,22 @@ if settings.env == "production":
 #                    AUTH HELPERS
 # ============================================================
 
-def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dict]:
+def _validate_telegram_init_data(init_data: str, bot_token: str,
+                                 max_age_seconds: int = 86400,
+                                 now: Optional[float] = None) -> Optional[dict]:
     """
-    Valideaza semnatura HMAC a Telegram WebApp init_data.
+    Valideaza semnatura HMAC a Telegram WebApp init_data + PROSPETIMEA auth_date.
 
     Surse oficiale se contrazic daca 'signature' se include sau nu in
     data_check_string la validarea cu hash. Asa ca incercam AMBELE variante:
       A) exclude hash + signature
       B) exclude doar hash (signature inclus)
     Acceptam daca oricare se potriveste.
+
+    Prospetime (securitate): chiar cu HMAC valid, respingem init_data cu auth_date
+    mai vechi de max_age_seconds (24h implicit, conventia Telegram). Altfel un
+    header X-Telegram-Init-Data capturat ar fi o sesiune care nu expira niciodata.
+    `now` (unix s) e injectabil pentru teste; implicit time.time().
 
     NU folosim parse_qsl (acela face unquote_plus si transforma '+' in spatiu,
     stricand campuri base64 ca query_id). Folosim unquote.
@@ -117,6 +125,23 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dic
             logger.warning(
                 f"init_data hash mismatch (ambele variante). "
                 f"Campuri: {[k for k, _ in all_pairs]}. Verifica TELEGRAM_TOKEN."
+            )
+            return None
+
+        # Prospetime: respinge init_data prea vechi chiar cu HMAC valid (sesiune
+        # care nu expira = credential exfiltrabil pe termen nelimitat).
+        used_map = {k: v for k, v in used}
+        try:
+            auth_ts = int(used_map.get("auth_date"))
+        except (TypeError, ValueError):
+            logger.warning("init_data: auth_date lipseste/invalid — respins")
+            return None
+        current = time.time() if now is None else now
+        age = current - auth_ts
+        if age > max_age_seconds:
+            logger.warning(
+                f"init_data EXPIRAT: auth_date vechi de {int(age)}s "
+                f"(> {max_age_seconds}s) — re-autentificare (redeschide din bot)"
             )
             return None
 
