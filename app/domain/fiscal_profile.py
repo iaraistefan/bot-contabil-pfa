@@ -62,7 +62,7 @@ _P = PARAMETRI_CONTRIBUTII[2026]
 CAS_THRESHOLD_MULTIPLIER = _P["cas_jos"]    # 12 → 48.600 RON/an
 CASS_THRESHOLD_MULTIPLIER = _P["cass_jos"]  # 6  → 24.300 RON/an
 CAS_MAX_BASE_MULTIPLIER = _P["cas_sus"]     # 24 → 97.200 RON/an (plafon maxim CAS)
-CASS_MAX_BASE_MULTIPLIER = _P["cass_sus"]   # 60 → 243.000 RON/an (plafon maxim CASS)
+CASS_MAX_BASE_MULTIPLIER = _P["cass_sus"]   # 72 (2026, Legea 141/2025) → 291.600 RON/an (plafon maxim CASS)
 
 # Cote impozit
 IMPOZIT_VENIT_PFA_PCT = 10

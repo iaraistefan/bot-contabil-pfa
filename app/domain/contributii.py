@@ -27,8 +27,9 @@ REGULI:
     0 < venit net < 6 SMB        -> baza MINIMA 6 SMB (NU 0!)
                                     exceptie asigurat_salariat (salariat/pensionar):
                                     10% pe VENITUL NET REAL (NU urca la 6 SMB, NU 0)
-    6 SMB <= venit net <= 60 SMB -> 10% pe venit net real
-    venit net > 60 SMB           -> plafon 60 SMB
+    6 SMB <= venit net <= cass_sus SMB -> 10% pe venit net real
+    venit net > cass_sus SMB     -> plafon cass_sus SMB
+                                    (cass_sus = 60 pt. 2025, 72 pt. 2026+ — Legea 141/2025)
 
 Rotunjire: 2 zecimale (pastreaza D212 bit-identic cu d212_calc actual).
 Retur: dict {"valoare", "baza", "cota_pct", "nota", "aplicabil"}.
@@ -49,7 +50,7 @@ PARAMETRI_CONTRIBUTII = {
         "cas_jos": 12,           # sub 12 SMB -> CAS optional
         "cas_sus": 24,           # >= 24 SMB -> baza CAS = 24 SMB
         "cass_jos": 6,           # sub 6 SMB -> baza CASS minima = 6 SMB
-        "cass_sus": 60,          # > 60 SMB -> CASS plafonat la 60 SMB
+        "cass_sus": 60,          # venituri 2025 -> CASS plafonat la 60 SMB = 243.000
     },
     2026: {
         "salariu_minim": 4050,   # ⚠️ 4050, NU 4325 (vezi nota din docstring)
@@ -58,7 +59,10 @@ PARAMETRI_CONTRIBUTII = {
         "cas_jos": 12,
         "cas_sus": 24,
         "cass_jos": 6,
-        "cass_sus": 60,
+        # Legea 141/2025: plafonul superior CASS urca 60->72 SMB DOAR pentru
+        # veniturile realizate incepand cu 01.01.2026 (D212 depusa in 2027).
+        # 72 × 4050 = 291.600 baza -> CASS max 29.160. Pentru 2025 ramane 60 (vezi sus).
+        "cass_sus": 72,
     },
 }
 
@@ -382,17 +386,21 @@ def prag_cass6_status(venit_net: float, an: int) -> dict:
 
 def prag_cass60_status(venit_net: float, an: int) -> dict:
     """
-    Status față de plafonul CASS de 60 SMB (peste care CASS se PLAFONEAZĂ).
+    Status față de plafonul SUPERIOR CASS (peste care CASS se PLAFONEAZĂ).
 
-    La/peste 60 SMB, CASS nu mai crește proporțional — rămâne la 60 SMB × 10%.
+    NUME ISTORIC: „60” reflectă plafonul din 2025; valoarea depinde de an —
+    60 SMB pentru venituri 2025 (243.000), 72 SMB pentru venituri 2026+
+    (291.600, Legea 141/2025). Funcția citește mereu PARAMETRI_CONTRIBUTII[an],
+    deci e corectă pe orice an; doar identificatorul a rămas pe vechea valoare.
+
+    La/peste plafon, CASS nu mai crește proporțional — rămâne la cass_sus × SMB × 10%.
     Informație neutru-favorabilă: NU e o felicitare (CASS rămâne de plată
-    integral, ~24.300 lei/an), doar nu mai crește. Ton ℹ️. Toate cifrele din
-    sursa unică (PARAMETRI_CONTRIBUTII).
+    integral), doar nu mai crește. Ton ℹ️. Toate cifrele din sursa unică.
     """
     p = _params(an)
     sm = p["salariu_minim"]
-    threshold = float(p["cass_sus"] * sm)                  # 60 × 4050 = 243.000
-    cass_max = round(threshold * p["cota_cass"] / 100, 2)  # ~24.300
+    threshold = float(p["cass_sus"] * sm)                  # 2025: 60×4050=243.000 | 2026: 72×4050=291.600
+    cass_max = round(threshold * p["cota_cass"] / 100, 2)  # 2025: ~24.300 | 2026: ~29.160
     core = prag_core(venit_net, threshold)
     status = core["status"]
     utilized_pct = core["utilized_pct"]

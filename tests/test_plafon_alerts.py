@@ -141,9 +141,9 @@ def test_cas24_dublare(monkeypatch):
 
 
 def test_cass60_plafonare(monkeypatch):
-    # venit_net peste 60 SMB (243.000): CASS plafonat (informativ). VAT payer →
-    # skip TVA, ca să izolăm. CAS 12 + CAS 24 + CASS 60 toate depășite.
-    sent, logged = _setup(monkeypatch, ca=250_000, venit_brut=250_000, venit_net=250_000)
+    # venit_net peste plafonul superior CASS 2026 = 72 SMB (291.600): CASS plafonat
+    # (informativ). VAT payer → skip TVA, ca să izolăm. CAS 12 + CAS 24 + CASS toate depășite.
+    sent, logged = _setup(monkeypatch, ca=300_000, venit_brut=300_000, venit_net=300_000)
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(is_vat_payer=True), _TODAY)
     assert n == 3                                        # CAS 12 + CAS 24 + CASS 60
     cass_msg = next(m for c, m in sent if "plafon" in m.lower() and "CASS" in m)
@@ -153,8 +153,8 @@ def test_cass60_plafonare(monkeypatch):
 
 
 def test_toate_4_pragurile(monkeypatch):
-    # high earner: TVA depășit + CAS 12 + CAS 24 + CASS 60 → 4 alerte, coduri distincte.
-    sent, logged = _setup(monkeypatch, ca=400_000, venit_brut=400_000, venit_net=250_000)  # TVA 101% depășit
+    # high earner: TVA depășit + CAS 12 + CAS 24 + CASS (72 SMB 2026) → 4 alerte, coduri distincte.
+    sent, logged = _setup(monkeypatch, ca=400_000, venit_brut=400_000, venit_net=300_000)  # TVA 101% depășit
     n = pa._check_plafon_alerts(None, "tok", _USER, _ctx(), _TODAY)
     assert n == 4
     coduri = {c for a in logged for c in

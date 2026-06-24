@@ -1209,7 +1209,7 @@
   const FLINE = {
     impozit:{name:"Impozit pe venit", tech:"Impozit 10% pe venitul net rămas după deducerea CAS și CASS (art. 68 Cod fiscal)."},
     cas:    {name:"CAS — pensie",      tech:"Sub 12 SMB, CAS opțional (implicit 0). Peste 12 SMB: 25% pe baza de 12 SMB; peste 24 SMB baza se dublează."},
-    cass:   {name:"CASS — sănătate",   tech:"Sub 6 SMB: CASS pe baza minimă de 6 SMB. Între 6 și 60 SMB: 10% pe venitul real. Peste 60 SMB: se plafonează."},
+    cass:   {name:"CASS — sănătate",   tech:"Sub 6 SMB: CASS pe baza minimă de 6 SMB. Între 6 și 72 SMB: 10% pe venitul real. Peste 72 SMB: se plafonează (plafon 2026, Legea 141/2025)."},
   };
   function _flSub(it,d){
     if(it.tip==="impozit") return `cota ${it.cota_pct}%`;
@@ -1248,7 +1248,7 @@
     } else { // cass
       gold=true;
       if(it.baza>d.venit_net){ pr=d.praguri.cass6; lab="Podeaua CASS (6 salarii minime)"; }
-      else { pr=d.praguri.cass60; lab="Plafonul CASS (60 salarii minime)"; }
+      else { pr=d.praguri.cass60; lab="Plafonul CASS (72 salarii minime)"; }
     }
     if(!pr) return "";
     const pct=Math.min(100,Math.round(pr.utilized_pct));
