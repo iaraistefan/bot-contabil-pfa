@@ -85,12 +85,31 @@ def test_analyze_ro_standard_d300():
     assert d.requires_d390 is False and d.requires_d301 is False
 
 
-def test_caracterizare_us_unknown():
-    # CONSTATARE (fix SEPARAT, după research la sursă): furnizor US (non-EU în afara
-    # GB/CH/NO) → UNKNOWN, nu IMPORT. Importurile de SaaS US ar putea necesita D301
-    # (taxare inversă, place of supply RO, art. 307). Documentăm comportamentul ACTUAL;
-    # dacă-l fixăm, acest test se actualizează la IMPORT_NON_EU + requires_d301.
+def test_us_import_non_eu_d301_fara_d390():
+    # FIX (increment fiscal, research la sursă art. 278/307): furnizor US (non-UE) servicii
+    # → IMPORT, loc prestării RO → taxare inversă + D301, FĂRĂ D390 (D390 = doar intracom).
     d = vat_engine.analyze(platforma="OpenAI")
     assert d.country_code == "US"
-    assert d.treatment == VATTreatment.UNKNOWN
-    assert d.requires_d301 is False             # actual: NU semnalează D301 pt US
+    assert d.country_group == CountryGroup.NON_EU
+    assert d.treatment == VATTreatment.IMPORT_NON_EU
+    assert d.requires_d301 is True
+    assert d.requires_d390 is False
+    # nota defensivă despre regimul special (art. 307 alin. 6)
+    assert "regim special" in d.explanation.lower()
+
+
+def test_sg_singapore_import_non_eu():
+    # SG (Singapore, non-UE) — aceeași regulă fiscală ca US (art. 278 pt orice non-UE)
+    d = vat_engine.analyze(platforma="Moonshot AI")
+    assert d.country_code == "SG"
+    assert d.country_group == CountryGroup.NON_EU
+    assert d.treatment == VATTreatment.IMPORT_NON_EU
+    assert d.requires_d301 is True and d.requires_d390 is False
+
+
+def test_ue_neatins_de_fix_non_eu():
+    # REGRESIE 0 pe UE: Bolt (EE) rămâne EU + reverse-charge + D390 (fixul non-UE NU atinge UE)
+    d = vat_engine.analyze(platforma="Bolt Operations OU")
+    assert d.country_group == CountryGroup.EU
+    assert d.treatment == VATTreatment.REVERSE_CHARGE
+    assert d.requires_d390 is True
