@@ -988,6 +988,9 @@ def vehicul_create():
 
 # Câmpuri minime obligatorii pentru finalizare (sub-pas C). Bolt e OPȚIONAL.
 # firma = CUI sau denumire (calea manuală are doar denumirea).
+# Mașina e OBLIGATORIE doar pentru ridesharing (deductibilitate auto / foaie de parcurs);
+# pentru non-șoferi (IT/medical/trader) e opțională — ca în Telegram — ca să nu-i blocheze
+# la finalizare (o pot adăuga oricând din Setări).
 def _onboarding_missing(profile, has_vehicul):
     missing = []
     if not (profile.get("name") or "").strip():
@@ -996,7 +999,8 @@ def _onboarding_missing(profile, has_vehicul):
         missing.append("firma")
     if not (profile.get("regim_impunere") or "").strip():
         missing.append("regim_impunere")
-    if not has_vehicul:
+    is_ridesharing = (profile.get("activity_code") or "") == "ridesharing"
+    if is_ridesharing and not has_vehicul:
         missing.append("masina")
     return missing
 

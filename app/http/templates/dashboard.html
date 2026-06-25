@@ -2245,9 +2245,11 @@
   function wizHasBolt(){ return WIZ.data._platforme==="BOLT" || WIZ.data._platforme==="AMBELE"; }
   function wizHasUber(){ return WIZ.data._platforme==="UBER" || WIZ.data._platforme==="AMBELE"; }
   function wizSteps(){
-    const s=["nume","cui","regim","situatie","masina"];
+    // Mașina e specifică șoferilor (foaie parcurs / deductibilitate auto) → o cerem DOAR
+    // la ridesharing, ca în Telegram. Non-șoferul (IT/medical) nu vede pasul, nu e blocat.
+    const s=["nume","cui","regim","situatie"];
     if(WIZ.data.is_ridesharing){
-      s.push("platforme","nerezident");
+      s.push("masina","platforme","nerezident");
       if(wizHasBolt()) s.push("apibolt");   // Uber n-are sync API → fără pas de conectare
     }
     return s;

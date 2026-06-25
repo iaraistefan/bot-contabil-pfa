@@ -31,7 +31,8 @@ def _web(monkeypatch, tmp_path):
 def test_wizsteps_dinamic_ridesharing():
     # lista de pași se extinde DOAR dacă is_ridesharing; apibolt apare doar cu Bolt
     assert 'if(WIZ.data.is_ridesharing){' in _HTML
-    assert 's.push("platforme","nerezident");' in _HTML
+    # masina e acum în blocul ridesharing (I2 — condiționată de is_ridesharing)
+    assert 's.push("masina","platforme","nerezident");' in _HTML
     assert 'if(wizHasBolt()) s.push("apibolt");' in _HTML       # Uber n-are pas API
 
 
