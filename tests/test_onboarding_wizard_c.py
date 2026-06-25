@@ -150,7 +150,7 @@ def test_template_finalizare_si_iesire():
     assert "function wizComplete()" in _HTML
     assert 'authFetch("/api/v1/onboarding/complete"' in _HTML
     assert "Gata! Contul tău e configurat" in _HTML     # ecran finalizare branded
-    assert "Intră în Contai" in _HTML                   # buton final
+    assert "Intră în Coniar" in _HTML                   # buton final
     assert "function exitWizardToDashboard()" in _HTML  # tranziție → dashboard normal
     assert 'classList.remove("wizard-mode")' in _HTML
     assert "function wizGoto(" in _HTML                 # edge: mergi la pasul lipsă
