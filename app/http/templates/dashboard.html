@@ -83,38 +83,38 @@
     border-right:1px solid var(--line);
     display:flex;flex-direction:column;padding:20px 14px;overflow-y:auto;
   }
-  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 22px;border-bottom:1px solid var(--line);margin-bottom:16px}
-  .brand .mk{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:flex;align-items:center;justify-content:center;flex:none}
+  .brand{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-2) var(--sp-6);border-bottom:1px solid var(--line);margin-bottom:var(--sp-4)}
+  .brand .mk{width:30px;height:30px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:flex;align-items:center;justify-content:center;flex:none}
   .brand .mk svg{width:17px;height:17px;fill:none;stroke-linecap:round;stroke-linejoin:round}
-  .brand .nm{font-family:var(--display);font-weight:700;font-size:1.4rem;letter-spacing:-.02em}
+  .brand .nm{font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);letter-spacing:-.02em}
   .brand .nm b{color:var(--emerald-br)}
-  .nav-group{margin-bottom:6px}
-  .nav-group .ttl{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-2);padding:0 12px 9px}
+  .nav-group{margin-bottom:var(--sp-2)}
+  .nav-group .ttl{font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.2em;text-transform:uppercase;color:var(--muted-2);padding:0 var(--sp-3) var(--sp-2)}
   /* Iconițe sidebar — scopate sub .tile .ic ca să NU coliziuneze cu .ic din conținut (.row/.kpi/.ic.green…) */
   .tile .ic{width:17px;height:17px;flex-shrink:0}
   .tile .ic svg{width:100%;height:100%;display:block}
   .tile .ic svg *{stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
   .tile .ic svg .fill{fill:currentColor;stroke:none}
-  .nav-item{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:13px;color:var(--muted);font-size:14.5px;font-weight:500;cursor:pointer;transition:.18s;position:relative;margin-bottom:2px}
-  .nav-item .tile{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--night-2);border:1px solid var(--line);transition:.18s}
+  .nav-item{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border-radius:var(--r-md);color:var(--muted);font-size:var(--text-sm);font-weight:var(--w-medium);cursor:pointer;transition:.18s;position:relative;margin-bottom:2px}
+  .nav-item .tile{width:34px;height:34px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;background:var(--night-2);border:1px solid var(--line);transition:.18s}
   .nav-item:hover{color:var(--cream)}
   .nav-item:hover .tile{border-color:var(--emerald);color:var(--emerald-br)}
-  .nav-item.active{color:#06231f;font-weight:600;background:linear-gradient(135deg,var(--emerald),var(--pos))}
-  .nav-item.active .tile{background:rgba(0,0,0,.18);border-color:transparent;color:#06231f}
-  .nav-item .badge{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.05em;padding:3px 7px;border-radius:20px;background:var(--gold-dim);color:var(--gold)}
-  .nav-item.active .badge{background:rgba(0,0,0,.18);color:#06231f}
+  .nav-item.active{color:var(--pos-bg);font-weight:var(--w-semibold);background:linear-gradient(135deg,var(--emerald),var(--pos))}
+  .nav-item.active .tile{background:rgba(0,0,0,.18);border-color:transparent;color:var(--pos-bg)}
+  .nav-item .badge{margin-left:auto;font-family:var(--mono);font-size:var(--text-2xs);font-weight:var(--w-semibold);letter-spacing:.05em;padding:2px var(--sp-2);border-radius:var(--r-full);background:var(--gold-dim);color:var(--gold)}
+  .nav-item.active .badge{background:rgba(0,0,0,.18);color:var(--pos-bg)}
   .nav-item .badge.danger{background:var(--red);color:#fff}
   .doc-group td{font-family:var(--display);font-weight:600;font-size:.8rem;color:var(--gold);padding-top:18px;text-transform:uppercase;letter-spacing:.04em}
   .doc-dl{background:none;border:1px solid var(--line-2);border-radius:9px;padding:5px 9px;color:var(--cream);cursor:pointer;display:inline-flex;align-items:center;transition:border-color .16s,background .16s}
   .doc-dl:hover{border-color:var(--emerald);background:var(--emerald-dim)}
   .doc-dl svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
-  .sidebar-foot{margin-top:auto;padding-top:16px;border-top:1px solid var(--line)}
-  .profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:11px;cursor:pointer;transition:background .16s}
+  .sidebar-foot{margin-top:auto;padding-top:var(--sp-4);border-top:1px solid var(--line)}
+  .profile{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border-radius:var(--r-md);cursor:pointer;transition:background .16s}
   .profile:hover{background:var(--night-2)}
-  .profile .av{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:800;color:#04140d;font-size:.9rem;flex:none}
+  .profile .av{width:34px;height:34px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:var(--w-display);color:var(--pos-bg-2);font-size:var(--text-sm);flex:none}
   .profile .who{min-width:0}
-  .profile .who .n{font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .profile .who .r{font-size:.68rem;color:var(--muted-2)}
+  .profile .who .n{font-size:var(--text-sm);font-weight:var(--w-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .profile .who .r{font-size:var(--text-2xs);color:var(--muted-2)}
 
   /* ============ MAIN ============ */
   .main{display:flex;flex-direction:column;overflow:hidden;position:relative}
@@ -496,6 +496,7 @@
   <g id="i-ledger"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></g>
   <g id="i-doc"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></g>
   <g id="i-gear"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></g>
+  <g id="i-guide"><path d="M12 6.8c-1.8-1.2-4.6-1.4-6.7-.6a.9.9 0 0 0-.6.9v9.8a.9.9 0 0 0 1.2.8c1.9-.7 4.4-.5 6.1.7"/><path d="M12 6.8c1.8-1.2 4.6-1.4 6.7-.6a.9.9 0 0 1 .6.9v9.8a.9.9 0 0 1-1.2.8c-1.9-.7-4.4-.5-6.1.7"/><path d="M12 6.8V19.2"/></g>
   <g id="i-brand"><path d="M16 6a7 7 0 1 0 0 12" stroke="#06231f" stroke-width="2.2"/><path d="M5 14l3-3 2.5 2L14 8" stroke="#06231f" stroke-width="2.2"/></g>
 </defs></svg>
 <!-- ONBOARDING WIZARD (sub-pas A: shell full-screen; pașii vin la sub-pas B). Afișat
@@ -536,7 +537,7 @@
         <span class="tile"><span class="ic"><svg viewBox="0 0 24 24"><use href="#i-cal"/></svg></span></span>
         Calendar fiscal<span class="badge" id="cal-badge" style="display:none"></span></div>
       <div class="nav-item" data-page="ghid">
-        <span class="tile"><span class="ic" style="font-size:15px">📖</span></span>
+        <span class="tile"><span class="ic"><svg viewBox="0 0 24 24"><use href="#i-guide"/></svg></span></span>
         Ghid obligații</div>
       <div class="nav-item" data-page="plati">
         <span class="tile"><span class="ic"><svg viewBox="0 0 24 24"><use href="#i-pay"/></svg></span></span>
