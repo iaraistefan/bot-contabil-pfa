@@ -54,12 +54,18 @@ EU_VAT_PREFIXES = {
     "SI": "Slovenia", "SK": "Slovacia",
 }
 
-# Prefixe non-UE (pentru identificare import servicii)
+# Prefixe VAT non-UE (țări care AU sistem VAT cu prefix) — pentru detecția vat_id.
 NON_EU_VAT_PREFIXES = {
     "GB": "Marea Britanie",  # post-Brexit
     "CH": "Elveția",
     "NO": "Norvegia",
 }
+
+# Țări non-UE pentru CLASIFICARE (superset). US/SG nu au prefix VAT european, dar
+# serviciile importate de la ele = import de servicii cu loc prestării în RO (art. 278)
+# → taxare inversă + D301, FĂRĂ D390 (D390 = doar intracomunitar). Allowlist EXPLICIT
+# (controlăm exact ce clasificăm non-UE — clasificare greșită = declarație greșită).
+NON_EU_COUNTRIES = {**NON_EU_VAT_PREFIXES, "US": "Statele Unite", "SG": "Singapore"}
 
 # România
 RO_VAT_PREFIX = "RO"
@@ -447,7 +453,7 @@ def analyze(
             country_group = (
                 CountryGroup.ROMANIA if country_code == "RO"
                 else CountryGroup.EU if country_code in EU_VAT_PREFIXES
-                else CountryGroup.NON_EU if country_code in NON_EU_VAT_PREFIXES
+                else CountryGroup.NON_EU if country_code in NON_EU_COUNTRIES
                 else CountryGroup.UNKNOWN
             )
             detected_brand = brand_name
@@ -536,11 +542,13 @@ def _apply_vat_rules(
         decision.vat_rate = VAT_RATE_STANDARD
         decision.requires_d301 = True
         decision.requires_d390 = False
-        country_name = NON_EU_VAT_PREFIXES.get(country_code, country_code)
+        country_name = NON_EU_COUNTRIES.get(country_code, country_code)
         decision.explanation = (
             f"Furnizor non-UE — {brand_label} ({country_name}). "
-            f"Import de servicii — TVA datorat la ANAF prin D301. "
-            f"Nu se include în VIES (D390)."
+            f"Import de servicii — TVA datorat la ANAF prin D301 (taxare inversă, "
+            f"loc prestării RO, art. 278). Nu se include în VIES (D390). "
+            f"Verifică pe factură: dacă furnizorul a perceput deja TVA printr-un "
+            f"regim special (OSS), taxarea inversă/D301 nu se aplică (art. 307 alin. 6)."
         )
 
     # ─── UNKNOWN — Manual review ────────────────────────────
@@ -578,7 +586,7 @@ def get_brand_database_size() -> dict:
     """Returnează statistica brand-urilor (pentru debugging)."""
     ro_count = sum(1 for v in BRAND_DATABASE.values() if v[0] == "RO")
     eu_count = sum(1 for v in BRAND_DATABASE.values() if v[0] in EU_VAT_PREFIXES)
-    non_eu_count = sum(1 for v in BRAND_DATABASE.values() if v[0] in NON_EU_VAT_PREFIXES)
+    non_eu_count = sum(1 for v in BRAND_DATABASE.values() if v[0] in NON_EU_COUNTRIES)
     return {
         "total": len(BRAND_DATABASE),
         "ro": ro_count,
