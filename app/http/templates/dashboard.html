@@ -23,6 +23,41 @@
     --display:"Poppins",sans-serif; --body:"Hanken Grotesk",sans-serif;
     --mono:"Geist Mono",ui-monospace,SFMono-Regular,monospace;
     --sidebar-w:248px;
+
+    /* ═══ SISTEM DE DESIGN (FAZA 1, PAS 1) — token-uri fundație ═══
+       Doar DEFINIȚII; migrarea utilizărilor vine la Pas 2. Aspectul vizibil NU se schimbă încă. */
+
+    /* — Paletă: token-uri pentru one-off-urile hardcodate (capete gradient + fundaluri) — */
+    --gold-2:#E89A2B;                      /* gold închis — capăt gradient */
+    --red-2:#D9483B;                       /* roșu închis — capăt gradient */
+    --pos-bg:#06231F;                      /* verde foarte închis — fundal gradient pozitiv */
+    --pos-bg-2:#04140D;                    /* verde și mai închis — fundal gradient */
+    /* Culori grafice (donut/bars) derivate din paletă — înlocuiesc #C9A14A/#7FC8A0 off-brand */
+    --chart-1:var(--emerald);              /* teal */
+    --chart-2:var(--blue);                 /* albastru */
+    --chart-3:var(--gold);                 /* auriu */
+    --chart-4:var(--muted);                /* gri neutru (Altele) */
+    --chart-5:var(--pos-br);               /* mint deschis */
+
+    /* — Type scale (rem; înlocuiește 47 de valori px+rem amestecate) — */
+    --text-2xs:.6875rem;                   /* 11px — badge-uri micuțe */
+    --text-xs:.75rem;                      /* 12px — captions, sub-labels */
+    --text-sm:.875rem;                     /* 14px — body secundar, celule tabel */
+    --text-base:1rem;                      /* 16px — body */
+    --text-lg:1.25rem;                     /* 20px — titluri secțiune */
+    --text-xl:1.5rem;                      /* 24px — headere card */
+    --text-2xl:2rem;                       /* 32px — numere KPI */
+    --text-3xl:3rem;                       /* 48px — total hero */
+
+    /* — Font weights (4 + display) — */
+    --w-normal:400; --w-medium:500; --w-semibold:600; --w-bold:700;
+    --w-display:800;                       /* doar hero/numere mari — excepție declarată */
+
+    /* — Spacing scale (8px-soft) — */
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+
+    /* — Radius scale (4 trepte + pill); caracterul exact se calibrează vizual la Pas 2 — */
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-full:999px;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
