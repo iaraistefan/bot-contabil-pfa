@@ -56,17 +56,21 @@ def create(
 def get_by_id(
     session: Session,
     doc_id: int,
-    user_id: Optional[int] = None,
+    user_id: int,
 ) -> Optional[Document]:
     """
-    Returnează documentul cu doc_id, sau None.
-    Dacă user_id e specificat, verifică că documentul aparține user-ului
-    (protecție: un user nu poate șterge documentele altuia).
+    Returnează documentul cu doc_id DOAR dacă aparține user-ului, altfel None.
+
+    SECURITATE: user_id e OBLIGATORIU (nu opțional) — scope-ul multi-tenant e impus
+    prin construcție, nu prin disciplina apelantului. Un apelant nu poate „uita"
+    user_id (ar fi TypeError) → footgun-ul (citirea documentului altui user) e
+    fizic imposibil. Vezi tests/test_isolation_boundary.py.
     """
-    q = session.query(Document).filter(Document.id == doc_id)
-    if user_id is not None:
-        q = q.filter(Document.user_id == user_id)
-    return q.one_or_none()
+    return (
+        session.query(Document)
+        .filter(Document.id == doc_id, Document.user_id == user_id)
+        .one_or_none()
+    )
 
 
 def set_status(
