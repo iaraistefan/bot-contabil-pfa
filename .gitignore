@@ -8,3 +8,5 @@ storage/
 
 # Artefact DB de test (SQLite local) — nu intra in repo
 test_data.db
+# Baza SQLite locală (dev/preview vizual) — creată de serverul de preview, nu intră în repo
+data.db
