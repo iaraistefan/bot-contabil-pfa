@@ -107,8 +107,10 @@ def test_complete_bolt_optional(monkeypatch, tmp_path):
 
 # ── /complete: blocat când lipsește obligatoriu ──
 def test_complete_blocat_fara_masina(monkeypatch, tmp_path):
+    # ȘOFER (ridesharing) fără vehicul → tot blocat (deductibilitate auto esențială).
     client, S, uid = _web(monkeypatch, tmp_path)
-    _seteaza(S, uid, name="Ion", firma_cui="53067338", regim_impunere="NORMA_VENIT")
+    _seteaza(S, uid, name="Ion", firma_cui="53067338", regim_impunere="NORMA_VENIT",
+             activity_code="ridesharing")
     # FĂRĂ mașină
     r = client.post("/api/v1/onboarding/complete", json={})
     assert r.status_code == 400
@@ -121,11 +123,26 @@ def test_complete_blocat_fara_masina(monkeypatch, tmp_path):
 
 def test_complete_blocat_lista_lipsa(monkeypatch, tmp_path):
     client, S, uid = _web(monkeypatch, tmp_path)
-    # nimic setat → toate lipsesc
+    # nimic setat (non-șofer: fără activity_code) → lipsesc cele 3 de bază, NU mașina
     r = client.post("/api/v1/onboarding/complete", json={})
     assert r.status_code == 400
     miss = set(r.get_json()["missing"])
-    assert {"name", "firma", "regim_impunere", "masina"} <= miss
+    assert {"name", "firma", "regim_impunere"} <= miss
+    assert "masina" not in miss                         # non-șofer → mașina nu blochează
+
+
+def test_complete_nonridesharing_fara_masina_trece(monkeypatch, tmp_path):
+    # DEBLOCARE (I2): non-șofer (IT/medical) cu minimele, FĂRĂ vehicul → finalizează.
+    # Web ≡ Telegram (mașina opțională pentru non-șoferi). Dovada end-to-end.
+    client, S, uid = _web(monkeypatch, tmp_path)
+    _seteaza(S, uid, name="Ana", firma_cui="12345678", regim_impunere="SISTEM_REAL",
+             activity_code="it_freelance")
+    # FĂRĂ mașină
+    r = client.post("/api/v1/onboarding/complete", json={})
+    assert r.status_code == 200 and r.get_json()["ok"] is True
+    s = S(); u = s.get(User, uid)
+    assert u.onboarding_completed is True
+    s.close()
 
 
 # ── gardieni template (finalizare + rehidratare + ieșire) ──
