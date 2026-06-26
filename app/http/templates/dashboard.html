@@ -161,26 +161,26 @@
   .panel-h .t span{font-family:var(--body);font-weight:400;font-size:.74rem;color:var(--muted);display:block;margin-top:1px}
 
   /* KPI */
-  .kpi{background:var(--night);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s}
+  .kpi{background:var(--night);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--sp-5);position:relative;overflow:hidden;transition:transform .2s,border-color .2s}
   .kpi:hover{transform:translateY(-3px);border-color:var(--line-2)}
-  .kpi .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-  .kpi .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center}
+  .kpi .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4)}
+  .kpi .ic{width:38px;height:38px;border-radius:var(--r-md);display:grid;place-items:center}
   .kpi .ic svg{width:19px;height:19px;stroke-width:2}
   .kpi.g .ic{background:var(--pos-dim);color:var(--pos-br)}
   .kpi.gold .ic{background:var(--gold-dim);color:var(--gold)}
   .kpi.r .ic{background:var(--red-dim);color:var(--red)}
   .kpi.b .ic{background:var(--blue-dim);color:var(--blue)}
-  .kpi .trend{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:20px}
+  .kpi .trend{font-size:.72rem;font-weight:var(--w-bold);padding:var(--sp-1) var(--sp-2);border-radius:var(--r-full)}
   .kpi .trend.up{background:var(--pos-dim);color:var(--pos-br)} .kpi .trend.up::before{content:"▲ "}
   .kpi .trend.down{background:var(--red-dim);color:var(--red)} .kpi .trend.down::before{content:"▼ "}
   /* MoM (C2): culoare decuplată de săgeată — săgeata e în text, culoarea = polaritate (favorabil/nefavorabil/neutru). */
   .kpi .trend.good{background:var(--pos-dim);color:var(--pos-br)}
   .kpi .trend.bad{background:var(--red-dim);color:var(--red)}
   .kpi .trend.neutral{background:rgba(143,160,184,.14);color:var(--muted)}
-  .kpi .lab{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted);margin-bottom:5px}
-  .kpi .val{font-family:var(--display);font-weight:700;font-size:1.62rem;letter-spacing:-.02em;line-height:1}
+  .kpi .lab{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted);margin-bottom:var(--sp-1)}
+  .kpi .val{font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-2xl);letter-spacing:-.02em;line-height:1}
   .kpi .val.g{color:var(--pos-br)} .kpi .val.gold{color:var(--gold)} .kpi .val.r{color:var(--red)}
-  .kpi .sub{font-size:.72rem;color:var(--muted-2);margin-top:6px}
+  .kpi .sub{font-size:.72rem;color:var(--muted-2);margin-top:var(--sp-2)}
 
   /* ============ HERO "CAT PLATESC SI CAND" ============ */
   .hero-pay{background:linear-gradient(135deg,var(--night-2),var(--night));border:1px solid var(--line-2);border-radius:var(--r-2xl);padding:22px 24px;margin-bottom:16px}
