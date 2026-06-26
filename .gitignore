@@ -10,3 +10,5 @@ storage/
 test_data.db
 # Baza SQLite locală (dev/preview vizual) — creată de serverul de preview, nu intră în repo
 data.db
+# Unelte de preview vizual local (server Flask + seed-uri demo) — dev-only, nu intră în repo
+_preview/
