@@ -107,8 +107,8 @@
   .nav-item .badge{margin-left:auto;font-family:var(--mono);font-size:var(--text-2xs);font-weight:var(--w-semibold);letter-spacing:.05em;padding:2px var(--sp-2);border-radius:var(--r-full);background:var(--gold-dim);color:var(--gold)}
   .nav-item.active .badge{background:rgba(0,0,0,.18);color:var(--pos-bg)}
   .nav-item .badge.danger{background:var(--red);color:#fff}
-  .doc-group td{font-family:var(--display);font-weight:600;font-size:.8rem;color:var(--gold);padding-top:18px;text-transform:uppercase;letter-spacing:.04em}
-  .doc-dl{background:none;border:1px solid var(--line-2);border-radius:9px;padding:5px 9px;color:var(--cream);cursor:pointer;display:inline-flex;align-items:center;transition:border-color .16s,background .16s}
+  .doc-group td{font-family:var(--display);font-weight:var(--w-semibold);font-size:.8rem;color:var(--gold);padding-top:18px;text-transform:uppercase;letter-spacing:.04em}
+  .doc-dl{background:none;border:1px solid var(--line-2);border-radius:var(--r-sm);padding:5px 9px;color:var(--cream);cursor:pointer;display:inline-flex;align-items:center;transition:border-color .16s,background .16s}
   .doc-dl:hover{border-color:var(--emerald);background:var(--emerald-dim)}
   .doc-dl svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
   .sidebar-foot{margin-top:auto;padding-top:var(--sp-4);border-top:1px solid var(--line)}
@@ -331,7 +331,7 @@
   .band{position:relative;border:1px solid var(--line-2);border-radius:var(--r-2xl);overflow:hidden;background:linear-gradient(160deg,var(--card),var(--card-2));padding:26px 26px 22px;margin-bottom:16px}
   .band-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
   .band-head .t{font-family:var(--display);font-weight:700;font-size:18px}
-  .band-head .badge{font-family:var(--mono);font-size:9px;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--emerald-br);border:1px solid var(--emerald-dim);background:var(--emerald-dim);padding:3px 9px;border-radius:20px;margin-left:auto}
+  .band-head .badge{font-family:var(--mono);font-size:9px;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--emerald-br);border:1px solid var(--emerald-dim);background:var(--emerald-dim);padding:var(--sp-1) var(--sp-2);border-radius:var(--r-full);margin-left:auto}
   .band-sub{font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.45}
   .tbar{padding:14px 0;border-bottom:1px solid var(--line)}
   .tbar:last-child{border-bottom:none;padding-bottom:4px}
@@ -364,14 +364,14 @@
 
   /* list rows */
   .rows{display:flex;flex-direction:column}
-  .row{display:flex;align-items:center;gap:13px;padding:13px 4px;border-bottom:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-1);border-bottom:1px solid var(--line)}
   .row:last-child{border-bottom:0}
-  .row .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:1rem;flex:none}
+  .row .ic{width:38px;height:38px;border-radius:var(--r-md);display:grid;place-items:center;font-size:1rem;flex:none}
   .row .info{flex:1;min-width:0}
-  .row .info .t{font-size:.88rem;font-weight:600}
+  .row .info .t{font-size:.88rem;font-weight:var(--w-semibold)}
   .row .info .m{font-size:.72rem;color:var(--muted-2);margin-top:1px}
-  .row .amt{font-weight:700;text-align:right;font-size:.92rem}
-  .row .amt .s{font-size:.68rem;color:var(--muted-2);font-weight:500;display:block}
+  .row .amt{font-weight:var(--w-bold);text-align:right;font-size:.92rem}
+  .row .amt .s{font-size:.68rem;color:var(--muted-2);font-weight:var(--w-medium);display:block}
   .pos{color:var(--pos-br)} .neg{color:var(--red)} .neu{color:var(--gold)}
 
   .ic.green{background:var(--pos-dim);color:var(--pos-br)}
@@ -379,7 +379,7 @@
   .ic.gold{background:var(--gold-dim);color:var(--gold)}
   .ic.blue{background:var(--blue-dim);color:var(--blue)}
 
-  .badge-st{font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .badge-st{font-size:.68rem;font-weight:var(--w-bold);padding:var(--sp-1) var(--sp-2);border-radius:var(--r-full);white-space:nowrap}
   .badge-st.ok{background:var(--pos-dim);color:var(--pos-br)} .badge-st.ok::before{content:"✓ "}
   .badge-st.warn{background:var(--gold-dim);color:var(--gold)} .badge-st.warn::before{content:"! "}
   .badge-st.danger{background:var(--red-dim);color:var(--red)} .badge-st.danger::before{content:"✕ "}
@@ -404,9 +404,9 @@
 
   /* table */
   table{width:100%;border-collapse:collapse}
-  th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;padding:0 12px 12px;border-bottom:1px solid var(--line)}
+  th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted-2);font-weight:var(--w-bold);padding:0 var(--sp-3) var(--sp-3);border-bottom:1px solid var(--line)}
   th.r,td.r{text-align:right}
-  td{padding:13px 12px;border-bottom:1px solid var(--line);font-size:.86rem}
+  td{padding:var(--sp-3) var(--sp-3);border-bottom:1px solid var(--line);font-size:.86rem}
   tr:last-child td{border-bottom:0}
   tbody tr{transition:background .15s}
   tbody tr:hover{background:var(--night-2)}
@@ -456,9 +456,9 @@
     .doc-dl{min-height:44px;padding:0 12px}
     /* C9-C: card-rows pe PLATI (tabel → carduri verticale label:valoare, nativ premium) */
     .t-cards thead{display:none}
-    .t-cards tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:12px}
-    .t-cards td{display:flex;justify-content:space-between;align-items:center;gap:12px;border:none;padding:7px 0;text-align:right}
-    .t-cards td::before{content:attr(data-label);color:var(--muted-2);font-size:.72rem;font-weight:600;text-align:left;flex:none}
+    .t-cards tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-3)}
+    .t-cards td{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-3);border:none;padding:var(--sp-2) 0;text-align:right}
+    .t-cards td::before{content:attr(data-label);color:var(--muted-2);font-size:.72rem;font-weight:var(--w-semibold);text-align:left;flex:none}
     .t-cards td[data-label=""]{padding-top:10px}
     .t-cards td[data-label=""]::before{display:none}
     .t-cards td[data-label=""] .btn{width:100%;justify-content:center;min-height:44px}
