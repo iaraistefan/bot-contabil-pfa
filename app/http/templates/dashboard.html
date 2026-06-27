@@ -32,12 +32,16 @@
     --red-2:#D9483B;                       /* roșu închis — capăt gradient */
     --pos-bg:#06231F;                      /* verde foarte închis — fundal gradient pozitiv */
     --pos-bg-2:#04140D;                    /* verde și mai închis — fundal gradient */
-    /* Culori grafice (donut/bars) derivate din paletă — înlocuiesc #C9A14A/#7FC8A0 off-brand */
-    --chart-1:var(--emerald);              /* teal */
-    --chart-2:var(--blue);                 /* albastru */
-    --chart-3:var(--gold);                 /* auriu */
-    --chart-4:var(--muted);                /* gri neutru (Altele) */
-    --chart-5:var(--pos-br);               /* mint deschis */
+    /* Culori grafice (secvența categorică donut) — SURSĂ UNICĂ, citite din JS via cssVar().
+       Ordinea oglindește secvența vie folosită până acum (0 regresie); slot 6/7 înlocuiesc
+       off-brand #C9A14A/#7FC8A0 cu tonuri brand (emerald/emerald-br). „Altele=gri" rămâne --muted. */
+    --chart-1:var(--pos);                  /* verde pozitiv */
+    --chart-2:var(--gold);                 /* auriu */
+    --chart-3:var(--blue);                 /* albastru */
+    --chart-4:var(--pos-br);               /* mint deschis */
+    --chart-5:var(--red);                  /* roșu */
+    --chart-6:var(--emerald);              /* teal (era #C9A14A off-brand) */
+    --chart-7:var(--emerald-br);           /* mint-teal (era #7FC8A0 off-brand) */
 
     /* — Type scale (rem; înlocuiește 47 de valori px+rem amestecate) — */
     --text-2xs:.6875rem;                   /* 11px — badge-uri micuțe */
@@ -1191,7 +1195,10 @@
   }
 
   // ---- CHART HELPERS ----
-  const C={teal:"#2DD4BF",tealSoft:"#82E0D3",emerald:"#19C691",emeraldBr:"#3DE7AE",gold:"#F5B945",blue:"#5AA9E6",red:"#F2685C",grid:"rgba(255,255,255,.06)",txt:"#8FA0B8"};
+  // SURSĂ UNICĂ: culorile graficelor derivă din token-urile CSS (:root), citite la runtime.
+  // Fallback = hex-ul original (dacă token-ul dispare → culoarea NU se sparge). .trim() — getPropertyValue întoarce " #hex".
+  const cssVar=(n,fb='')=>getComputedStyle(document.documentElement).getPropertyValue(n).trim()||fb;
+  const C={teal:cssVar("--emerald","#2DD4BF"),tealSoft:cssVar("--emerald-br","#82E0D3"),emerald:cssVar("--pos","#19C691"),emeraldBr:cssVar("--pos-br","#3DE7AE"),gold:cssVar("--gold","#F5B945"),blue:cssVar("--blue","#5AA9E6"),red:cssVar("--red","#F2685C"),grid:"rgba(255,255,255,.06)",txt:cssVar("--muted","#8FA0B8")};
   const charts={};
   const baseOpts=(extra={})=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#121E33",borderColor:C.teal,borderWidth:1,titleColor:"#F4F8FC",bodyColor:"#F4F8FC",padding:10}},...extra});
   if(window.Chart){Chart.defaults.font.family="Hanken Grotesk";Chart.defaults.color=C.txt;}
@@ -1637,7 +1644,7 @@
   function drawDonut(canvasId,items,key,colors){
     const labels=items.map(i=>i.label);
     const data=items.map(i=>Number(i.amount_brut||0));
-    const palette=[C.emerald,C.gold,C.blue,C.emeraldBr,C.red,"#C9A14A","#7FC8A0"];
+    const palette=[1,2,3,4,5,6,7].map(n=>cssVar(`--chart-${n}`,C.txt));   // secvență din token-uri; off-brand #C9A14A/#7FC8A0 → --chart-6/7 (teal/mint)
     if(charts[canvasId])charts[canvasId].destroy();
     const el=document.getElementById(canvasId);if(!el)return;
     if(data.length===0){return;}
