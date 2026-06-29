@@ -750,9 +750,9 @@
           <div><div class="t">TVA pe comisionul Bolt (îl declari tu)</div><div class="d">Bolt facturează din Estonia, fără TVA → declari tu TVA-ul de 21% prin D301 + raportezi la VIES prin D390. Lunar, până pe 25.</div></div>
         </div>
         <div class="grid g-3" style="margin-bottom:16px">
-          <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d301">—</span> <span style="font-size:.8rem;color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">—</span> comision</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D301 — decontul de TVA</div><span class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:var(--text-xl);color:var(--gold)"><span id="tva-d301">—</span> <span style="font-size:var(--text-xs);color:var(--muted)">RON</span></div><div class="hint" style="margin-top:8px">TVA 21% × <span id="tva-baza">—</span> comision</div></div>
           <div class="panel hover"><div class="panel-h"><div class="t">D390 — raportare UE (VIES)</div><span class="badge-st warn">de depus</span></div><div class="hint" style="margin-top:4px">Raportezi la UE serviciile cumpărate de la Bolt (Estonia). Fără plată.</div></div>
-          <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span id="tva-d100-badge" class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:1.5rem;color:var(--gold)"><span id="tva-d100">—</span> <span id="tva-d100-ron" style="font-size:.8rem;color:var(--muted)">RON</span></div><div id="tva-d100-hint" class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): după regimul nerezident. Lunar, termen 25.</div></div>
+          <div class="panel hover"><div class="panel-h"><div class="t">D100 — impozit pentru Bolt</div><span id="tva-d100-badge" class="badge-st warn">de depus</span></div><div class="val num" style="font-family:var(--display);font-size:var(--text-xl);color:var(--gold)"><span id="tva-d100">—</span> <span id="tva-d100-ron" style="font-size:var(--text-xs);color:var(--muted)">RON</span></div><div id="tva-d100-hint" class="hint" style="margin-top:8px">Impozit reținut pentru Bolt (firmă din afara RO): după regimul nerezident. Lunar, termen 25.</div></div>
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Generare declarații<span>format oficial ANAF</span></div></div>
@@ -766,11 +766,11 @@
           <div class="reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Coniar pregătește declarația — o depui tu în SPV. Nu trimitem nimic la ANAF în locul tău.</div>
           <div id="decl-rezultat" style="margin-top:18px;display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-              <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:1rem"></div>
+              <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base)"></div>
               <a class="btn btn-primary" id="decl-xml" style="padding:8px 14px" href="#" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă XML</a>
             </div>
             <div id="decl-avert"></div>
-            <pre id="decl-ghid" style="background:var(--night-2);border:1px solid var(--line-2);border-radius:12px;padding:16px;font-family:var(--body);font-size:.82rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--cream);margin-top:4px;max-height:none;overflow:visible"></pre>
+            <pre id="decl-ghid" style="background:var(--night-2);border:1px solid var(--line-2);border-radius:12px;padding:16px;font-family:var(--body);font-size:var(--text-sm);line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--cream);margin-top:4px;max-height:none;overflow:visible"></pre>
           </div>
         </div>
         <div class="fiscal-stamp"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Coniar pregătește · tu depui în SPV</div>
@@ -789,9 +789,9 @@
             <div class="panel-h"><div class="t">Ritm lunar</div></div>
             <div class="hint" style="margin-bottom:14px">Ce ai de făcut în fiecare lună, recurent:</div>
             <div class="rows">
-              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D301 — decontul de TVA</div><div class="m">doar în lunile cu factură Bolt</div></div><span class="badge-st ok">auto</span></div>
-              <div class="row"><div class="ic gold"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D390 — raportare UE (VIES)</div><div class="m">recapitulativă servicii</div></div><span class="badge-st ok">auto</span></div>
-              <div class="row"><div class="ic blue"><b style="font-size:.7rem">25</b></div><div class="info"><div class="t">D100 — impozit pentru Bolt</div><div class="m">posibil 0 (suportat Bolt)</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic gold"><b style="font-size:var(--text-2xs)">25</b></div><div class="info"><div class="t">D301 — decontul de TVA</div><div class="m">doar în lunile cu factură Bolt</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic gold"><b style="font-size:var(--text-2xs)">25</b></div><div class="info"><div class="t">D390 — raportare UE (VIES)</div><div class="m">recapitulativă servicii</div></div><span class="badge-st ok">auto</span></div>
+              <div class="row"><div class="ic blue"><b style="font-size:var(--text-2xs)">25</b></div><div class="info"><div class="t">D100 — impozit pentru Bolt</div><div class="m">posibil 0 (suportat Bolt)</div></div><span class="badge-st ok">auto</span></div>
             </div>
           </div>
         </div>
@@ -871,7 +871,7 @@
               <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Date bancare</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:4px">Date bancare</div>
               <div class="hint" style="margin-bottom:14px">Folosite la generarea declarației D301 (banca și IBAN sunt obligatorii în formular).</div>
               <label class="set-lbl">Banca</label>
               <input class="set-inp" id="set-banca" type="text" placeholder="ex. Banca Transilvania" autocomplete="off">
@@ -884,15 +884,15 @@
               </button>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Regim impozit nerezident — platforme</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:4px">Regim impozit nerezident — platforme</div>
               <div class="hint" style="margin-bottom:12px">Impozitul pe comisionul reținut de platformele din afara RO (D100). Cota depinde de platformă și de certificatul de rezidență fiscală. Setează doar platformele pe care le folosești — fiecare are tratamentul ei.</div>
-              <div class="t" style="font-weight:var(--w-semibold);font-size:.86rem;margin-bottom:4px">🟢 Bolt <span style="font-weight:var(--w-normal);color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
+              <div class="t" style="font-weight:var(--w-semibold);font-size:var(--text-sm);margin-bottom:4px">🟢 Bolt <span style="font-weight:var(--w-normal);color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
               <select class="set-inp" id="set-nerezident" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="BOLT_CU_CRF">Am certificatul Bolt → 2% (D100 lunar + D207 anual)</option>
                 <option value="BOLT_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
               </select>
-              <div class="t" style="font-weight:var(--w-semibold);font-size:.86rem;margin:14px 0 4px">⚫ Uber <span style="font-weight:var(--w-normal);color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
+              <div class="t" style="font-weight:var(--w-semibold);font-size:var(--text-sm);margin:14px 0 4px">⚫ Uber <span style="font-weight:var(--w-normal);color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
               <select class="set-inp" id="set-nerezident-uber" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="UBER_CU_CRF">Am certificatul Uber → 0% (scutire; doar D207)</option>
@@ -901,11 +901,11 @@
               <div id="set-nerez-msg" class="hint" style="margin-top:8px;min-height:18px"></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Certificat de rezidență Bolt</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:4px">Certificat de rezidență Bolt</div>
               <div id="cert-continut"><div class="hint">Se încarcă…</div></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Conectare cont Bolt (sync automat)</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:4px">Conectare cont Bolt (sync automat)</div>
               <div id="bolt-conectare"><div class="hint">Se încarcă…</div></div>
             </div>
           </div>
@@ -1611,7 +1611,7 @@
     // Stare 4 — gol complet (nimic de plătit, de depus sau de estimat)
     if(plati.length===0 && declar.length===0 && estimari.length===0){
       box.classList.add("is-clean");
-      box.innerHTML=head+`<div class="hp-empty"><span style="font-size:1.4rem">✓</span><div>Nimic de plătit luna aceasta<span class="sub">Nicio declarație de depus. Ești la zi.</span></div></div>`;
+      box.innerHTML=head+`<div class="hp-empty"><!-- font-size 1.4rem off-scale intenționat (22.4px) — candidat recalibrare tipografică viitoare --><span style="font-size:1.4rem">✓</span><div>Nimic de plătit luna aceasta<span class="sub">Nicio declarație de depus. Ești la zi.</span></div></div>`;
       return;
     }
 
@@ -1781,7 +1781,7 @@
         box.innerHTML = items.length? items.map(i=>{
           const w=Math.round(Number(i.amount_brut||0)/max*100);
           const ded=i.deductibility_pct<100?`${i.deductibility_pct}% deductibil`:"100% deductibil";
-          return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:1rem">'+escHtml(i.icon)+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
+          return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:var(--text-base)">'+escHtml(i.icon)+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
         }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:14px">Nicio cheltuială în '+MONTHS[M]+'.</div>');
       }
       drawDonut("chDonut", items);
@@ -1997,7 +1997,7 @@
           const btn = o.suma_estimata!=null && o.suma_estimata>0
             ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
             : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
-          return `<tr><td data-label="Obligație"><b>${escHtml(o.cod)}</b><div class="m" style="font-size:.72rem;color:var(--muted-2)">${escHtml(o.nume.slice(0,28))}</div></td><td class="num" data-label="Cont" style="font-size:.78rem">${escHtml(cont)}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
+          return `<tr><td data-label="Obligație"><b>${escHtml(o.cod)}</b><div class="m" style="font-size:var(--text-xs);color:var(--muted-2)">${escHtml(o.nume.slice(0,28))}</div></td><td class="num" data-label="Cont" style="font-size:var(--text-xs)">${escHtml(cont)}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
         }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
       }
     }catch(e){
@@ -2364,7 +2364,7 @@
       <div style="max-width:480px;margin:0 auto;width:100%">
         <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
           <span class="brand-badge">C</span>
-          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:1.3rem">Coniar</div>
+          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-lg)">Coniar</div>
         </div>
         <div style="display:flex;gap:5px;margin-bottom:6px">${WIZ.steps.map((_,k)=>`<div style="flex:1;height:4px;border-radius:3px;background:${k<=WIZ.i?'var(--emerald)':'var(--line-2)'}"></div>`).join("")}</div>
         <div class="hint" style="margin-bottom:14px">Pasul ${x} din ${n}</div>
@@ -2408,12 +2408,12 @@
     }
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%;text-align:center">
-        <div style="font-size:3rem;margin-bottom:6px">✅</div>
-        <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:1.5rem;margin-bottom:6px">Gata! Contul tău e configurat</div>
+        <div style="font-size:var(--text-3xl);margin-bottom:6px">✅</div>
+        <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:6px">Gata! Contul tău e configurat</div>
         <div class="hint" style="margin-bottom:16px">Am salvat tot. Iată ce-ai configurat:</div>
         <div class="panel" style="text-align:left;margin-bottom:16px">${rez}</div>
         <div id="wiz-done-msg" class="hint" style="color:var(--red);min-height:18px;margin-bottom:8px"></div>
-        <button class="btn btn-primary" id="wiz-complete-btn" onclick="wizComplete()" style="width:100%;min-height:48px;font-size:1.05rem">Intră în Coniar →</button>
+        <button class="btn btn-primary" id="wiz-complete-btn" onclick="wizComplete()" style="width:100%;min-height:48px;font-size:var(--text-base)">Intră în Coniar →</button>
       </div>`;
   }
   async function wizComplete(){
@@ -2584,7 +2584,7 @@
     const tog=(key,emoji,tit,desc)=>{
       const on=!!WIZ.data[key];
       return `<div onclick="wizToggleSituatie('${key}')" style="cursor:pointer;border:2px solid ${on?"var(--emerald)":"var(--line-2)"};border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:11px;align-items:flex-start">
-        <span style="font-size:1.3rem">${emoji}</span>
+        <span style="font-size:var(--text-lg)">${emoji}</span>
         <div style="flex:1"><div style="font-weight:var(--w-semibold)">${tit} ${on?"✓":""}</div><div class="hint" style="margin-top:4px">${desc}</div></div></div>`;
     };
     const cashTog = WIZ.data.is_ridesharing
