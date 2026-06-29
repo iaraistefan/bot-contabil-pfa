@@ -214,6 +214,10 @@
   .hero-pay .hp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   .hero-pay .hp-title{font-family:var(--mono);font-weight:var(--w-semibold);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted)}
   .hero-pay .hp-period{font-size:var(--text-xs);color:var(--muted-2)}
+  /* indicator de stare PLATĂ la vârf (legat de `overdue` din renderPay; pragurile au banda separată) */
+  .hero-pay .hp-stat{vertical-align:middle;margin-right:7px}
+  .hero-pay .hp-stat.ok{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos)}
+  .hero-pay .hp-stat.bad{display:inline-block;font-size:var(--text-2xs);font-weight:var(--w-bold);color:var(--red);background:var(--red-dim);padding:2px 8px;border-radius:var(--r-full)}
   .hero-pay .hp-main{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap}
   .hero-pay .hp-total{font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-2xl);line-height:1;letter-spacing:-.02em;color:var(--gold)}
   .hero-pay .hp-total .cur{font-size:var(--text-base);color:var(--muted);font-weight:var(--w-semibold);margin-left:3px}
@@ -247,8 +251,8 @@
   .fhero .glow{position:absolute;top:-120px;right:-80px;width:400px;height:400px;background:radial-gradient(circle,var(--emerald-dim),transparent 65%);pointer-events:none}
   .fhero .eyebrow{font-family:var(--mono);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);color:var(--emerald-br);text-transform:uppercase}
   .fhero .eyebrow .yr{color:var(--muted)}
-  .fhero .htot{font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-3xl);line-height:1.05;margin-top:9px;letter-spacing:-.02em;color:var(--gold)}
-  .fhero .htot .cur{font-family:var(--display);font-weight:var(--w-light);font-size:var(--text-lg);color:var(--muted);margin-left:var(--sp-2)}
+  .fhero .htot{font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);line-height:1.05;margin-top:9px;letter-spacing:-.02em;color:var(--gold)}
+  .fhero .htot .cur{font-family:var(--display);font-weight:var(--w-light);font-size:var(--text-sm);color:var(--muted);margin-left:var(--sp-2)}
   .fhero .htot-lab{font-family:var(--mono);font-size:var(--text-3xs);letter-spacing:var(--tracking-label);color:var(--muted);text-transform:uppercase;margin-top:4px}
   .fhero .profit{display:flex;gap:var(--sp-6);margin-top:var(--sp-4);flex-wrap:wrap;font-size:var(--text-sm)}
   .fhero .profit .it{display:flex;align-items:center;gap:8px}
@@ -623,14 +627,9 @@
       <!-- ===== OVERVIEW ===== -->
       <section class="page active" id="page-overview">
         <div id="ov-onboarding"></div>
-        <div id="ov-fiscal"></div>
-        <div id="ov-praguri"></div>
-        <div class="panel" id="ov-simulator" style="margin-bottom:16px">
-          <div class="panel-h"><div class="t">Ce regim fiscal e mai avantajos?<span>normă de venit vs sistem real</span></div></div>
-          <div id="sim-body"><button class="btn btn-primary" onclick="loadSimulare()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v18M6 7l6-4 6 4M4 21h16M7 11l-2.5 6h5L7 11zM17 11l-2.5 6h5L17 11z" stroke-linecap="round" stroke-linejoin="round"/></svg>Află ce regim e mai avantajos</button></div>
-        </div>
-        <div id="ov-amef"></div>
         <div class="hero-pay" id="ov-pay"></div>
+        <div id="ov-amef"></div>
+        <div id="ov-praguri"></div>
         <div class="grid g-4" style="margin-bottom:16px">
           <div class="kpi g">
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
@@ -648,6 +647,13 @@
             <div class="top"><div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></div></div>
             <div class="lab">Km cu pasageri</div><div class="val num" id="ov-km">—</div><div class="sub" id="ov-km-sub">din cursele Bolt</div>
           </div>
+        </div>
+
+        <div id="ov-fiscal"></div>
+
+        <div class="panel" id="ov-simulator" style="margin-bottom:16px">
+          <div class="panel-h"><div class="t">Ce regim fiscal e mai avantajos?<span>normă de venit vs sistem real</span></div></div>
+          <div id="sim-body"><button class="btn btn-primary" onclick="loadSimulare()"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v18M6 7l6-4 6 4M4 21h16M7 11l-2.5 6h5L7 11zM17 11l-2.5 6h5L17 11z" stroke-linecap="round" stroke-linejoin="round"/></svg>Află ce regim e mai avantajos</button></div>
         </div>
 
         <div class="grid g-2-1" style="margin-bottom:16px">
@@ -1237,6 +1243,10 @@
     try{
       skelKpis(["ov-net","ov-chelt","ov-tva","ov-km"]);
       const _fh=document.getElementById("ov-fiscal"); if(_fh) _fh.innerHTML='<div class="skel skel-hero"></div>';
+      // hero-pay PRIMUL (decizie-first): spina se randează înaintea restului. Depinde DOAR de
+      // getObligatii (fetch propriu, independent de period/d212) → mutarea nu rupe nicio dependență.
+      const _hp=document.getElementById("ov-pay"); if(_hp){_hp.className="";_hp.innerHTML='<div class="skel skel-hero"></div>';}
+      try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
       const p=await getPeriod(Y,M);
       // ov-net = venit net ANUAL YTD (din getD212, mai jos) — identic cu botul
       // + hero-ul fiscal de pe aceeași pagină. NU profit_estimated lunar (care
@@ -1274,7 +1284,6 @@
       }catch(e){console.error(e);}
       // A5: linie discretă "Date actualizate {relativ}" (cel mai recent sync: Bolt sau documente)
       try{const st=await getSetari();const ig=st.integrari||{};const ts=[ig.bolt&&ig.bolt.last_synced,ig.documente&&ig.documente.last_synced].filter(Boolean).sort();setTxt("ov-synced", ts.length?("Date actualizate "+relTime(ts[ts.length-1])):"");}catch(e){console.error(e);}
-      try{const ob=await getObligatii(Y,M);const obl=ob.obligatii||[];renderPay(obl);renderDeadlines(obl);renderCalBadge(obl);}catch(e){console.error(e);}
     }catch(e){console.error(e);}
   }
 
@@ -1595,7 +1604,10 @@
     const box=document.getElementById("ov-pay");if(!box)return;
     const {plati,declar,estimari,total,overdue,near}=_splitObligatii(obl);
     box.className="hero-pay";
-    const head=`<div class="hp-head"><div class="hp-title">Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
+    // indicator de stare PLATĂ: leagă `overdue` (deja calculat sus) la un element vizual mic la vârf.
+    // overdue → badge roșu „restanță"; curat → punct verde discret. Zero calcul nou.
+    const stat = overdue ? `<span class="hp-stat bad">restanță</span>` : `<span class="hp-stat ok" title="La zi"></span>`;
+    const head=`<div class="hp-head"><div class="hp-title">${stat}Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
     const estLine = estimari.map(o=>`<div class="hp-decl" style="color:var(--blue)">ⓘ <b>${escHtml(o.cod)}</b> — se calculează pe parcursul anului (încă fără venituri pe ${o.estimare_an||Y})</div>`).join("");
 
     // Stare 4 — gol complet (nimic de plătit, de depus sau de estimat)
