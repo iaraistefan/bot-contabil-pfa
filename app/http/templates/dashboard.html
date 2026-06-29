@@ -447,6 +447,8 @@
   .btn-ghost{background:var(--night-2);color:var(--cream);border:1px solid var(--line-2)}
   .btn:active{transform:translateY(1px)}
   .btn svg{width:16px;height:16px;stroke-width:2}
+  .btn-full{flex:1;min-height:44px}
+  .sep{border-top:1px solid var(--line)}
 
   .hint{font-size:var(--text-xs);color:var(--muted);line-height:1.55}
 
@@ -1195,7 +1197,7 @@
         html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">${esc(g.label)}</div></div>`;
         (g.obligatii||[]).forEach((o,i)=>{
           const id=`ghid-${g.cheie}-${i}`;
-          html+=`<div style="border-top:1px solid var(--line)">
+          html+=`<div class="sep">
             <div class="row" style="cursor:pointer" onclick="var b=document.getElementById('${id}');b.style.display=(b.style.display==='none'?'block':'none')">
               <div class="info"><div class="t">${esc(o.cod)} — ${esc(o.nume)}</div><div class="m">${esc((o.ce_e||'').slice(0,80))}…</div></div>
               <span class="hint">Detalii ▾</span></div>
@@ -1211,7 +1213,7 @@
       if(d.amef){
         const a=d.amef;
         html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">🧾 ${esc(a.titlu)}</div></div>
-          <div style="border-top:1px solid var(--line);padding:2px 12px 14px">
+          <div class="sep" style="padding:2px 12px 14px">
             ${field('🔹','Ce e?',a.ce_e)}${field('📅','Când e obligatorie?',a.cand)}
             ${field('💡','De ce?',a.de_ce)}${field('📝','Cum?',a.cum)}
             <div class="hint" style="margin-top:6px">Orientativ — verifică cu un contabil/ANAF.</div>
@@ -2377,7 +2379,7 @@
   function wizBtns(inapoiVisible){
     return `<div style="display:flex;gap:10px;margin-top:16px">
       ${inapoiVisible?`<button class="btn btn-ghost" onclick="wizBack()" style="min-height:44px">⬅️ Înapoi</button>`:""}
-      <button class="btn btn-primary" id="wiz-next" onclick="wizNext()" style="flex:1;min-height:44px">Înainte →</button>
+      <button class="btn btn-primary btn-full" id="wiz-next" onclick="wizNext()">Înainte →</button>
     </div><div id="wiz-msg" class="hint" style="margin-top:8px;min-height:18px"></div>`;
   }
   function wizMsg(t,err){ const m=document.getElementById("wiz-msg"); if(m){ m.style.color=err?"var(--red)":"var(--muted)"; m.textContent=t; } }
@@ -2487,7 +2489,7 @@
         <div class="hint">CAEN ${WIZ.esc(d.cod_caen||"—")}${act} · ${tva} · ${stare}</div>
         ${d.is_inactiv?'<div class="hint" style="color:var(--red);margin-top:6px">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
         <div style="display:flex;gap:10px;margin-top:12px">
-          <button class="btn btn-primary" onclick="wizCuiConfirm()" style="flex:1;min-height:44px">✅ Corect</button>
+          <button class="btn btn-primary btn-full" onclick="wizCuiConfirm()">✅ Corect</button>
           <button class="btn btn-ghost" onclick="wizCuiManual('')" style="min-height:44px">✏️ Editez</button>
         </div></div>`;
     }catch(e){ console.error(e); wizCuiManual("Nu am putut contacta ANAF — introdu manual."); }
@@ -2691,7 +2693,7 @@
       <div id="wiz-bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
       <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn btn-ghost" onclick="wizBack()" style="min-height:44px">⬅️ Înapoi</button>
-        <button class="btn btn-primary" id="wiz-bolt-btn" onclick="wizApiBoltConnect()" style="flex:1;min-height:44px">Conectează</button>
+        <button class="btn btn-primary btn-full" id="wiz-bolt-btn" onclick="wizApiBoltConnect()">Conectează</button>
       </div>
       <button class="btn btn-ghost" onclick="wizApiBoltSkip()" style="width:100%;margin-top:10px;min-height:44px">Sări peste — conectez mai târziu →</button>
       <div class="hint" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)">🛟 Fără API poți introduce venitul <b>manual</b>: trimite în bot screenshotul raportului Bolt sau text (<code>venit bolt [lună]: net X, cash Y</code>).</div>`);
