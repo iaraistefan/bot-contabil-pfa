@@ -768,7 +768,7 @@
           <div class="reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Coniar pregătește declarația — o depui tu în SPV. Nu trimitem nimic la ANAF în locul tău.</div>
           <div id="decl-rezultat" style="margin-top:18px;display:none">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-              <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:600;font-size:1rem"></div>
+              <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:1rem"></div>
               <a class="btn btn-primary" id="decl-xml" style="padding:8px 14px" href="#" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă XML</a>
             </div>
             <div id="decl-avert"></div>
@@ -873,7 +873,7 @@
               <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Date bancare</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Date bancare</div>
               <div class="hint" style="margin-bottom:14px">Folosite la generarea declarației D301 (banca și IBAN sunt obligatorii în formular).</div>
               <label class="set-lbl">Banca</label>
               <input class="set-inp" id="set-banca" type="text" placeholder="ex. Banca Transilvania" autocomplete="off">
@@ -886,15 +886,15 @@
               </button>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Regim impozit nerezident — platforme</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Regim impozit nerezident — platforme</div>
               <div class="hint" style="margin-bottom:12px">Impozitul pe comisionul reținut de platformele din afara RO (D100). Cota depinde de platformă și de certificatul de rezidență fiscală. Setează doar platformele pe care le folosești — fiecare are tratamentul ei.</div>
-              <div class="t" style="font-weight:600;font-size:.86rem;margin-bottom:4px">🟢 Bolt <span style="font-weight:400;color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
+              <div class="t" style="font-weight:var(--w-semibold);font-size:.86rem;margin-bottom:4px">🟢 Bolt <span style="font-weight:var(--w-normal);color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
               <select class="set-inp" id="set-nerezident" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="BOLT_CU_CRF">Am certificatul Bolt → 2% (D100 lunar + D207 anual)</option>
                 <option value="BOLT_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
               </select>
-              <div class="t" style="font-weight:600;font-size:.86rem;margin:14px 0 4px">⚫ Uber <span style="font-weight:400;color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
+              <div class="t" style="font-weight:var(--w-semibold);font-size:.86rem;margin:14px 0 4px">⚫ Uber <span style="font-weight:var(--w-normal);color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
               <select class="set-inp" id="set-nerezident-uber" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="UBER_CU_CRF">Am certificatul Uber → 0% (scutire; doar D207)</option>
@@ -903,11 +903,11 @@
               <div id="set-nerez-msg" class="hint" style="margin-top:8px;min-height:18px"></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Certificat de rezidență Bolt</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Certificat de rezidență Bolt</div>
               <div id="cert-continut"><div class="hint">Se încarcă…</div></div>
             </div>
             <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
-              <div class="t" style="font-family:var(--display);font-weight:600;font-size:.98rem;margin-bottom:4px">Conectare cont Bolt (sync automat)</div>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:.98rem;margin-bottom:4px">Conectare cont Bolt (sync automat)</div>
               <div id="bolt-conectare"><div class="hint">Se încarcă…</div></div>
             </div>
           </div>
@@ -1398,7 +1398,7 @@
     }
     let html="";
     if(ipotezaNote){
-      html += `<div style="background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-weight:600">🔎 ${ipotezaNote}</div>`;
+      html += `<div style="background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:10px 13px;margin-bottom:12px;font-weight:var(--w-semibold)">🔎 ${ipotezaNote}</div>`;
     }
     if(d.norma){
       html += `<div class="grid g-2" style="margin-bottom:14px">`
@@ -1407,7 +1407,7 @@
         + `</div>`;
       if(d.recomandat){
         const nume = d.recomandat==="NORMA_VENIT" ? "normă de venit" : "sistemul real";
-        html += `<div style="background:var(--emerald-dim);color:var(--emerald-br);border-radius:12px;padding:12px 14px;font-weight:600;margin-bottom:12px">`
+        html += `<div style="background:var(--emerald-dim);color:var(--emerald-br);border-radius:12px;padding:12px 14px;font-weight:var(--w-semibold);margin-bottom:12px">`
           +`✅ Pe ${nume} ai plăti mai puțin — economisești ~${lei0(d.diferenta)} lei pe an.</div>`;
       }
     } else {
@@ -2365,8 +2365,8 @@
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%">
         <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
-          <span style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:800;color:#06231f">C</span>
-          <div style="font-family:var(--display);font-weight:700;font-size:1.3rem">Coniar</div>
+          <span style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:var(--w-display);color:#06231f">C</span>
+          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:1.3rem">Coniar</div>
         </div>
         <div style="display:flex;gap:5px;margin-bottom:6px">${WIZ.steps.map((_,k)=>`<div style="flex:1;height:4px;border-radius:3px;background:${k<=WIZ.i?'var(--emerald)':'var(--line-2)'}"></div>`).join("")}</div>
         <div class="hint" style="margin-bottom:14px">Pasul ${x} din ${n}</div>
@@ -2411,7 +2411,7 @@
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%;text-align:center">
         <div style="font-size:3rem;margin-bottom:6px">✅</div>
-        <div style="font-family:var(--display);font-weight:700;font-size:1.5rem;margin-bottom:6px">Gata! Contul tău e configurat</div>
+        <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:1.5rem;margin-bottom:6px">Gata! Contul tău e configurat</div>
         <div class="hint" style="margin-bottom:16px">Am salvat tot. Iată ce-ai configurat:</div>
         <div class="panel" style="text-align:left;margin-bottom:16px">${rez}</div>
         <div id="wiz-done-msg" class="hint" style="color:var(--red);min-height:18px;margin-bottom:8px"></div>
@@ -2484,8 +2484,8 @@
       const stare=d.is_inactiv?'<span style="color:var(--red)">⚠️ INACTIVĂ la ANAF</span>':'activă';
       const act=d.activity_label?` · ${WIZ.esc(d.activity_label)}`:"";
       card.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0">
-        <div class="hint" style="color:var(--pos-br);font-weight:600">✅ Am găsit firma:</div>
-        <div style="font-weight:600;margin:6px 0">${WIZ.esc(d.denumire||"—")}</div>
+        <div class="hint" style="color:var(--pos-br);font-weight:var(--w-semibold)">✅ Am găsit firma:</div>
+        <div style="font-weight:var(--w-semibold);margin:6px 0">${WIZ.esc(d.denumire||"—")}</div>
         <div class="hint">CAEN ${WIZ.esc(d.cod_caen||"—")}${act} · ${tva} · ${stare}</div>
         ${d.is_inactiv?'<div class="hint" style="color:var(--red);margin-top:6px">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
         <div style="display:flex;gap:10px;margin-top:12px">
@@ -2520,7 +2520,7 @@
     // Gardian selecție: ridesharing pe NORMĂ doar din 2026 (regula = norma_permisa, server).
     const normaPermisa = !(WIZ.data.is_ridesharing && (WIZ.data._an_fiscal||9999) < 2026);
     const card=(val,emoji,tit,desc,disabled)=>`<div ${disabled?"":`onclick="wizPickRegim('${val}')"`} style="cursor:${disabled?"not-allowed":"pointer"};opacity:${disabled?".5":"1"};border:2px solid ${sel===val?"var(--emerald)":"var(--line-2)"};border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
+      <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
     const normaDesc = normaPermisa
       ? "Sumă fixă stabilită de ANAF, indiferent de venit. Mai simplu."
       : "⏳ Disponibilă pentru ridesharing doar din 2026; pentru anul curent se aplică sistem real.";
@@ -2546,7 +2546,7 @@
     }
     if(WIZ.data.norma_venit_anuala>0){
       const s=WIZ.data._norma_sursa;
-      return `<div class="hint" style="color:var(--pos-br);font-weight:600">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
+      return `<div class="hint" style="color:var(--pos-br);font-weight:var(--w-semibold)">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
     }
     return "";
   }
@@ -2587,7 +2587,7 @@
       const on=!!WIZ.data[key];
       return `<div onclick="wizToggleSituatie('${key}')" style="cursor:pointer;border:2px solid ${on?"var(--emerald)":"var(--line-2)"};border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:11px;align-items:flex-start">
         <span style="font-size:1.3rem">${emoji}</span>
-        <div style="flex:1"><div style="font-weight:600">${tit} ${on?"✓":""}</div><div class="hint" style="margin-top:4px">${desc}</div></div></div>`;
+        <div style="flex:1"><div style="font-weight:var(--w-semibold)">${tit} ${on?"✓":""}</div><div class="hint" style="margin-top:4px">${desc}</div></div></div>`;
     };
     const cashTog = WIZ.data.is_ridesharing
       ? tog("incaseaza_numerar","💵","Încasez numerar de la pasageri","Dacă accepți curse plătite cash, probabil ai nevoie de casă de marcat (AMEF). Plățile card prin app NU intră.")
@@ -2643,7 +2643,7 @@
   function wizPlatforme(){
     const sel=WIZ.data._platforme;
     const card=(val,emoji,tit,desc)=>`<div onclick="wizPickPlatforme('${val}')" style="cursor:pointer;border:2px solid ${sel===val?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
+      <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:4px">${desc}</div></div>`;
     wizShell("Pe ce platforme lucrezi?", `
       <div class="hint" style="margin-bottom:12px">Comisionul reținut de platforme (firme din afara României) se impozitează aici prin D100. Te întrebăm regimul doar pentru platformele alese.</div>
       ${card("BOLT","🟢","Doar Bolt","Bolt Operations OÜ (Estonia).")}
@@ -2660,17 +2660,17 @@
     const card=(grup,val,emoji,tit,desc)=>{
       const sel=WIZ.data[grup]===val;
       return `<div onclick="wizPickNerezident('${grup}','${val}')" style="cursor:pointer;border:2px solid ${sel?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:13px;margin-bottom:9px">
-        <div style="font-weight:600">${emoji} ${tit}</div><div class="hint" style="margin-top:3px">${desc}</div></div>`;
+        <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:3px">${desc}</div></div>`;
     };
     let corp=`<div class="hint" style="margin-bottom:12px">Cota de impozit pe comisionul nerezident depinde de certificatul de rezidență fiscală al platformei.</div>`;
     if(wizHasBolt()){
-      corp+=`<div style="font-weight:600;margin:6px 0 8px">🟢 Bolt (Estonia)</div>`
+      corp+=`<div style="font-weight:var(--w-semibold);margin:6px 0 8px">🟢 Bolt (Estonia)</div>`
         +card("regim_nerezident_bolt","BOLT_CU_CRF","✅","Am certificatul Bolt — 2%","Impozit 2% (D100 lunar + D207 anual). Necesită certificatul de rezidență fiscală al Bolt.")
         +card("regim_nerezident_bolt","BOLT_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
         +`<div class="hint" style="margin:2px 0 14px">📄 Certificatul Bolt îl găsești în secțiunea <b>Certificat</b> după configurare.</div>`;
     }
     if(wizHasUber()){
-      corp+=`<div style="font-weight:600;margin:6px 0 8px">⚫ Uber (Olanda)</div>`
+      corp+=`<div style="font-weight:var(--w-semibold);margin:6px 0 8px">⚫ Uber (Olanda)</div>`
         +card("regim_nerezident_uber","UBER_CU_CRF","✅","Am certificatul Uber — 0%","Scutire: doar D207 anual, fără D100. Necesită certificatul de rezidență fiscală al Uber.")
         +card("regim_nerezident_uber","UBER_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
         +`<div class="hint" style="margin:2px 0 6px">ℹ️ Uber nu are cota de 2% (aceea e doar pentru Bolt).</div>`;
