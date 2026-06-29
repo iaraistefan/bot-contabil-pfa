@@ -114,8 +114,7 @@
     display:flex;flex-direction:column;padding:20px 14px;overflow-y:auto;
   }
   .brand{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-2) var(--sp-6);border-bottom:1px solid var(--line);margin-bottom:var(--sp-4)}
-  .brand .mk{width:30px;height:30px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-lg);color:var(--pos-bg);line-height:1}
-  .brand .mk svg{width:17px;height:17px;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .brand-badge{width:30px;height:30px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-lg);color:var(--pos-bg);line-height:1}
   .brand .nm{font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);letter-spacing:-.02em}
   .brand .nm b{color:var(--emerald-br)}
   .nav-group{margin-bottom:var(--sp-2)}
@@ -531,7 +530,6 @@
   <g id="i-doc"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></g>
   <g id="i-gear"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></g>
   <g id="i-guide"><path d="M12 6.8c-1.8-1.2-4.6-1.4-6.7-.6a.9.9 0 0 0-.6.9v9.8a.9.9 0 0 0 1.2.8c1.9-.7 4.4-.5 6.1.7"/><path d="M12 6.8c1.8-1.2 4.6-1.4 6.7-.6a.9.9 0 0 1 .6.9v9.8a.9.9 0 0 1-1.2.8c-1.9-.7-4.4-.5-6.1.7"/><path d="M12 6.8V19.2"/></g>
-  <g id="i-brand"><path d="M16 6a7 7 0 1 0 0 12" stroke="#06231f" stroke-width="2.2"/><path d="M5 14l3-3 2.5 2L14 8" stroke="#06231f" stroke-width="2.2"/></g>
 </defs></svg>
 <!-- ONBOARDING WIZARD (sub-pas A: shell full-screen; pașii vin la sub-pas B). Afișat
      DOAR în mod wizard (user neonboarded), via routing prin stare la init. -->
@@ -542,7 +540,7 @@
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <span class="mk">C</span>
+      <span class="brand-badge">C</span>
       <div class="nm">Con<b>iar</b></div>
     </div>
 
@@ -2365,7 +2363,7 @@
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%">
         <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
-          <span style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:var(--w-display);color:#06231f">C</span>
+          <span class="brand-badge">C</span>
           <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:1.3rem">Coniar</div>
         </div>
         <div style="display:flex;gap:5px;margin-bottom:6px">${WIZ.steps.map((_,k)=>`<div style="flex:1;height:4px;border-radius:3px;background:${k<=WIZ.i?'var(--emerald)':'var(--line-2)'}"></div>`).join("")}</div>
