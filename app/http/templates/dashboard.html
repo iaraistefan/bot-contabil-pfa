@@ -52,6 +52,7 @@
     --on-warn:#1A1407;                     /* text pe dot/badge warn (gold) */
     --on-danger:#2A0A07;                   /* text pe dot/badge danger (roșu) */
     --gold-br:#f0cd8e;                     /* gold deschis — capăt gradient bar-fill */
+    --gradient-brand:linear-gradient(135deg,var(--emerald),var(--pos)); /* suprafață brand: badge/nav-activ/avatar/chip/btn-primary/onb-btn */
 
     /* Culori grafice (secvența categorică donut) — SURSĂ UNICĂ, citite din JS via cssVar().
        Ordinea oglindește secvența vie folosită până acum (0 regresie); slot 6/7 înlocuiesc
@@ -114,7 +115,7 @@
     display:flex;flex-direction:column;padding:20px 14px;overflow-y:auto;
   }
   .brand{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-2) var(--sp-6);border-bottom:1px solid var(--line);margin-bottom:var(--sp-4)}
-  .brand-badge{width:30px;height:30px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-lg);color:var(--pos-bg);line-height:1}
+  .brand-badge{width:30px;height:30px;border-radius:var(--r-sm);background:var(--gradient-brand);display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-lg);color:var(--pos-bg);line-height:1}
   .brand .nm{font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);letter-spacing:-.02em}
   .brand .nm b{color:var(--emerald-br)}
   .nav-group{margin-bottom:var(--sp-2)}
@@ -128,7 +129,7 @@
   .nav-item .tile{width:34px;height:34px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;background:var(--night-2);border:1px solid var(--line);transition:.18s}
   .nav-item:hover{color:var(--cream)}
   .nav-item:hover .tile{border-color:var(--emerald);color:var(--emerald-br)}
-  .nav-item.active{color:var(--pos-bg);font-weight:var(--w-semibold);background:linear-gradient(135deg,var(--emerald),var(--pos))}
+  .nav-item.active{color:var(--pos-bg);font-weight:var(--w-semibold);background:var(--gradient-brand)}
   .nav-item.active .tile{background:var(--scrim-soft);border-color:transparent;color:var(--pos-bg)}
   .nav-item .badge{margin-left:auto;font-family:var(--mono);font-size:var(--text-2xs);font-weight:var(--w-semibold);letter-spacing:.05em;padding:2px var(--sp-2);border-radius:var(--r-full);background:var(--gold-dim);color:var(--gold)}
   .nav-item.active .badge{background:var(--scrim-soft);color:var(--pos-bg)}
@@ -140,7 +141,7 @@
   .sidebar-foot{margin-top:auto;padding-top:var(--sp-4);border-top:1px solid var(--line)}
   .profile{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border-radius:var(--r-md);cursor:pointer;transition:background .16s}
   .profile:hover{background:var(--night-2)}
-  .profile .av{width:34px;height:34px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--emerald),var(--pos));display:grid;place-items:center;font-weight:var(--w-display);color:var(--pos-bg-2);font-size:var(--text-sm);flex:none}
+  .profile .av{width:34px;height:34px;border-radius:var(--r-sm);background:var(--gradient-brand);display:grid;place-items:center;font-weight:var(--w-display);color:var(--pos-bg-2);font-size:var(--text-sm);flex:none}
   .profile .who{min-width:0}
   .profile .who .n{font-size:var(--text-sm);font-weight:var(--w-semibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .profile .who .r{font-size:var(--text-2xs);color:var(--muted-2)}
@@ -163,7 +164,7 @@
   .months{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0;scrollbar-width:none}
   .months::-webkit-scrollbar{display:none}
   .pchip{padding:6px 13px;border-radius:var(--r-sm);font-size:var(--text-sm);font-weight:var(--w-semibold);color:var(--muted);cursor:pointer;transition:all .16s;white-space:nowrap;flex:none}
-  .pchip.active{background:linear-gradient(135deg,var(--emerald),var(--pos));color:var(--pos-bg-2);box-shadow:0 6px 14px -6px var(--emerald-glow)}
+  .pchip.active{background:var(--gradient-brand);color:var(--pos-bg-2);box-shadow:0 6px 14px -6px var(--emerald-glow)}
   .topbar .ico-btn{width:38px;height:38px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--night);display:grid;place-items:center;cursor:pointer;color:var(--muted);transition:all .16s}
   .topbar .ico-btn:hover{color:var(--emerald-br);border-color:var(--line-2)}
 
@@ -321,7 +322,7 @@
   .onb-step .d{font-size:var(--text-sm);color:var(--muted);margin-top:2px;line-height:1.45}
   .onb-step .d b{color:var(--gold);font-weight:600}
   .onb-cta{display:flex;gap:11px;margin-top:22px;flex-wrap:wrap;position:relative}
-  .onb-btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-sm);padding:13px var(--sp-5);border-radius:var(--r-md);cursor:pointer;border:none;text-decoration:none;transition:transform .15s;background:linear-gradient(135deg,var(--emerald),var(--pos));color:var(--pos-bg)}
+  .onb-btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-sm);padding:13px var(--sp-5);border-radius:var(--r-md);cursor:pointer;border:none;text-decoration:none;transition:transform .15s;background:var(--gradient-brand);color:var(--pos-bg)}
   .onb-btn:hover{transform:translateY(-2px)}
   .onb-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
   .onb-reassure{display:flex;align-items:center;gap:9px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:var(--text-xs);color:var(--muted);position:relative}
@@ -443,7 +444,7 @@
 
   /* buttons */
   .btn{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-5);border-radius:var(--r-md);font-size:var(--text-sm);font-weight:var(--w-bold);border:none;cursor:pointer;text-decoration:none;transition:transform .18s,opacity .18s}
-  .btn-primary{background:linear-gradient(135deg,var(--emerald),var(--pos));color:var(--pos-bg-2);box-shadow:0 8px 20px -8px var(--emerald-glow)}
+  .btn-primary{background:var(--gradient-brand);color:var(--pos-bg-2);box-shadow:0 8px 20px -8px var(--emerald-glow)}
   .btn-ghost{background:var(--night-2);color:var(--cream);border:1px solid var(--line-2)}
   .btn:active{transform:translateY(1px)}
   .btn svg{width:16px;height:16px;stroke-width:2}
