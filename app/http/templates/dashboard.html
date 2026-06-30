@@ -451,6 +451,9 @@
   .sep{border-top:1px solid var(--line)}
 
   .hint{font-size:var(--text-xs);color:var(--muted);line-height:1.55}
+  .hint.is-error{color:var(--red)}
+  .hint.is-warn{color:var(--gold)}
+  .hint.is-ok{color:var(--pos-br)}
 
   /* setari inputs */
   .set-lbl{display:block;font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted);font-weight:var(--w-bold);margin-bottom:var(--sp-2)}
@@ -1430,7 +1433,7 @@
     const box=document.getElementById("sim-body"); if(!box) return;
     box.innerHTML='<div class="hint">Se calculează…</div>';
     try{ renderSimulator(await getSimulare(Y)); }
-    catch(e){ console.error(e); box.innerHTML='<div class="hint" style="color:var(--red)">Nu am putut calcula simularea acum. Încearcă din nou.</div>'; }
+    catch(e){ console.error(e); box.innerHTML='<div class="hint is-error">Nu am putut calcula simularea acum. Încearcă din nou.</div>'; }
   }
   // A3.2: user pe real fără normă → alege tip localitate → lookup live → re-simulare cu
   // norma ca IPOTEZĂ (?norma=). NU scrie în profil, NU schimbă regimul.
@@ -1444,9 +1447,9 @@
         const note=`Simulare pe norma de ${TIP_LBL[tip]} (${lei0(d.norma)} lei) — ești pe sistem real, deci e o ipoteză (ce-ar fi dacă).`;
         renderSimulator(await getSimulare(Y, d.norma), note);
       } else if(rez){
-        rez.innerHTML='<div class="hint" style="color:var(--gold)">Nu există o normă pentru această combinație (județ + tip). Verifică decizia AJFP a județului tău.</div>';
+        rez.innerHTML='<div class="hint is-warn">Nu există o normă pentru această combinație (județ + tip). Verifică decizia AJFP a județului tău.</div>';
       }
-    }catch(e){ console.error(e); if(rez) rez.innerHTML='<div class="hint" style="color:var(--red)">Nu am putut căuta norma acum. Încearcă din nou.</div>'; }
+    }catch(e){ console.error(e); if(rez) rez.innerHTML='<div class="hint is-error">Nu am putut căuta norma acum. Încearcă din nou.</div>'; }
   }
   window.loadSimulare=loadSimulare;
   window.simPickTip=simPickTip;
@@ -2005,7 +2008,7 @@
     }catch(e){
       console.error(e);
       const tl=document.getElementById("cal-timeline");
-      if(tl)tl.innerHTML='<div class="hint" style="padding:10px;color:var(--red)">Nu am putut încărca obligațiile. Reîncarcă pagina.</div>';
+      if(tl)tl.innerHTML='<div class="hint is-error" style="padding:10px">Nu am putut încărca obligațiile. Reîncarcă pagina.</div>';
     }
   }
 
@@ -2171,7 +2174,7 @@
           +`<button class="btn btn-ghost" onclick="boltReconecteaza()">Reconectează (schimbă cheile)</button>`;
       }else{
         if(!s.crypto_available){
-          box.innerHTML='<div class="hint" style="color:var(--red)">⚠️ Criptarea nu e configurată pe server — conectarea Bolt e indisponibilă momentan. Contactează administratorul.</div>';
+          box.innerHTML='<div class="hint is-error">⚠️ Criptarea nu e configurată pe server — conectarea Bolt e indisponibilă momentan. Contactează administratorul.</div>';
           return;
         }
         boltFormular(box);
@@ -2414,7 +2417,7 @@
         <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:6px">Gata! Contul tău e configurat</div>
         <div class="hint" style="margin-bottom:16px">Am salvat tot. Iată ce-ai configurat:</div>
         <div class="panel" style="text-align:left;margin-bottom:16px">${rez}</div>
-        <div id="wiz-done-msg" class="hint" style="color:var(--red);min-height:18px;margin-bottom:8px"></div>
+        <div id="wiz-done-msg" class="hint is-error" style="min-height:18px;margin-bottom:8px"></div>
         <button class="btn btn-primary" id="wiz-complete-btn" onclick="wizComplete()" style="width:100%;min-height:48px;font-size:var(--text-base)">Intră în Coniar →</button>
       </div>`;
   }
@@ -2484,10 +2487,10 @@
       const stare=d.is_inactiv?'<span style="color:var(--red)">⚠️ INACTIVĂ la ANAF</span>':'activă';
       const act=d.activity_label?` · ${WIZ.esc(d.activity_label)}`:"";
       card.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0">
-        <div class="hint" style="color:var(--pos-br);font-weight:var(--w-semibold)">✅ Am găsit firma:</div>
+        <div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Am găsit firma:</div>
         <div style="font-weight:var(--w-semibold);margin:6px 0">${WIZ.esc(d.denumire||"—")}</div>
         <div class="hint">CAEN ${WIZ.esc(d.cod_caen||"—")}${act} · ${tva} · ${stare}</div>
-        ${d.is_inactiv?'<div class="hint" style="color:var(--red);margin-top:6px">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
+        ${d.is_inactiv?'<div class="hint is-error" style="margin-top:6px">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
         <div style="display:flex;gap:10px;margin-top:12px">
           <button class="btn btn-primary btn-full" onclick="wizCuiConfirm()">✅ Corect</button>
           <button class="btn btn-ghost" onclick="wizCuiManual('')" style="min-height:44px">✏️ Editez</button>
@@ -2505,7 +2508,7 @@
   }
   function wizCuiManual(motiv){
     const card=document.getElementById("wiz-cui-card");
-    card.innerHTML=`${motiv?`<div class="hint" style="color:var(--gold);margin-bottom:8px">${WIZ.esc(motiv)} Completează manual:</div>`:''}
+    card.innerHTML=`${motiv?`<div class="hint is-warn" style="margin-bottom:8px">${WIZ.esc(motiv)} Completează manual:</div>`:''}
       <label class="set-lbl">Denumire firmă</label>
       <input class="set-inp" id="wiz-denumire" type="text" placeholder="Denumirea PFA" value="${WIZ.esc((WIZ.data._anaf||{}).denumire||WIZ.data.firma_nume||"")}">
       <div class="hint" style="margin-top:10px">_(CAEN/activitatea le poți seta ulterior în Setări)_</div>`;
@@ -2541,12 +2544,12 @@
   // Sub-pas NORMĂ: tip localitate → lookup nomenclator → valoare (sau manual la județ necunoscut)
   function _wizNormaRezHtml(){
     if(WIZ.data._norma_manual){
-      return `<div class="hint" style="color:var(--gold);margin-bottom:6px">Nu am norma pentru județul tău în nomenclator — introdu valoarea din Decizia AJFP a județului (norma anuală, CAEN 4933):</div>
+      return `<div class="hint is-warn" style="margin-bottom:6px">Nu am norma pentru județul tău în nomenclator — introdu valoarea din Decizia AJFP a județului (norma anuală, CAEN 4933):</div>
         <input class="set-inp" id="wiz-norma-val" type="number" inputmode="numeric" placeholder="ex. 54300" value="${WIZ.data.norma_venit_anuala||""}" oninput="wizNormaInput(this.value)">`;
     }
     if(WIZ.data.norma_venit_anuala>0){
       const s=WIZ.data._norma_sursa;
-      return `<div class="hint" style="color:var(--pos-br);font-weight:var(--w-semibold)">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
+      return `<div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
     }
     return "";
   }
