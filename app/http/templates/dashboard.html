@@ -456,6 +456,7 @@
   .hint.is-ok{color:var(--pos-br)}
 
   /* setari inputs */
+  .set-section{margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--line)}
   .set-lbl{display:block;font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--muted);font-weight:var(--w-bold);margin-bottom:var(--sp-2)}
   .set-inp{width:100%;background:var(--night-2);border:1px solid var(--line-input);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4);color:var(--cream);font-family:var(--body);font-size:var(--text-sm);outline:none;transition:border-color .16s}
   .set-inp:focus{border-color:var(--emerald)}
@@ -761,18 +762,18 @@
         </div>
         <div class="panel">
           <div class="panel-h"><div class="t">Generare declarații<span>format oficial ANAF</span></div></div>
-          <div class="hint" style="margin-bottom:14px">Coniar îți pregătește declarația completată pe luna selectată. Primești ghidul cu valorile de pus în formular + fișierul XML. Tu validezi, semnezi cu eToken și încarci în SPV.</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="hint" style="margin-bottom:var(--sp-3)">Coniar îți pregătește declarația completată pe luna selectată. Primești ghidul cu valorile de pus în formular + fișierul XML. Tu validezi, semnezi cu eToken și încarci în SPV.</div>
+          <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
             <button class="btn btn-primary" onclick="genDecl('D301')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7l-4-4zM14 3v4h4" stroke-linejoin="round"/></svg>Generează D301 — TVA</button>
             <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390 — VIES</button>
             <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100 — impozit Bolt</button>
             <button class="btn btn-ghost" onclick="genD212()">Generează Declarația Unică</button>
           </div>
           <div class="reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Coniar pregătește declarația — o depui tu în SPV. Nu trimitem nimic la ANAF în locul tău.</div>
-          <div id="decl-rezultat" style="margin-top:18px;display:none">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:var(--sp-3);flex-wrap:wrap">
+          <div id="decl-rezultat" style="margin-top:var(--sp-4);display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap">
               <div class="t" id="decl-titlu" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base)"></div>
-              <a class="btn btn-primary" id="decl-xml" style="padding:8px 14px" href="#" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă XML</a>
+              <a class="btn btn-primary" id="decl-xml" style="padding:var(--sp-2) var(--sp-3)" href="#" download><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>Descarcă XML</a>
             </div>
             <div id="decl-avert"></div>
             <pre id="decl-ghid" style="background:var(--night-2);border:1px solid var(--line-2);border-radius:12px;padding:var(--sp-4);font-family:var(--body);font-size:var(--text-sm);line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--cream);margin-top:var(--sp-1);max-height:none;overflow:visible"></pre>
@@ -787,12 +788,12 @@
           <div class="panel">
             <div class="panel-h"><div class="t">Obligații</div><span id="cal-luna" class="hint"></span></div>
             <div class="timeline" id="cal-timeline">
-              <div class="hint" style="padding:10px">Se încarcă…</div>
+              <div class="hint" style="padding:var(--sp-2)">Se încarcă…</div>
             </div>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="t">Ritm lunar</div></div>
-            <div class="hint" style="margin-bottom:14px">Ce ai de făcut în fiecare lună, recurent:</div>
+            <div class="hint" style="margin-bottom:var(--sp-3)">Ce ai de făcut în fiecare lună, recurent:</div>
             <div class="rows">
               <div class="row"><div class="ic gold"><b style="font-size:var(--text-2xs)">25</b></div><div class="info"><div class="t">D301 — decontul de TVA</div><div class="m">doar în lunile cu factură Bolt</div></div><span class="badge-st ok">auto</span></div>
               <div class="row"><div class="ic gold"><b style="font-size:var(--text-2xs)">25</b></div><div class="info"><div class="t">D390 — raportare UE (VIES)</div><div class="m">recapitulativă servicii</div></div><span class="badge-st ok">auto</span></div>
@@ -809,7 +810,7 @@
           <div class="hint">Fiecare declarație, explicată pe înțeles — <b>ce e</b>, <b>cine</b>, <b>când</b>, <b>cum</b> și mai ales <b>de ce e obligația TA</b>. Grupate după cât de des le ai.</div>
         </div>
         <div id="ghid-continut">
-          <div class="hint" style="padding:10px">Se încarcă…</div>
+          <div class="hint" style="padding:var(--sp-2)">Se încarcă…</div>
         </div>
       </section>
 
@@ -824,7 +825,7 @@
           <table class="t-cards">
             <thead><tr><th>Obligație</th><th>Cont</th><th class="r">Sumă</th><th class="r">Termen</th><th></th></tr></thead>
             <tbody id="plati-tbody">
-              <tr><td colspan="5" class="hint" style="padding:14px">Se încarcă…</td></tr>
+              <tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Se încarcă…</td></tr>
             </tbody>
           </table>
         </div>
@@ -875,20 +876,20 @@
               <div class="row"><div class="info"><div class="m">TVA</div><div class="t">Neplătitor · cod special art. 317</div></div></div>
               <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
             </div>
-            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+            <div class="set-section">
               <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Date bancare</div>
-              <div class="hint" style="margin-bottom:14px">Folosite la generarea declarației D301 (banca și IBAN sunt obligatorii în formular).</div>
+              <div class="hint" style="margin-bottom:var(--sp-3)">Folosite la generarea declarației D301 (banca și IBAN sunt obligatorii în formular).</div>
               <label class="set-lbl">Banca</label>
               <input class="set-inp" id="set-banca" type="text" placeholder="ex. Banca Transilvania" autocomplete="off">
               <label class="set-lbl" style="margin-top:var(--sp-3)">IBAN</label>
               <input class="set-inp" id="set-iban" type="text" placeholder="RO00 XXXX 0000 0000 0000 0000" autocomplete="off" spellcheck="false">
-              <div id="set-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
-              <button class="btn btn-primary" id="set-save" style="margin-top:6px" onclick="salveazaSetari()">
+              <div id="set-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
+              <button class="btn btn-primary" id="set-save" style="margin-top:var(--sp-1)" onclick="salveazaSetari()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Salvează
               </button>
             </div>
-            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+            <div class="set-section">
               <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Regim impozit nerezident — platforme</div>
               <div class="hint" style="margin-bottom:var(--sp-3)">Impozitul pe comisionul reținut de platformele din afara RO (D100). Cota depinde de platformă și de certificatul de rezidență fiscală. Setează doar platformele pe care le folosești — fiecare are tratamentul ei.</div>
               <div class="t" style="font-weight:var(--w-semibold);font-size:var(--text-sm);margin-bottom:var(--sp-1)">🟢 Bolt <span style="font-weight:var(--w-normal);color:var(--muted)">(Bolt Operations OÜ, Estonia · Art. 12 Convenție)</span></div>
@@ -897,7 +898,7 @@
                 <option value="BOLT_CU_CRF">Am certificatul Bolt → 2% (D100 lunar + D207 anual)</option>
                 <option value="BOLT_FARA_CRF">Nu am certificatul → 16% (stopaj la sursă)</option>
               </select>
-              <div class="t" style="font-weight:var(--w-semibold);font-size:var(--text-sm);margin:14px 0 4px">⚫ Uber <span style="font-weight:var(--w-normal);color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
+              <div class="t" style="font-weight:var(--w-semibold);font-size:var(--text-sm);margin:var(--sp-3) 0 var(--sp-1)">⚫ Uber <span style="font-weight:var(--w-normal);color:var(--muted)">(Uber B.V., Olanda · art. 7 profituri)</span></div>
               <select class="set-inp" id="set-nerezident-uber" onchange="salveazaRegimNerezident()">
                 <option value="">— alege regimul —</option>
                 <option value="UBER_CU_CRF">Am certificatul Uber → 0% (scutire; doar D207)</option>
@@ -905,11 +906,11 @@
               </select>
               <div id="set-nerez-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
             </div>
-            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+            <div class="set-section">
               <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Certificat de rezidență Bolt</div>
               <div id="cert-continut"><div class="hint">Se încarcă…</div></div>
             </div>
-            <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+            <div class="set-section">
               <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Conectare cont Bolt (sync automat)</div>
               <div id="bolt-conectare"><div class="hint">Se încarcă…</div></div>
             </div>
@@ -1182,13 +1183,13 @@
   function loadGhid(all){
     const box=document.getElementById("ghid-continut");
     const esc=escHtml;   // sursă unică de escape (vezi escHtml sus)
-    const field=(icon,label,val)=> val?`<div style="margin:10px 0"><b>${icon} ${label}</b><br><span style="color:var(--muted)">${esc(val)}</span></div>`:"";
-    box.innerHTML='<div class="hint" style="padding:10px">Se încarcă…</div>';
+    const field=(icon,label,val)=> val?`<div style="margin:var(--sp-2) 0"><b>${icon} ${label}</b><br><span style="color:var(--muted)">${esc(val)}</span></div>`:"";
+    box.innerHTML='<div class="hint" style="padding:var(--sp-2)">Se încarcă…</div>';
     getGhid(!!all).then(d=>{
       let html="";
       // Nudge profil incomplet (anti-omisiune: arătăm tot, nu ascundem nimic).
       if(d.nudge){
-        html+=`<div class="alert" style="margin-bottom:14px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet — nu ascundem nimic. Completează-l (în bot: /start) ca să vezi doar obligațiile TALE.</div></div></div>`;
+        html+=`<div class="alert" style="margin-bottom:var(--sp-3)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet — nu ascundem nimic. Completează-l (în bot: /start) ca să vezi doar obligațiile TALE.</div></div></div>`;
       }
       // Toggle personalizat ↔ toate (doar dacă profilul e complet — altfel oricum vede tot).
       if(!d.nudge){
@@ -1197,14 +1198,14 @@
           : `<div style="margin-bottom:var(--sp-3)"><button class="btn btn-ghost" onclick="loadGhid(false)">📋 Doar ale mele</button></div>`;
       }
       (d.grupuri||[]).forEach(g=>{
-        html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">${esc(g.label)}</div></div>`;
+        html+=`<div class="panel" style="margin-bottom:var(--sp-3)"><div class="panel-h"><div class="t">${esc(g.label)}</div></div>`;
         (g.obligatii||[]).forEach((o,i)=>{
           const id=`ghid-${g.cheie}-${i}`;
           html+=`<div class="sep">
             <div class="row" style="cursor:pointer" onclick="var b=document.getElementById('${id}');b.style.display=(b.style.display==='none'?'block':'none')">
               <div class="info"><div class="t">${esc(o.cod)} — ${esc(o.nume)}</div><div class="m">${esc((o.ce_e||'').slice(0,80))}…</div></div>
               <span class="hint">Detalii ▾</span></div>
-            <div id="${id}" style="display:none;padding:2px 12px 14px">
+            <div id="${id}" style="display:none;padding:var(--sp-1) var(--sp-3) var(--sp-3)">
               ${field('🔹','Ce e?',o.ce_e)}${field('👤','Cui se aplică?',o.cui_se_aplica)}
               ${field('📅','Când?',o.cand)}${field('📝','Cum depun?',o.cum_depun)}
               ${field('💡','De ce?',o.de_ce)}${field('⚠️','Dacă nu depui',o.penalty_info)}
@@ -1215,15 +1216,15 @@
       // Secțiune AMEF (casă de marcat) — pedagogică, ca restul ghidului (PAS 3).
       if(d.amef){
         const a=d.amef;
-        html+=`<div class="panel" style="margin-bottom:14px"><div class="panel-h"><div class="t">🧾 ${esc(a.titlu)}</div></div>
-          <div class="sep" style="padding:2px 12px 14px">
+        html+=`<div class="panel" style="margin-bottom:var(--sp-3)"><div class="panel-h"><div class="t">🧾 ${esc(a.titlu)}</div></div>
+          <div class="sep" style="padding:var(--sp-1) var(--sp-3) var(--sp-3)">
             ${field('🔹','Ce e?',a.ce_e)}${field('📅','Când e obligatorie?',a.cand)}
             ${field('💡','De ce?',a.de_ce)}${field('📝','Cum?',a.cum)}
-            <div class="hint" style="margin-top:6px">Orientativ — verifică cu un contabil/ANAF.</div>
+            <div class="hint" style="margin-top:var(--sp-1)">Orientativ — verifică cu un contabil/ANAF.</div>
           </div></div>`;
       }
-      box.innerHTML=html||'<div class="hint" style="padding:10px">—</div>';
-    }).catch(e=>{console.error(e);box.innerHTML='<div class="hint" style="padding:10px">Nu am putut încărca ghidul.</div>';});
+      box.innerHTML=html||'<div class="hint" style="padding:var(--sp-2)">—</div>';
+    }).catch(e=>{console.error(e);box.innerHTML='<div class="hint" style="padding:var(--sp-2)">Nu am putut încărca ghidul.</div>';});
   }
 
   // ---- CHART HELPERS ----
@@ -1379,8 +1380,8 @@
     const col = a.ton==="atentie" ? "var(--gold)" : "var(--blue)";
     const dim = a.ton==="atentie" ? "var(--gold-dim)" : "var(--blue-dim)";
     const ic = a.ton==="atentie" ? "⚠️" : "ℹ️";
-    return `<div style="border-left:3px solid ${col};background:${dim};border-radius:0 10px 10px 0;padding:10px 13px;margin-bottom:var(--sp-2)">`
-      +`<b>${ic} ${a.titlu}</b><div class="sub" style="margin-top:3px">${a.text}</div></div>`;
+    return `<div style="border-left:3px solid ${col};background:${dim};border-radius:0 10px 10px 0;padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-2)">`
+      +`<b>${ic} ${a.titlu}</b><div class="sub" style="margin-top:var(--sp-1)">${a.text}</div></div>`;
   }
   // Selector tip localitate — DOAR pentru NORMA_INDISPONIBILA (lipsă de date; lookup ajută).
   // NU pentru NORMA_DOAR_DIN_2026 (interzis legal — n-am sugera ceva nepermis).
@@ -1389,7 +1390,7 @@
     return `<div class="panel" style="background:var(--card-2);margin:0 0 var(--sp-2)">`
       +`<div class="hint" style="margin-bottom:var(--sp-2)">Ca să comparăm pe cifrele tale, alege tipul localității (norma diferă pe nivel):</div>`
       +`<div style="display:flex;gap:var(--sp-2)">${chip("municipiu")}${chip("oras")}${chip("comuna")}</div>`
-      +`<div id="sim-tip-rez" style="margin-top:10px"></div></div>`;
+      +`<div id="sim-tip-rez" style="margin-top:var(--sp-2)"></div></div>`;
   }
   function renderSimulator(d, ipotezaNote){
     const box=document.getElementById("sim-body"); if(!box) return;
@@ -1401,21 +1402,21 @@
     }
     let html="";
     if(ipotezaNote){
-      html += `<div style="background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:10px 13px;margin-bottom:var(--sp-3);font-weight:var(--w-semibold)">🔎 ${ipotezaNote}</div>`;
+      html += `<div style="background:var(--gold-dim);color:var(--gold);border-radius:10px;padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);font-weight:var(--w-semibold)">🔎 ${ipotezaNote}</div>`;
     }
     if(d.norma){
-      html += `<div class="grid g-2" style="margin-bottom:14px">`
+      html += `<div class="grid g-2" style="margin-bottom:var(--sp-3)">`
         + _simKpi("Sistem real", d.real.total_taxe, d.recomandat==="SISTEM_REAL")
         + _simKpi("Normă de venit", d.norma.total_taxe, d.recomandat==="NORMA_VENIT")
         + `</div>`;
       if(d.recomandat){
         const nume = d.recomandat==="NORMA_VENIT" ? "normă de venit" : "sistemul real";
-        html += `<div style="background:var(--emerald-dim);color:var(--emerald-br);border-radius:12px;padding:12px 14px;font-weight:var(--w-semibold);margin-bottom:var(--sp-3)">`
+        html += `<div style="background:var(--emerald-dim);color:var(--emerald-br);border-radius:12px;padding:var(--sp-3) var(--sp-3);font-weight:var(--w-semibold);margin-bottom:var(--sp-3)">`
           +`✅ Pe ${nume} ai plăti mai puțin — economisești ~${lei0(d.diferenta)} lei pe an.</div>`;
       }
     } else {
       // normă indisponibilă / nepermisă → doar sistemul real, fără recomandare
-      html += `<div class="grid g-2" style="margin-bottom:14px">${_simKpi("Sistem real", d.real.total_taxe, false)}</div>`;
+      html += `<div class="grid g-2" style="margin-bottom:var(--sp-3)">${_simKpi("Sistem real", d.real.total_taxe, false)}</div>`;
     }
     const av=d.avertismente_legale||[];
     const arataSelector = av.includes("NORMA_INDISPONIBILA") && !!d.judet;  // lipsă date + avem judet
@@ -1426,7 +1427,7 @@
     if(arataSelector){
       html += _simAvertBox(SIM_AVERT.NORMA_INDISPONIBILA) + _simSelectorTip();
     }
-    html += `<div class="synced-line" style="margin-top:6px">Estimare orientativă — verifică cu contabilul</div>`;
+    html += `<div class="synced-line" style="margin-top:var(--sp-1)">Estimare orientativă — verifică cu contabilul</div>`;
     box.innerHTML=html;
   }
   async function loadSimulare(){
@@ -1624,7 +1625,7 @@
     if(plati.length===0){
       box.classList.add("is-clean");
       const declBlock = declar.length
-        ? `<div class="hp-decl" style="margin-top:15px">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
+        ? `<div class="hp-decl" style="margin-top:var(--sp-4)">ⓘ Ai însă ${declar.length===1?"o declarație de depus":declar.length+" declarații de depus"} (fără plată):</div>`
           +`<div class="hp-break">${declar.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="r">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div></div>`).join("")}</div>`
         : "";
       box.innerHTML=head
@@ -1662,7 +1663,7 @@
   }
   function renderDeadlines(obl){
     const box=document.getElementById("ov-deadlines");if(!box)return;
-    if(!obl.length){box.innerHTML='<div class="hint" style="padding:10px">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✓</div>';return;}
+    if(!obl.length){box.innerHTML='<div class="hint" style="padding:var(--sp-2)">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✓</div>';return;}
     const sorted=[...obl].sort((a,b)=>a.zile_ramase-b.zile_ramase);  // depășite primele
     box.innerHTML=sorted.map(o=>{
       const dot=DOT[o.status]||"ok";
@@ -1701,7 +1702,7 @@
     VAT_IN:'<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>'};
   function renderActivity(tx){
     const box=document.getElementById("ov-activity");if(!box)return;
-    if(!tx.length){box.innerHTML='<div class="hint" style="padding:14px">Nicio tranzacție în '+MONTHS[M]+'.</div>';return;}
+    if(!tx.length){box.innerHTML='<div class="hint" style="padding:var(--sp-3)">Nicio tranzacție în '+MONTHS[M]+'.</div>';return;}
     box.innerHTML=tx.slice(0,6).map(t=>{
       const inc=t.tx_type==="INCOME";
       const col=inc?"green":(t.tx_type==="VAT_OUT"?"gold":"red");
@@ -1740,7 +1741,7 @@
       const tb=document.getElementById("ven-tbody");
       if(tb){
         if(await isNewUser()) tb.innerHTML='<tr><td colspan="6">'+pgEmpty("i-car","Aici vezi încasările din curse Bolt","Se completează automat din Bolt. Deschide botul ca să conectezi contul.","Conectează din bot")+'</td></tr>';
-        else tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:14px">Fără încasări în '+MONTHS[M]+'.</td></tr>';
+        else tb.innerHTML = rows.length?rows.join(""):'<tr><td colspan="6" class="hint" style="padding:var(--sp-3)">Fără încasări în '+MONTHS[M]+'.</td></tr>';
       }
       buildVenBars();
       renderVenPlatforme(p.income_by_platform||[]);
@@ -1787,7 +1788,7 @@
           const w=Math.round(Number(i.amount_brut||0)/max*100);
           const ded=i.deductibility_pct<100?`${i.deductibility_pct}% deductibil`:"100% deductibil";
           return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:var(--text-base)">'+escHtml(i.icon)+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
-        }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:14px">Nicio cheltuială în '+MONTHS[M]+'.</div>');
+        }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:var(--sp-3)">Nicio cheltuială în '+MONTHS[M]+'.</div>');
       }
       drawDonut("chDonut", items);
     }catch(e){console.error(e);}
@@ -1812,7 +1813,7 @@
         tb.innerHTML = ture.length? ture.map(t=>{
           const interval=escHtml(t.ora_start||"—")+" → "+escHtml(t.ora_stop||"—");
           return `<tr><td>${dmy(t.trip_date)}</td><td>${interval}</td><td class="r num">${t.odometer_start??"—"}</td><td class="r num">${t.odometer_end??"—"}</td><td class="r num pos">${KM(t.km)}</td></tr>`;
-        }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio tură în '+MONTHS[M]+'.</td></tr>');
+        }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio tură în '+MONTHS[M]+'.</td></tr>');
       }
       // vehicul + combustibil
       const vb=document.getElementById("pc-vehicul");
@@ -1897,7 +1898,7 @@
       });
       const tb=document.getElementById("reg-tbody");
       const isNew=await isNewUser();
-      if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:14px">Nicio înregistrare în '+MONTHS[M]+'.</td></tr>');
+      if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:var(--sp-3)">Nicio înregistrare în '+MONTHS[M]+'.</td></tr>');
       setNum("reg-inc", inc, RON);
       setNum("reg-plati", plati, RON);
       setNum("reg-sold", inc-plati, RON);
@@ -1983,7 +1984,7 @@
           const dot=DOT[o.status]||"ok";
           const suma=o.suma_estimata!=null?` · ${RON(o.suma_estimata)} RON`:"";
           return `<div class="tl-item"><div class="tl-dot ${dot}"></div><div class="tl-date">${termenRo(o.termen)} · ${zileRo(o.zile_ramase)}</div><div class="tl-title">${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="tl-desc">${escHtml((o.descriere||"").slice(0,90))}${suma}</div></div>`;
-        }).join("") : '<div class="hint" style="padding:10px">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✅</div>';
+        }).join("") : '<div class="hint" style="padding:var(--sp-2)">Nicio obligație fiscală pentru '+MONTHS[M]+'. ✅</div>';
       }
 
       // --- PLĂȚI (tabel, doar cele cu sumă/IBAN de plată) ---
@@ -2000,15 +2001,15 @@
           // constante fiscale server (D212 etc.), iar ' e deja eliminat pt. JS. Escape-ul
           // HTML (escHtml) ar fi unealta greșită aici → lăsat intenționat.
           const btn = o.suma_estimata!=null && o.suma_estimata>0
-            ? `<a class="btn btn-primary" style="padding:8px 14px" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
-            : `<a class="btn btn-ghost" style="padding:8px 14px" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
+            ? `<a class="btn btn-primary" style="padding:var(--sp-2) var(--sp-3)" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
+            : `<a class="btn btn-ghost" style="padding:var(--sp-2) var(--sp-3)" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
           return `<tr><td data-label="Obligație"><b>${escHtml(o.cod)}</b><div class="m" style="font-size:var(--text-xs);color:var(--muted-2)">${escHtml(o.nume.slice(0,28))}</div></td><td class="num" data-label="Cont" style="font-size:var(--text-xs)">${escHtml(cont)}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
-        }).join("") : '<tr><td colspan="5" class="hint" style="padding:14px">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
+        }).join("") : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
       }
     }catch(e){
       console.error(e);
       const tl=document.getElementById("cal-timeline");
-      if(tl)tl.innerHTML='<div class="hint is-error" style="padding:10px">Nu am putut încărca obligațiile. Reîncarcă pagina.</div>';
+      if(tl)tl.innerHTML='<div class="hint is-error" style="padding:var(--sp-2)">Nu am putut încărca obligațiile. Reîncarcă pagina.</div>';
     }
   }
 
@@ -2056,7 +2057,7 @@
       const warns=[];
       if(d.namespace_de_confirmat) warns.push("XML-ul pentru "+tip+" e gata, dar formatul nu e încă confirmat 100% — folosește deocamdată ghidul de completare (sigur).");
       (d.avertismente||[]).forEach(a=>warns.push(a));
-      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:10px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
+      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:var(--sp-2)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
     }catch(e){
       console.error(e);
       titlu.textContent=`${tip} — eroare`;
@@ -2088,7 +2089,7 @@
       titlu.innerHTML='<span class="gen-ok">✓</span> '+`Declarația Unică ${Y} · de plată ${RON(d.total_plata)} lei`;
       ghid.textContent=d.ghid_plain||d.ghid||"";
       const warns=(d.avertismente||[]);
-      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:10px"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
+      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:var(--sp-2)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
     }catch(e){
       console.error(e);
       titlu.textContent="Declarația Unică — eroare";
@@ -2169,8 +2170,8 @@
       const r=await authFetch("/api/v1/bolt/status"); const s=await r.json();
       if(s.connected){
         const dt=s.connected_at?new Date(String(s.connected_at).replace(" ","T")).toLocaleDateString("ro-RO"):"—";
-        box.innerHTML=`<div class="hint" style="margin-bottom:10px">✅ <b>Conectat</b> la ${dt} · Client ID: <code>${escHtml((s.client_id||"").slice(0,10))}…</code> · secret: ${escHtml(s.secret_masked)}</div>`
-          +`<div class="hint" style="margin-bottom:10px">Sincronizăm automat cursele tale Bolt (la închiderea zilei) → îți propunem să le adaugi în Registru.</div>`
+        box.innerHTML=`<div class="hint" style="margin-bottom:var(--sp-2)">✅ <b>Conectat</b> la ${dt} · Client ID: <code>${escHtml((s.client_id||"").slice(0,10))}…</code> · secret: ${escHtml(s.secret_masked)}</div>`
+          +`<div class="hint" style="margin-bottom:var(--sp-2)">Sincronizăm automat cursele tale Bolt (la închiderea zilei) → îți propunem să le adaugi în Registru.</div>`
           +`<button class="btn btn-ghost" onclick="boltReconecteaza()">Reconectează (schimbă cheile)</button>`;
       }else{
         if(!s.crypto_available){
@@ -2187,9 +2188,9 @@
       <input class="set-inp" id="bolt-cid" type="text" placeholder="Client ID din fleets.bolt.eu" autocomplete="off" spellcheck="false">
       <label class="set-lbl" style="margin-top:var(--sp-3)">Client Secret</label>
       <input class="set-inp" id="bolt-csec" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false">
-      <div id="bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
-      <button class="btn btn-primary" id="bolt-connect-btn" style="margin-top:6px" onclick="conecteazaBolt()">Conectează contul Bolt</button>
-      <div class="hint" style="margin-top:14px;padding-top:var(--sp-3);border-top:1px dashed var(--line)">🛟 <b>Nu poți conecta API-ul Bolt?</b> (ex. cont gestionat de altă flotă) — API-ul sincronizează automat, dar dacă nu-l poți folosi, introdu venitul <b>manual</b>: trimite în bot <b>screenshotul raportului Bolt</b> sau text (<code>venit bolt [lună]: net X, cash Y</code>). Manual e alternativa pentru cine n-are acces API.</div>`;
+      <div id="bolt-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
+      <button class="btn btn-primary" id="bolt-connect-btn" style="margin-top:var(--sp-1)" onclick="conecteazaBolt()">Conectează contul Bolt</button>
+      <div class="hint" style="margin-top:var(--sp-3);padding-top:var(--sp-3);border-top:1px dashed var(--line)">🛟 <b>Nu poți conecta API-ul Bolt?</b> (ex. cont gestionat de altă flotă) — API-ul sincronizează automat, dar dacă nu-l poți folosi, introdu venitul <b>manual</b>: trimite în bot <b>screenshotul raportului Bolt</b> sau text (<code>venit bolt [lună]: net X, cash Y</code>). Manual e alternativa pentru cine n-are acces API.</div>`;
   }
   function boltReconecteaza(){ const box=document.getElementById("bolt-conectare"); if(box) boltFormular(box); }
   async function conecteazaBolt(){
@@ -2367,12 +2368,12 @@
     const n=WIZ.steps.length, x=WIZ.i+1;
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%">
-        <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
           <span class="brand-badge">C</span>
           <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-lg)">Coniar</div>
         </div>
-        <div style="display:flex;gap:5px;margin-bottom:6px">${WIZ.steps.map((_,k)=>`<div style="flex:1;height:4px;border-radius:3px;background:${k<=WIZ.i?'var(--emerald)':'var(--line-2)'}"></div>`).join("")}</div>
-        <div class="hint" style="margin-bottom:14px">Pasul ${x} din ${n}</div>
+        <div style="display:flex;gap:var(--sp-1);margin-bottom:var(--sp-1)">${WIZ.steps.map((_,k)=>`<div style="flex:1;height:4px;border-radius:3px;background:${k<=WIZ.i?'var(--emerald)':'var(--line-2)'}"></div>`).join("")}</div>
+        <div class="hint" style="margin-bottom:var(--sp-3)">Pasul ${x} din ${n}</div>
         <div class="panel">
           <div class="panel-h"><div class="t">${titlu}</div></div>
           ${corp}
@@ -2380,7 +2381,7 @@
       </div>`;
   }
   function wizBtns(inapoiVisible){
-    return `<div style="display:flex;gap:10px;margin-top:var(--sp-4)">
+    return `<div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-4)">
       ${inapoiVisible?`<button class="btn btn-ghost" onclick="wizBack()" style="min-height:44px">⬅️ Înapoi</button>`:""}
       <button class="btn btn-primary btn-full" id="wiz-next" onclick="wizNext()">Înainte →</button>
     </div><div id="wiz-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>`;
@@ -2400,7 +2401,7 @@
   const WIZ_NEREZ_LBL={BOLT_CU_CRF:"Bolt 2%",BOLT_FARA_CRF:"Bolt 16%",UBER_CU_CRF:"Uber 0%",UBER_FARA_CRF:"Uber 16%"};
   function wizDone(){
     const d=WIZ.data, e=WIZ.esc;
-    const rand=(emoji,txt)=>`<div style="display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)"><span>${emoji}</span><div class="hint" style="color:var(--ink)">${txt}</div></div>`;
+    const rand=(emoji,txt)=>`<div style="display:flex;gap:var(--sp-2);padding:var(--sp-2) 0;border-bottom:1px solid var(--line)"><span>${emoji}</span><div class="hint" style="color:var(--ink)">${txt}</div></div>`;
     let rez=rand("🏢", e(d.firma_nume||d.firma_cui||"Firma ta"));
     if(d.regim_impunere) rez+=rand("🧾", "Regim: "+(WIZ_REGIM_LBL[d.regim_impunere]||d.regim_impunere));
     if(d.is_pensionar||d.is_salariat){ const sit=[]; if(d.is_pensionar)sit.push("pensionar"); if(d.is_salariat)sit.push("angajat"); rez+=rand("👤","Situație: "+sit.join(" · ")); }
@@ -2413,8 +2414,8 @@
     }
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%;text-align:center">
-        <div style="font-size:var(--text-3xl);margin-bottom:6px">✅</div>
-        <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:6px">Gata! Contul tău e configurat</div>
+        <div style="font-size:var(--text-3xl);margin-bottom:var(--sp-1)">✅</div>
+        <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:var(--sp-1)">Gata! Contul tău e configurat</div>
         <div class="hint" style="margin-bottom:var(--sp-4)">Am salvat tot. Iată ce-ai configurat:</div>
         <div class="panel" style="text-align:left;margin-bottom:var(--sp-4)">${rez}</div>
         <div id="wiz-done-msg" class="hint is-error" style="min-height:18px;margin-bottom:var(--sp-2)"></div>
@@ -2488,10 +2489,10 @@
       const act=d.activity_label?` · ${WIZ.esc(d.activity_label)}`:"";
       card.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0">
         <div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Am găsit firma:</div>
-        <div style="font-weight:var(--w-semibold);margin:6px 0">${WIZ.esc(d.denumire||"—")}</div>
+        <div style="font-weight:var(--w-semibold);margin:var(--sp-1) 0">${WIZ.esc(d.denumire||"—")}</div>
         <div class="hint">CAEN ${WIZ.esc(d.cod_caen||"—")}${act} · ${tva} · ${stare}</div>
-        ${d.is_inactiv?'<div class="hint is-error" style="margin-top:6px">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
-        <div style="display:flex;gap:10px;margin-top:var(--sp-3)">
+        ${d.is_inactiv?'<div class="hint is-error" style="margin-top:var(--sp-1)">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
+        <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-3)">
           <button class="btn btn-primary btn-full" onclick="wizCuiConfirm()">✅ Corect</button>
           <button class="btn btn-ghost" onclick="wizCuiManual('')" style="min-height:44px">✏️ Editez</button>
         </div></div>`;
@@ -2511,7 +2512,7 @@
     card.innerHTML=`${motiv?`<div class="hint is-warn" style="margin-bottom:var(--sp-2)">${WIZ.esc(motiv)} Completează manual:</div>`:''}
       <label class="set-lbl">Denumire firmă</label>
       <input class="set-inp" id="wiz-denumire" type="text" placeholder="Denumirea PFA" value="${WIZ.esc((WIZ.data._anaf||{}).denumire||WIZ.data.firma_nume||"")}">
-      <div class="hint" style="margin-top:10px">_(CAEN/activitatea le poți seta ulterior în Setări)_</div>`;
+      <div class="hint" style="margin-top:var(--sp-2)">_(CAEN/activitatea le poți seta ulterior în Setări)_</div>`;
     WIZ.data._cuiManual=true; WIZ.data._cuiConfirmat=true;
     const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=false; nb.style.opacity="1"; }
   }
@@ -2544,12 +2545,12 @@
   // Sub-pas NORMĂ: tip localitate → lookup nomenclator → valoare (sau manual la județ necunoscut)
   function _wizNormaRezHtml(){
     if(WIZ.data._norma_manual){
-      return `<div class="hint is-warn" style="margin-bottom:6px">Nu am norma pentru județul tău în nomenclator — introdu valoarea din Decizia AJFP a județului (norma anuală, CAEN 4933):</div>
+      return `<div class="hint is-warn" style="margin-bottom:var(--sp-1)">Nu am norma pentru județul tău în nomenclator — introdu valoarea din Decizia AJFP a județului (norma anuală, CAEN 4933):</div>
         <input class="set-inp" id="wiz-norma-val" type="number" inputmode="numeric" placeholder="ex. 54300" value="${WIZ.data.norma_venit_anuala||""}" oninput="wizNormaInput(this.value)">`;
     }
     if(WIZ.data.norma_venit_anuala>0){
       const s=WIZ.data._norma_sursa;
-      return `<div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:3px">${WIZ.esc(s)}</div>`:""}`;
+      return `<div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Normă anuală: ${Number(WIZ.data.norma_venit_anuala).toLocaleString("ro-RO")} lei</div>${s?`<div class="hint" style="margin-top:var(--sp-1)">${WIZ.esc(s)}</div>`:""}`;
     }
     return "";
   }
@@ -2557,10 +2558,10 @@
     const box=document.getElementById("wiz-norma-box"); if(!box) return;
     const tip=WIZ.data._norma_tip||"";
     const chip=(v,lbl)=>`<button class="btn ${tip===v?"btn-primary":"btn-ghost"}" onclick="wizPickTipLoc('${v}')" style="flex:1;min-height:40px">${lbl}</button>`;
-    box.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0 0 10px">
+    box.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0 0 var(--sp-2)">
       <div class="hint" style="margin-bottom:var(--sp-2)">Tipul localității (norma diferă pe nivel):</div>
       <div style="display:flex;gap:var(--sp-2)">${chip("municipiu","Municipiu")}${chip("oras","Oraș")}${chip("comuna","Comună")}</div>
-      <div id="wiz-norma-rez" style="margin-top:10px">${_wizNormaRezHtml()}</div></div>`;
+      <div id="wiz-norma-rez" style="margin-top:var(--sp-2)">${_wizNormaRezHtml()}</div></div>`;
   }
   async function wizPickTipLoc(tip){
     WIZ.data._norma_tip=tip; WIZ.data._norma_manual=false; WIZ.data.norma_venit_anuala=0; WIZ.data._norma_sursa="";
@@ -2598,7 +2599,7 @@
     // Activitate mixtă (PAS 4b) — doar pe NORMĂ: dacă a adăugat o activitate neeligibilă
     // pentru normă în cursul anului → sistem real de la acea dată (split temporal).
     const mixtBlock = WIZ.data.regim_impunere==="NORMA_VENIT" ? `
-      <div style="margin-top:6px;border-top:1px solid var(--line-2);padding-top:var(--sp-3)">
+      <div style="margin-top:var(--sp-1);border-top:1px solid var(--line-2);padding-top:var(--sp-3)">
         ${tog("are_activitate_neeligibila_norma","🔀","Am adăugat altă activitate (neeligibilă pentru normă) în cursul anului","Ex. comerț, livrări de mâncare etc. Atunci treci pe sistem real DE LA acea dată: norma se calculează doar până atunci, restul pe venit real.")}
         ${WIZ.data.are_activitate_neeligibila_norma ? `
         <label class="set-lbl" style="margin-top:var(--sp-1)">Data adăugării activității neeligibile</label>
@@ -2610,7 +2611,7 @@
       ${tog("is_pensionar","🧓","Sunt pensionar","Pensionarii NU plătesc CAS (pensie) pe activitatea PFA. CASS se aplică pe venitul real.")}
       ${tog("is_salariat","💼","Sunt angajat cu normă întreagă altundeva","Ca asigurat prin salariu, CASS pe PFA se calculează pe venitul real (fără baza minimă). CAS pe PFA rămâne după prag.")}
       ${cashTog}
-      <div style="margin-top:6px;border-top:1px solid var(--line-2);padding-top:var(--sp-3)">
+      <div style="margin-top:var(--sp-1);border-top:1px solid var(--line-2);padding-top:var(--sp-3)">
         <div class="hint" style="margin-bottom:var(--sp-2)">📅 Ai început activitatea în cursul anului (nu de la 1 ianuarie) sau o vei înceta? Opțional — lasă gol dacă PFA-ul e activ tot anul. La <b>începere</b>, plafonul CAS se recalculează proporțional; norma de venit se prorata pe zile.</div>
         <label class="set-lbl">Data început activitate</label>
         <input class="set-inp" id="wiz-data-inceput" type="date" value="${WIZ.data.data_inceput_activitate||''}" oninput="WIZ.data.data_inceput_activitate=this.value">
@@ -2630,11 +2631,11 @@
       <div class="hint" style="margin-bottom:var(--sp-3)">Pentru foaia de parcurs și deductibilitatea combustibilului.</div>
       <label class="set-lbl">Număr înmatriculare *</label>
       <input class="set-inp" id="wiz-nr" type="text" placeholder="ex. BN 12 ABC" value="${WIZ.esc(d.veh_nr||"")}" autocomplete="off">
-      <label class="set-lbl" style="margin-top:10px">Marcă / model</label>
+      <label class="set-lbl" style="margin-top:var(--sp-2)">Marcă / model</label>
       <input class="set-inp" id="wiz-marca" type="text" placeholder="ex. Dacia Logan" value="${WIZ.esc(d.veh_marca||"")}">
-      <label class="set-lbl" style="margin-top:10px">Consum mediu (l/100km)</label>
+      <label class="set-lbl" style="margin-top:var(--sp-2)">Consum mediu (l/100km)</label>
       <input class="set-inp" id="wiz-consum" type="number" step="0.1" placeholder="7.5" value="${WIZ.esc(d.veh_consum||"7.5")}">
-      <label class="set-lbl" style="margin-top:10px">Tip deținere</label>
+      <label class="set-lbl" style="margin-top:var(--sp-2)">Tip deținere</label>
       <select class="set-inp" id="wiz-tip">
         ${["proprietate","leasing","comodat"].map(t=>`<option value="${t}" ${d.veh_tip===t?"selected":""}>${t}</option>`).join("")}
       </select>
@@ -2645,7 +2646,7 @@
   // ── Pas PLATFORME (gate: Bolt / Uber / Ambele) ──
   function wizPlatforme(){
     const sel=WIZ.data._platforme;
-    const card=(val,emoji,tit,desc)=>`<div onclick="wizPickPlatforme('${val}')" style="cursor:pointer;border:2px solid ${sel===val?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:14px;margin-bottom:10px">
+    const card=(val,emoji,tit,desc)=>`<div onclick="wizPickPlatforme('${val}')" style="cursor:pointer;border:2px solid ${sel===val?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:var(--sp-3);margin-bottom:var(--sp-2)">
       <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:var(--sp-1)">${desc}</div></div>`;
     wizShell("Pe ce platforme lucrezi?", `
       <div class="hint" style="margin-bottom:var(--sp-3)">Comisionul reținut de platforme (firme din afara României) se impozitează aici prin D100. Te întrebăm regimul doar pentru platformele alese.</div>
@@ -2662,21 +2663,21 @@
   function wizNerezident(){
     const card=(grup,val,emoji,tit,desc)=>{
       const sel=WIZ.data[grup]===val;
-      return `<div onclick="wizPickNerezident('${grup}','${val}')" style="cursor:pointer;border:2px solid ${sel?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:13px;margin-bottom:9px">
-        <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:3px">${desc}</div></div>`;
+      return `<div onclick="wizPickNerezident('${grup}','${val}')" style="cursor:pointer;border:2px solid ${sel?'var(--emerald)':'var(--line-2)'};border-radius:14px;padding:var(--sp-3);margin-bottom:var(--sp-2)">
+        <div style="font-weight:var(--w-semibold)">${emoji} ${tit}</div><div class="hint" style="margin-top:var(--sp-1)">${desc}</div></div>`;
     };
     let corp=`<div class="hint" style="margin-bottom:var(--sp-3)">Cota de impozit pe comisionul nerezident depinde de certificatul de rezidență fiscală al platformei.</div>`;
     if(wizHasBolt()){
-      corp+=`<div style="font-weight:var(--w-semibold);margin:6px 0 8px">🟢 Bolt (Estonia)</div>`
+      corp+=`<div style="font-weight:var(--w-semibold);margin:var(--sp-1) 0 var(--sp-2)">🟢 Bolt (Estonia)</div>`
         +card("regim_nerezident_bolt","BOLT_CU_CRF","✅","Am certificatul Bolt — 2%","Impozit 2% (D100 lunar + D207 anual). Necesită certificatul de rezidență fiscală al Bolt.")
         +card("regim_nerezident_bolt","BOLT_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
-        +`<div class="hint" style="margin:2px 0 14px">📄 Certificatul Bolt îl găsești în secțiunea <b>Certificat</b> după configurare.</div>`;
+        +`<div class="hint" style="margin:var(--sp-1) 0 var(--sp-3)">📄 Certificatul Bolt îl găsești în secțiunea <b>Certificat</b> după configurare.</div>`;
     }
     if(wizHasUber()){
-      corp+=`<div style="font-weight:var(--w-semibold);margin:6px 0 8px">⚫ Uber (Olanda)</div>`
+      corp+=`<div style="font-weight:var(--w-semibold);margin:var(--sp-1) 0 var(--sp-2)">⚫ Uber (Olanda)</div>`
         +card("regim_nerezident_uber","UBER_CU_CRF","✅","Am certificatul Uber — 0%","Scutire: doar D207 anual, fără D100. Necesită certificatul de rezidență fiscală al Uber.")
         +card("regim_nerezident_uber","UBER_FARA_CRF","⚠️","Nu am certificatul — 16%","Impozit 16% (stopaj la sursă).")
-        +`<div class="hint" style="margin:2px 0 6px">ℹ️ Uber nu are cota de 2% (aceea e doar pentru Bolt).</div>`;
+        +`<div class="hint" style="margin:var(--sp-1) 0 var(--sp-1)">ℹ️ Uber nu are cota de 2% (aceea e doar pentru Bolt).</div>`;
     }
     wizShell("Impozit nerezident (D100)", corp+wizBtns(true));
     const ok=(!wizHasBolt()||WIZ.data.regim_nerezident_bolt)&&(!wizHasUber()||WIZ.data.regim_nerezident_uber);
@@ -2693,13 +2694,13 @@
       <input class="set-inp" id="wiz-bolt-cid" type="text" placeholder="Client ID din fleets.bolt.eu" autocomplete="off" spellcheck="false">
       <label class="set-lbl" style="margin-top:var(--sp-3)">Client Secret</label>
       <input class="set-inp" id="wiz-bolt-csec" type="password" placeholder="Client Secret" autocomplete="off" spellcheck="false">
-      <div id="wiz-bolt-msg" class="hint" style="margin-top:10px;min-height:18px"></div>
-      <div style="display:flex;gap:10px;margin-top:var(--sp-2)">
+      <div id="wiz-bolt-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
+      <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-2)">
         <button class="btn btn-ghost" onclick="wizBack()" style="min-height:44px">⬅️ Înapoi</button>
         <button class="btn btn-primary btn-full" id="wiz-bolt-btn" onclick="wizApiBoltConnect()">Conectează</button>
       </div>
-      <button class="btn btn-ghost" onclick="wizApiBoltSkip()" style="width:100%;margin-top:10px;min-height:44px">Sări peste — conectez mai târziu →</button>
-      <div class="hint" style="margin-top:var(--sp-3);padding-top:10px;border-top:1px dashed var(--line)">🛟 Fără API poți introduce venitul <b>manual</b>: trimite în bot screenshotul raportului Bolt sau text (<code>venit bolt [lună]: net X, cash Y</code>).</div>`);
+      <button class="btn btn-ghost" onclick="wizApiBoltSkip()" style="width:100%;margin-top:var(--sp-2);min-height:44px">Sări peste — conectez mai târziu →</button>
+      <div class="hint" style="margin-top:var(--sp-3);padding-top:var(--sp-2);border-top:1px dashed var(--line)">🛟 Fără API poți introduce venitul <b>manual</b>: trimite în bot screenshotul raportului Bolt sau text (<code>venit bolt [lună]: net X, cash Y</code>).</div>`);
   }
   async function wizApiBoltConnect(){
     const msg=document.getElementById("wiz-bolt-msg"), btn=document.getElementById("wiz-bolt-btn");
@@ -2840,7 +2841,7 @@
       <div class="pm-row"><span>Identificare</span><b id="pm-identif">—</b></div>
       <div class="pm-note">Pe <b style="color:var(--emerald-br)">ghișeul.ro</b> plătești cu cardul. ANAF afișează singur obligațiile pe CNP — verifică suma acolo. Pentru TVA (pe CUI) confirmă în SPV. Coniar nu plătește automat, ca să nu existe risc de cont greșit.</div>
       <a class="btn btn-primary" href="https://www.ghiseul.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20" stroke-linecap="round"/></svg>Plătește pe ghișeul.ro</a>
-      <a class="btn btn-ghost" href="https://www.anaf.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin-top:9px">Deschide site-ul ANAF</a>
+      <a class="btn btn-ghost" href="https://www.anaf.ro" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin-top:var(--sp-2)">Deschide site-ul ANAF</a>
     </div>
   </div>
 </div>
