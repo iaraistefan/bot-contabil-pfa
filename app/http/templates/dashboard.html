@@ -218,6 +218,7 @@
   .hero-pay .hp-stat{vertical-align:middle;margin-right:7px}
   .hero-pay .hp-stat.ok{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--pos)}
   .hero-pay .hp-stat.bad{display:inline-block;font-size:var(--text-2xs);font-weight:var(--w-bold);color:var(--red);background:var(--red-dim);padding:2px 8px;border-radius:var(--r-full)}
+  .hero-pay .hp-stat.warn{display:inline-block;font-size:var(--text-2xs);font-weight:var(--w-bold);color:var(--gold);background:var(--gold-dim);padding:2px 8px;border-radius:var(--r-full)}
   .hero-pay .hp-main{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap}
   .hero-pay .hp-total{font-family:var(--display);font-weight:var(--w-display);font-size:var(--text-2xl);line-height:1;letter-spacing:-.02em;color:var(--gold)}
   .hero-pay .hp-total .cur{font-size:var(--text-base);color:var(--muted);font-weight:var(--w-semibold);margin-left:3px}
@@ -372,6 +373,7 @@
   .tb-name{font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base)}
   .tb-pct{margin-left:auto;font-family:var(--mono);font-size:var(--text-sm);font-weight:var(--w-semibold)}
   .tb-pct.ok{color:var(--emerald-br)} .tb-pct.near{color:var(--gold)} .tb-pct.over{color:var(--red)}
+  .tb-tag{font-family:var(--mono);font-size:var(--text-3xs);text-transform:uppercase;letter-spacing:var(--tracking-label);color:var(--emerald-br);background:var(--emerald-dim);padding:2px var(--sp-2);border-radius:var(--r-full)}
   .tb-track{height:11px;border-radius:var(--r-sm);background:var(--fill-subtle);overflow:hidden;position:relative}
   .tb-fill{height:100%;border-radius:var(--r-sm);transition:width .9s cubic-bezier(.22,1,.36,1)}
   .tb-fill.ok{background:linear-gradient(90deg,var(--emerald),var(--pos))}
@@ -1491,11 +1493,14 @@
   // Culoarea/iconul vin din `status` din payload (nu recalculăm pragul de 80% în JS).
   function _prCls(status){ return status==="DEPASIT_PLAFON"?"over":(status==="APROAPE_PLAFON"?"near":"ok"); }
   const _PR_GLYPH={ok:"✓",near:"!",over:"✕"};
-  function _prBar(cls,name,pct,lTxt,rTxt){
+  function _prBar(cls,name,pct,lTxt,rTxt,opts){
+    opts=opts||{};
     const w=Math.min(100,Math.round(pct||0));                      // clamp lățime (pct>100 la venituri mari)
     const pctLbl = cls==="over" ? "peste" : `${Math.round(pct||0)}%`;
-    return `<div class="tbar"><div class="tb-top"><span class="tb-ic ${cls}">${_PR_GLYPH[cls]}</span>`
-      +`<span class="tb-name">${name}</span><span class="tb-pct ${cls}">${pctLbl}</span></div>`
+    const glyph = opts.glyph || _PR_GLYPH[cls];                    // podea CASS: ● în loc de ✓ (peste podea = obligație activă, NU alarmă)
+    const tag = opts.tag ? `<span class="tb-tag">${opts.tag}</span>` : "";
+    return `<div class="tbar"><div class="tb-top"><span class="tb-ic ${cls}">${glyph}</span>`
+      +`<span class="tb-name">${name}</span>${tag}<span class="tb-pct ${cls}">${pctLbl}</span></div>`
       +`<div class="tb-track"><div class="tb-fill ${cls}" data-w="${w}" style="width:0"></div><span class="mark"></span></div>`
       +`<div class="tb-cap"><span class="l">${lTxt}</span><span class="r">${rTxt}</span></div></div>`;
   }
@@ -1520,7 +1525,8 @@
       const l=`Venit net <b>${lei0(d.venit_net)} lei</b> din ${lei0(c6.threshold_ron)} lei`;
       const r=above?`peste podea → CASS pe<br>venitul real`
                    :`sub podea → CASS pe<br>baza minimă (${lei0(d.cass)} lei)`;
-      bars.push(_prBar(cls,"Podeaua CASS (6 salarii minime)",c6.utilized_pct,l,r));
+      const opts=above?{glyph:"●",tag:"obligație activă"}:undefined;  // podea trecută = normal → verde păstrat, doar glif+etichetă
+      bars.push(_prBar(cls,"Podeaua CASS (6 salarii minime)",c6.utilized_pct,l,r,opts));
     }
     // 3. PRAG CAS — peste prag = CAS obligatoriu
     const c12=pg.cas12;
@@ -1539,7 +1545,7 @@
       +`<p class="band-sub">Cât spațiu fiscal mai ai până la fiecare prag care îți schimbă obligațiile.</p>`
       +bars.join("")
       +`<div class="band-foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>Pragurile sunt din salariul minim ${sm} lei și plafonul TVA legal (${thr} lei, OG 22/2025).</div></section>`
-      +`<div class="legend"><span class="it"><span class="sw ok"></span>✓ În normă (sub 80%)</span><span class="it"><span class="sw near"></span>! Aproape (≥80%)</span><span class="it"><span class="sw over"></span>✕ Peste prag (≥100%)</span></div>`;
+      +`<div class="legend"><span class="it"><span class="sw ok"></span>✓ În normă (sub 80%)</span><span class="it"><span class="sw near"></span>! Aproape (≥80%)</span><span class="it"><span class="sw over"></span>✕ Peste plafon (≥100%)</span><span class="it"><span class="sw ok"></span>● Peste podea — obligație activă</span></div>`;
     // animație lățime (ca B7): reduced-motion → instant; altfel rAF declanșează tranziția CSS
     const fills=box.querySelectorAll(".tb-fill");
     if(prefersReduced()) fills.forEach(f=>f.style.width=f.dataset.w+"%");
@@ -1611,7 +1617,9 @@
     box.className="hero-pay";
     // indicator de stare PLATĂ: leagă `overdue` (deja calculat sus) la un element vizual mic la vârf.
     // overdue → badge roșu „restanță"; curat → punct verde discret. Zero calcul nou.
-    const stat = overdue ? `<span class="hp-stat bad">restanță</span>` : `<span class="hp-stat ok" title="La zi"></span>`;
+    const stat = overdue ? `<span class="hp-stat bad">restanță</span>`
+      : (near && near.status==='AVERTISMENT') ? `<span class="hp-stat warn" title="${near.zile_ramase} zile">de plată curând</span>`
+      : `<span class="hp-stat ok" title="La zi"></span>`;
     const head=`<div class="hp-head"><div class="hp-title">${stat}Cât plătesc și când?</div><div class="hp-period">${MONTHS[M]} ${Y}</div></div>`;
     const estLine = estimari.map(o=>`<div class="hp-decl" style="color:var(--blue)">ⓘ <b>${escHtml(o.cod)}</b> — se calculează pe parcursul anului (încă fără venituri pe ${o.estimare_an||Y})</div>`).join("");
 
