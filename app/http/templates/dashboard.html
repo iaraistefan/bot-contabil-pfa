@@ -1511,9 +1511,9 @@
     if(vat && !vat.is_payer && vat.threshold_ron!=null){
       const cls=_prCls(vat.status);
       const l=`Cifra de afaceri <b>${lei0(vat.cifra_afaceri)} lei</b> din ${lei0(vat.threshold_ron)} lei`;
-      const r = cls==="over" ? `ai depășit — înregistrează-te<br>plătitor TVA (în 10 zile)`
-              : cls==="near" ? `atenție: mai ai doar ${lei0(vat.remaining_ron)} lei<br>până devii plătitor TVA`
-              :                `mai ai ${lei0(vat.remaining_ron)} lei<br>până devii plătitor TVA`;
+      const r = cls==="over" ? `ai depășit plafonul — trebuie să te înregistrezi ca plătitor de TVA în 10 zile`
+              : cls==="near" ? `mai ai doar ${lei0(vat.remaining_ron)} lei până devii plătitor de TVA — bine de știut din vreme`
+              :                `mai ai ${lei0(vat.remaining_ron)} lei până devii plătitor de TVA`;
       bars.push(_prBar(cls,"Plafon TVA",vat.utilized_pct,l,r));
     }
     // 2. PODEA CASS — peste podea = pe venitul real (NU e alarmă → teal); sub podea = pe minim (status)
@@ -1522,8 +1522,8 @@
       const above=(c6.utilized_pct||0)>=100;
       const cls=above?"ok":_prCls(c6.status);
       const l=`Venit net <b>${lei0(d.venit_net)} lei</b> din ${lei0(c6.threshold_ron)} lei`;
-      const r=above?`peste podea → CASS pe<br>venitul real`
-                   :`sub podea → CASS pe<br>baza minimă (${lei0(d.cass)} lei)`;
+      const r=above?`ai trecut podeaua — CASS se calculează pe cât câștigi real`
+                   :`sub podea — CASS se calculează pe baza minimă (${lei0(d.cass)} lei)`;
       const opts=above?{glyph:"●",tag:"obligație activă"}:undefined;  // podea trecută = normal → verde păstrat, doar glif+etichetă
       bars.push(_prBar(cls,"Podeaua CASS (6 salarii minime)",c6.utilized_pct,l,r,opts));
     }
@@ -1532,16 +1532,16 @@
     if(c12){
       const over=(c12.status==="DEPASIT_PLAFON");
       const cls=_prCls(c12.status);
-      const l=over?`Venit net <b>peste ${lei0(c12.threshold_ron)} lei</b>`
+      const l=over?`Câștigi <b>peste ${lei0(c12.threshold_ron)} lei</b> — ești peste pragul CAS`
                   :`Venit net <b>${lei0(d.venit_net)} lei</b> din ${lei0(c12.threshold_ron)} lei`;
-      const r=over?`CAS obligatoriu<br>(25% pe baza de 12 SMB)`
-                  :`sub prag → CAS<br>neobligatoriu (0 lei)`;
+      const r=over?`CAS obligatoriu — 25% pe baza a 12 salarii minime`
+                  :`sub prag — CAS-ul e opțional, deci plătești 0 lei`;
       bars.push(_prBar(cls,"Prag CAS (12 salarii minime)",c12.utilized_pct,l,r));
     }
     if(!bars.length){ box.innerHTML=""; return; }
     const sm=lei0((pg.salariu_minim)||4050), thr=lei0((vat&&vat.threshold_ron)||395000);
     box.innerHTML=`<section class="band"><div class="band-head"><span class="t">Unde te afli fiscal</span><span class="badge">${d.an} · la zi</span></div>`
-      +`<p class="band-sub">Cât spațiu fiscal mai ai până la fiecare prag care îți schimbă obligațiile.</p>`
+      +`<p class="band-sub">Cât mai ai până la fiecare prag care îți schimbă taxele.</p>`
       +bars.join("")
       +`<div class="band-foot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>Pragurile sunt din salariul minim ${sm} lei și plafonul TVA legal (${thr} lei, OG 22/2025).</div></section>`
       +`<div class="legend"><span class="it"><span class="sw ok"></span>✓ În normă (sub 80%)</span><span class="it"><span class="sw near"></span>! Aproape (≥80%)</span><span class="it"><span class="sw over"></span>✕ Peste plafon (≥100%)</span><span class="it"><span class="sw ok"></span>● Peste podea — obligație activă</span></div>`;
