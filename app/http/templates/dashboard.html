@@ -1299,14 +1299,14 @@
   // "rămâne după taxe" = venit_net − total_plata (scădere a două valori autoritare).
   const lei0 = v => (v==null?"—":Math.round(v).toLocaleString("ro-RO"));
   const FLINE = {
-    impozit:{name:"Impozit pe venit", tech:"Impozit 10% pe venitul net rămas după deducerea CAS și CASS (art. 68 Cod fiscal)."},
-    cas:    {name:"CAS — pensie",      tech:"Sub 12 SMB, CAS opțional (implicit 0). Peste 12 SMB: 25% pe baza de 12 SMB; peste 24 SMB baza se dublează."},
-    cass:   {name:"CASS — sănătate",   tech:"Sub 6 SMB: CASS pe baza minimă de 6 SMB. Între 6 și 72 SMB: 10% pe venitul real. Peste 72 SMB: se plafonează (plafon 2026, Legea 141/2025)."},
+    impozit:{name:"Impozit pe venit", tech:"Impozit de 10% pe cât îți rămâne după ce scazi CAS și CASS (art. 68 Cod fiscal)."},
+    cas:    {name:"CAS — pensie",      tech:"Sub 12 salarii minime, CAS-ul e opțional (implicit 0). Peste 12: plătești 25% pe baza a 12 salarii minime; peste 24 de salarii minime, baza se dublează."},
+    cass:   {name:"CASS — sănătate",   tech:"Sub 6 salarii minime: CASS pe baza minimă de 6 salarii minime. Între 6 și 72: 10% pe venitul real. Peste 72 de salarii minime, se plafonează (plafon 2026, Legea 141/2025)."},
   };
   function _flSub(it,d){
     if(it.tip==="impozit") return `cota ${it.cota_pct}%`;
-    if(it.tip==="cas") return it.aplicabil ? `cota ${it.cota_pct}%` : "neaplicabil sub plafon";
-    if(!it.aplicabil) return "neaplicabil";
+    if(it.tip==="cas") return it.aplicabil ? `cota ${it.cota_pct}%` : "nu se aplică sub prag";
+    if(!it.aplicabil) return "nu se aplică";
     if(it.baza>d.venit_net) return "pe baza minimă";
     if(it.baza<d.venit_net) return "plafonat";
     return `cota ${it.cota_pct}%`;
@@ -1315,14 +1315,14 @@
     const vn=`<span class="tn">${lei0(d.venit_net)}</span>`;
     if(it.tip==="impozit"){
       return `<b>${it.cota_pct}%</b> × baza impozabilă <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>`
-        +`Baza = venit net <span class="tn">${lei0(d.venit_net)}</span> − CAS <span class="tn">${lei0(d.cas)}</span> − CASS <span class="tn">${lei0(d.cass)}</span>. Impozitul se aplică <i>după</i> ce scazi contribuțiile.`;
+        +`Baza = venit net <span class="tn">${lei0(d.venit_net)}</span> − CAS <span class="tn">${lei0(d.cas)}</span> − CASS <span class="tn">${lei0(d.cass)}</span>. Impozitul se calculează <i>după</i> ce scazi contribuțiile.`;
     }
     if(it.tip==="cas"){
       if(!it.aplicabil){
         return `Venitul tău net (${vn} lei) e <b>sub pragul de 12 salarii minime</b> (${lei0(d.praguri.cas12.threshold_ron)} lei). CAS-ul devine obligatoriu doar peste acest prag — deci nu plătești CAS anul acesta.`;
       }
       return `<b>${it.cota_pct}%</b> × baza <b>${lei0(it.baza)} lei</b> = <b>${RON(it.suma)} lei</b>.<br>`
-        +`Baza CAS e fixată la pragul de salarii minime atins, nu la venitul tău integral.`;
+        +`Plătești pe baza pragului de salarii minime atins, nu pe tot venitul tău.`;
     }
     // cass
     if(it.baza>d.venit_net){
