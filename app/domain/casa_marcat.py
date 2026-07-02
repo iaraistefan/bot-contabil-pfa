@@ -44,13 +44,13 @@ def necesita_amef(income_cash: float, declarat: bool = False) -> Tuple[bool, str
     cash = float(income_cash or 0.0)
     if cash > 0:
         return True, (
-            "Ai încasări în numerar în date (curse cash) — numerarul direct de la "
-            "pasager declanșează obligația de casă de marcat."
+            "În date ai curse plătite cash — iar numerarul primit direct de la "
+            "pasager cere casă de marcat."
         )
     if declarat:
         return True, (
-            "Ai declarat că încasezi numerar de la pasageri — numerarul direct "
-            "declanșează obligația de casă de marcat."
+            "Ai declarat că iei numerar de la pasageri — iar banii cash direct "
+            "de la client cer casă de marcat."
         )
     return False, (
         "Nu detectăm încasări în numerar — dacă toate plățile sunt prin aplicație "
@@ -63,23 +63,23 @@ def necesita_amef(income_cash: float, declarat: bool = False) -> Tuple[bool, str
 AMEF_INFO = {
     "titlu": "Casă de marcat (AMEF)",
     "ce_e": (
-        "AMEF = Aparatul de Marcat Electronic Fiscal (casa de marcat). Emite bon fiscal "
-        "pentru încasările în numerar de la clienți și le raportează automat la ANAF."
+        "AMEF = Aparatul de Marcat Electronic Fiscal — adică, pe scurt, casa de marcat. "
+        "Emite bon fiscal pentru banii primiți cash de la clienți și îi raportează automat la ANAF."
     ),
     "cand": (
-        "Obligatorie când încasezi DIRECT de la pasager — numerar (cash) sau card la un POS "
-        "al tău, la finalul cursei. Plățile prin aplicație (card via Bolt/Uber) NU intră: "
+        "Ai nevoie de ea când iei banii direct de la pasager — cash sau card pe un POS "
+        "al tău, la finalul cursei. Plățile prin aplicație (card prin Bolt/Uber) nu intră: "
         "acolo banii vin de la platformă, nu direct de la client."
     ),
     "de_ce": (
-        "Legea cere bon fiscal pentru orice încasare în numerar de la populație "
-        "(OUG 28/1999 republicată; OUG 49/2019 art. 21 stabilește sancțiunile). Fără casă "
-        "la încasări cash → amendă + risc de suspendare a activității."
+        "Legea cere bon fiscal pentru orice sumă primită cash de la populație "
+        "(OUG 28/1999 republicată; OUG 49/2019 art. 21 stabilește amenzile). Fără casă de marcat "
+        "la încasări cash rișți amendă și chiar suspendarea activității."
     ),
     "cum": (
-        "Bolt: poți DEZACTIVA plata cash în aplicație → dacă accepți doar card prin app, nu "
-        "ai nevoie de casă. Uber: permite mereu cash → dacă accepți curse cash, ai nevoie de "
-        "casă. Dacă încasezi numerar: cumperi o AMEF, o fiscalizezi la ANAF și emiți bon la "
+        "Bolt: poți dezactiva plata cash în aplicație — dacă accepți doar card prin app, "
+        "nu-ți trebuie casă. Uber: permite mereu cash — dacă accepți curse cash, îți trebuie "
+        "casă. Dacă iei numerar: cumperi o casă de marcat, o fiscalizezi la ANAF și emiți bon la "
         "fiecare cursă plătită cash."
     ),
 }
