@@ -37,9 +37,9 @@ def test_cele_5_coduri_traduse():
 
 def test_cazuri_speciale_si_disclaimer():
     assert "fara_venituri" in HTML                    # caz fără venituri tratat în UI
-    assert "Estimare orientativă — verifică cu contabilul" in HTML
+    assert "E o estimare — pentru cifra exactă, confirmă cu contabilul" in HTML
     # textele rafinate (fără majuscule de accentuare)
-    assert "o obligație legală" in HTML               # PLAFON_DEPASIT rafinat
+    assert "așa cere legea" in HTML                   # PLAFON_DEPASIT rafinat
     assert "termen 25 mai" in HTML                    # SCHIMBARE_ANUL_URMATOR rafinat
 
 

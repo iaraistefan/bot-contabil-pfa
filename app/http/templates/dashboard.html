@@ -1191,7 +1191,7 @@
       let html="";
       // Nudge profil incomplet (anti-omisiune: arătăm tot, nu ascundem nimic).
       if(d.nudge){
-        html+=`<div class="alert" style="margin-bottom:var(--sp-3)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet — nu ascundem nimic. Completează-l (în bot: /start) ca să vezi doar obligațiile TALE.</div></div></div>`;
+        html+=`<div class="alert" style="margin-bottom:var(--sp-3)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="t">Îți arăt toate declarațiile</div><div class="d">Profilul tău nu e complet încă — de-aia le vezi pe toate, nu doar pe ale tale. Completează-l în bot (/start) și îți arăt exact ce te privește.</div></div></div>`;
       }
       // Toggle personalizat ↔ toate (doar dacă profilul e complet — altfel oricum vede tot).
       if(!d.nudge){
@@ -1222,7 +1222,7 @@
           <div class="sep" style="padding:var(--sp-1) var(--sp-3) var(--sp-3)">
             ${field('🔹','Ce e?',a.ce_e)}${field('📅','Când e obligatorie?',a.cand)}
             ${field('💡','De ce?',a.de_ce)}${field('📝','Cum?',a.cum)}
-            <div class="hint" style="margin-top:var(--sp-1)">Orientativ — verifică cu un contabil/ANAF.</div>
+            <div class="hint" style="margin-top:var(--sp-1)">Orientativ — pentru siguranță, confirmă cu un contabil sau la ANAF.</div>
           </div></div>`;
       }
       box.innerHTML=html||'<div class="hint" style="padding:var(--sp-2)">—</div>';
@@ -1364,9 +1364,9 @@
     NORMA_DOAR_DIN_2026:{titlu:"Norma — doar din 2026",ton:"info",
       text:"Pentru ridesharing, impozitarea pe normă e disponibilă abia din 2026. Anul acesta se aplică obligatoriu sistemul real."},
     PLAFON_DEPASIT:{titlu:"Ai depășit plafonul de normă",ton:"atentie",
-      text:"Ai depășit plafonul de 126.038 lei venit brut (2026). Din anul viitor treci obligatoriu la sistem real — nu mai este o opțiune, ci o obligație legală."},
+      text:"Ai depășit plafonul de 126.038 lei venit brut (2026). De anul viitor treci pe sistem real — peste acest plafon nu mai e o alegere, așa cere legea."},
     REVENIRE_NORMA_2ANI:{titlu:"Revenirea la normă durează",ton:"atentie",
-      text:"Ești pe sistem real. Revenirea la normă e posibilă doar după minimum 2 ani fiscali pe real — verifică de când ești pe real cu contabilul."},
+      text:"Ești pe sistem real. Poți reveni la normă abia după minimum 2 ani fiscali pe real — verifică cu contabilul de când ești pe real."},
     SCHIMBARE_ANUL_URMATOR:{titlu:"Schimbarea se face de anul viitor",ton:"info",
       text:"Decizia de regim se aplică prin Declarația Unică (termen 25 mai) și e valabilă de anul viitor, nu în cursul anului curent."},
   };
@@ -1429,7 +1429,7 @@
     if(arataSelector){
       html += _simAvertBox(SIM_AVERT.NORMA_INDISPONIBILA) + _simSelectorTip();
     }
-    html += `<div class="synced-line" style="margin-top:var(--sp-1)">Estimare orientativă — verifică cu contabilul</div>`;
+    html += `<div class="synced-line" style="margin-top:var(--sp-1)">E o estimare — pentru cifra exactă, confirmă cu contabilul</div>`;
     box.innerHTML=html;
   }
   async function loadSimulare(){
@@ -1450,7 +1450,7 @@
         const note=`Simulare pe norma de ${TIP_LBL[tip]} (${lei0(d.norma)} lei) — ești pe sistem real, deci e o ipoteză (ce-ar fi dacă).`;
         renderSimulator(await getSimulare(Y, d.norma), note);
       } else if(rez){
-        rez.innerHTML='<div class="hint is-warn">Nu există o normă pentru această combinație (județ + tip). Verifică decizia AJFP a județului tău.</div>';
+        rez.innerHTML='<div class="hint is-warn">Nu am norma pentru combinația asta (județ + tip). Caut-o în decizia AJFP a județului tău.</div>';
       }
     }catch(e){ console.error(e); if(rez) rez.innerHTML='<div class="hint is-error">Nu am putut căuta norma acum. Încearcă din nou.</div>'; }
   }
@@ -1879,7 +1879,7 @@
     }else if(d.status==="neconfigurat"){
       val.textContent="—"; showRon(false);
       badge.className="badge-st neutral"; badge.textContent="setează regim";
-      hint.textContent="Ai facturi de la o platformă nerezidentă (Bolt/Uber) cu regimul nesetat. Setează-l (în bot: /start sau Setări) ca să calculăm D100. Cu CRF → 0% (depui D207); 2% conservator; fără CRF → 16%. Nu afișăm o sumă până nu alegi."+neatrib;
+      hint.textContent="Ai facturi de la o platformă din afara țării (Bolt/Uber), dar nu ai setat încă regimul fiscal. Setează-l în bot (/start) sau în Setări și îți calculez D100. Cu CRF → 0% (depui D207); 2% conservator; fără CRF → 16%. Nu afișăm o sumă până nu alegi."+neatrib;
     }else{ // fara_baza
       val.textContent="—"; showRon(false);
       badge.className="badge-st neutral"; badge.textContent="—";
@@ -2063,7 +2063,7 @@
       };
       // avertismente
       const warns=[];
-      if(d.namespace_de_confirmat) warns.push("XML-ul pentru "+tip+" e gata, dar formatul nu e încă confirmat 100% — folosește deocamdată ghidul de completare (sigur).");
+      if(d.namespace_de_confirmat) warns.push("XML-ul pentru "+tip+" e gata, dar încă verificăm formatul — până atunci folosește ghidul de completare, e sigur.");
       (d.avertismente||[]).forEach(a=>warns.push(a));
       avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:var(--sp-2)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
     }catch(e){
