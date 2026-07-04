@@ -156,7 +156,7 @@ def _pill(d, x, y, text, fnt, fg, bg, padx=14, pady=7, tracking=2):
 
 def _header(d, section):
     d.ellipse([s(56), s(50), s(74), s(68)], fill=TEAL)
-    d.text((s(86), s(44)), "Contai", font=font(POP_B, 22), fill=WHITE)
+    d.text((s(86), s(44)), "Coniar", font=font(POP_B, 22), fill=WHITE)
     f = font(MONO_B, 13)
     _pill(d, W * SCALE - s(56) - (_tw(d, section, f, 2) + s(28)), s(48),
           section, f, TEAL, (16, 46, 64), tracking=2)
