@@ -49,7 +49,7 @@ async def test_start_onboarded_meniu_normal(monkeypatch):
     monkeypatch.setattr(bot_contabil.onboarding, "user_is_onboarded", lambda tg: True)
     upd = _upd()
     await bot_contabil.handle_start(upd, SimpleNamespace())
-    assert "Bun venit înapoi" in upd.message.text
+    assert "Salut din nou" in upd.message.text
     # meniu reply (ReplyKeyboardMarkup), FĂRĂ buton web_app de wizard
     mk = upd.message.kw["reply_markup"]
     flat = [b for row in mk.keyboard for b in row]

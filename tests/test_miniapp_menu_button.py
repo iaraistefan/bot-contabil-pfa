@@ -27,7 +27,7 @@ async def test_post_init_seteaza_miniapp_ca_buton_meniu():
     bot.set_chat_menu_button.assert_awaited_once()
     mb = bot.set_chat_menu_button.call_args.kwargs["menu_button"]
     assert isinstance(mb, MenuButtonWebApp)
-    assert mb.text == "📊 Contai"
+    assert mb.text == "📊 Coniar"
     assert mb.web_app.url == bot_contabil.DASHBOARD_URL
 
 
