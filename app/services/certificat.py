@@ -76,7 +76,7 @@ def mesaj_reminder(an: int, regim_bolt: str) -> str | None:
             f"Reînnoiește certificatul de rezidență fiscală Bolt pentru *{an}* ca să "
             f"rămâi pe *2%* la D100. Îl iei din Portalul de Parteneri Bolt sau ceri-l "
             f"suportului Bolt în chat (ți-l trimit rapid).\n\n"
-            f"Apoi îl ai la îndemână în Contai: /certificat."
+            f"Apoi îl ai la îndemână în Coniar: /certificat."
         )
     if regim_bolt == "BOLT_FARA_CRF":
         return (

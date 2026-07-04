@@ -375,7 +375,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
     welcome = (
-        "👋 *Bun venit la Contai!*\n\n"
+        "👋 *Bun venit la Coniar!*\n\n"
         "Sunt asistentul tău fiscal automat. Te ajut să:\n"
         "• Înregistrezi automat bonuri/facturi din poze 📸\n"
         "• Generezi Registrul de Încasări și Plăți 📂\n"
