@@ -584,11 +584,11 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if onboarding.user_is_onboarded(tg_id):
         name = update.effective_user.first_name or "șofer"
         await update.message.reply_text(
-            f"👋 Bun venit înapoi, *{name}*!\n\n"
-            f"Folosește meniul de mai jos pentru navigare rapidă.\n\n"
-            f"📸 *Cum încarci documente:*\n"
-            f"• Trimite poze cu bonuri/facturi → procesate automat\n"
-            f"• Sau text: `bon 05.04.2026 Lukoil 300 lei motorina`",
+            f"👋 Salut din nou, *{name}*!\n\n"
+            f"Alege din meniul de mai jos ce vrei să faci.\n\n"
+            f"📸 *Cum îmi trimiți documente:*\n"
+            f"• Trimite o poză cu bonul/factura → o procesez automat\n"
+            f"• Sau scrie: `bon 05.04.2026 Lukoil 300 lei motorină`",
             parse_mode="Markdown",
             reply_markup=build_main_menu(),
         )
@@ -601,13 +601,13 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                  web_app=WebAppInfo(url=DASHBOARD_URL))
         ]])
         await update.message.reply_text(
-            "👋 *Bun venit la Contai!*\n"
+            "👋 *Bun venit la Coniar!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Hai să-ți configurăm contul — apasă butonul de mai jos. Durează *sub un "
-            "minut*: îți caut datele firmei automat în registrul ANAF (denumire, CAEN, TVA), "
+            "minut*: îți caut singur datele firmei în registrul ANAF (denumire, CAEN, TVA), "
             "tu doar confirmi.\n\n"
-            "_Configurarea se face în Dashboard (mai clar decât în chat)._\n"
-            "_Nu poți deschide dashboard-ul? Scrie /setup_text pentru configurare prin chat._",
+            "_Configurarea se face în Dashboard — e mai clar acolo decât în chat._\n"
+            "Nu poți deschide dashboard-ul? Scrie /setup_text și te configurez prin chat.",
             parse_mode="Markdown",
             reply_markup=markup,
         )
@@ -637,20 +637,20 @@ async def send_ajutor(chat_id, context):
     msg = (
         "🆘 *Ghid de utilizare*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "📸 *Încărcare documente*\n"
-        "• Poză bon/factură → AI extrage automat\n"
-        "• Screenshot raport Bolt → înregistrare lunară\n\n"
-        "✍️ *Format text*\n"
-        "• `bon 05.04.2026 Lukoil 300 lei motorina`\n"
+        "📸 *Cum îmi trimiți documente*\n"
+        "• Poză cu bon/factură → o citesc și o procesez singur\n"
+        "• Screenshot raport Bolt → îl trec ca înregistrare lunară\n\n"
+        "✍️ *Sau scrie direct*\n"
+        "• `bon 05.04.2026 Lukoil 300 lei motorină`\n"
         "• `cheltuiala 15.03.2026 service auto 800 lei`\n"
         "• `venit bolt aprilie: net 1878 lei, cash 1081 lei`\n\n"
         "📋 *Meniul principal*\n"
-        "• 📊 *Raport* — sumar lunar cu profit\n"
+        "• 📊 *Raport* — sumarul tău lunar cu profit\n"
         "• 📂 *Registru* — Excel pentru bancă/ANAF\n"
         "• 🖥️ *Dashboard* — interfață vizuală\n"
-        "• 📋 *Calendar* — termene fiscale\n"
-        "• 💳 *Plată Fiscală* — IBAN + sumă pre-calculate\n"
-        "• 🛣️ *Foaie parcurs* — jurnal km auto\n"
+        "• 📋 *Calendar* — termenele tale fiscale\n"
+        "• 💳 *Plată Fiscală* — IBAN + sumă, gata calculate\n"
+        "• 🛣️ *Foaie parcurs* — jurnalul de km\n"
         "• ⚙️ *Setări* — alerte, profil, mașini, export\n\n"
         "🚗 *Foaie de parcurs (comenzi text)*\n"
         "• `parcurs start 125430` — pornești tura\n"
@@ -658,8 +658,8 @@ async def send_ajutor(chat_id, context):
         "• `parcurs 125430 125680` — tură completă\n"
         "• `parcurs` — vezi jurnalul lunii\n\n"
         "🔔 *Alerte automate (Setări)*\n"
-        "• *Alerte fiscale* — modificări legislative ANAF\n"
-        "• *Reminder-uri obligații* — termene proprii (D301, D100, etc.)\n\n"
+        "• *Alerte fiscale* — te anunț de modificări la ANAF\n"
+        "• *Reminder obligații* — termenele tale (D301, D100, etc.)\n\n"
         "💬 *Comenzi text*\n"
         "• `/start` — meniul principal\n"
         "• `/profil` — vezi profilul tău\n"
@@ -710,7 +710,7 @@ async def handle_bolt_conectare(update: Update, context: ContextTypes.DEFAULT_TY
     """
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     session = get_session()
     try:
@@ -749,7 +749,7 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/profil - afiseaza profilul curent."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     session = get_session()
@@ -787,8 +787,8 @@ async def handle_profil(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📈 *Regim impunere:* {regim_imp_label}\n"
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
-        f"*Status onboarding:* {onb_status}\n\n"
-        f"_Pentru editare folosește_ `/reset_profil`"
+        f"*Cont configurat:* {onb_status}\n\n"
+        f"_Ca să modifici ceva, scrie_ `/reset_profil`"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -856,19 +856,19 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_status = "✅ Conectat" if db_ok else "❌ Eroare"
 
     msg = (
-        "🤖 *Status Contai*\n"
+        "🤖 *Status Coniar*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚙️ Versiune: *v30* (Compliance + Alerts + Monitoring + Parcurs + Confirmare + Anti-duplicat + Bolt API)\n"
+        f"⚙️ Versiune: *v30*\n"
         f"🗄️ Bază de date: {db_status}\n"
-        f"📡 Error tracking: {sentry_status}\n\n"
+        f"📡 Monitorizare erori: {sentry_status}\n\n"
         f"📊 *Datele tale:*\n"
         f"• Documente: *{doc_count}*\n"
         f"• Tranzacții: *{tx_count}*\n\n"
-        f"🕐 *Joburi automate:*\n"
-        f"• Zilnic 08:00 — alerte obligații\n"
-        f"• Luni 08:30 — dashboard conformitate\n"
-        f"• Ziua 1 — monitorizare legislativă\n\n"
-        f"_Sistemul funcționează normal._"
+        f"🕐 *Ce fac automat pentru tine:*\n"
+        f"• Zilnic 08:00 — te anunț de termene\n"
+        f"• Luni 08:30 — actualizez dashboard-ul\n"
+        f"• Ziua 1 — verific modificări la legislație\n\n"
+        f"_Totul merge bine._"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -960,7 +960,7 @@ async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     if text == BTN_RAPORT:
@@ -1040,7 +1040,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     user_id = ensure_user(update)
     if not user_id:
-        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     data = query.data
@@ -1415,7 +1415,7 @@ async def handle_cheltuieli_command(update: Update, context: ContextTypes.DEFAUL
     """
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     now = datetime.now()
@@ -2182,7 +2182,7 @@ async def execute_reset(query, context, user_id):
 async def handle_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     args = context.args or []
@@ -2839,7 +2839,7 @@ async def handle_coduri_fiscale(update: Update, context: ContextTypes.DEFAULT_TY
     """/coduri_fiscale - afiseaza codurile cu butoane de setare."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     session = get_session()
     try:
@@ -2983,7 +2983,7 @@ async def handle_set_cod_tva(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """/cod_tva NNNNNNNN - seteaza codul special TVA art. 317."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     args = context.args or []
     if not args:
@@ -3015,7 +3015,7 @@ async def handle_set_cnp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/cnp NNNNNNNNNNNNN - seteaza CNP-ul (pentru Declaratia Unica)."""
     user_id = ensure_user(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide din nou din butonul bot-ului.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     args = context.args or []
     if not args:
@@ -3073,7 +3073,7 @@ async def post_init(application):
         # jos), butonul inline 🖥️ Dashboard + /start rămân → accesul nu se rupe.
         await application.bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
-                text="📊 Contai",
+                text="📊 Coniar",
                 web_app=WebAppInfo(url=DASHBOARD_URL),
             )
         )
