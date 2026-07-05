@@ -152,7 +152,7 @@ def _format_item(idx: int, item: dict, dup_info=None) -> str:
     tip_label = TIP_LABELS.get(tip, tip)
     icon = TIP_ICONS.get(tip, "📄")
     lines = [f"{icon} *Document #{idx + 1}* — {tip_label}"]
-    lines.append(f"📅 Data: {item.get('data') or '— (se pune azi)'}")
+    lines.append(f"📅 Data: {item.get('data') or '— (pun data de azi)'}")
 
     if tip == "VENIT":
         lines.append(f"🏢 Platformă: {item.get('platforma') or '—'}")
@@ -181,15 +181,15 @@ def _format_item(idx: int, item: dict, dup_info=None) -> str:
             nr = dup_info.get("numar_document") or "?"
             lines.append(
                 f"\n🚫 *DUPLICAT* — documentul cu numărul `{nr}` "
-                f"este DEJA înregistrat (#{doc_id}{added_part}).\n"
-                f"Același document fizic nu trebuie introdus de două ori."
+                f"e deja înregistrat (#{doc_id}{added_part}).\n"
+                f"L-ai mai trimis o dată — nu-l punem de două ori."
             )
         else:
             # Match pe data + suma = doar POSIBIL duplicat
             lines.append(
-                f"\n⚠️ *POSIBIL DUPLICAT* — există deja un document "
+                f"\n⚠️ *POSIBIL DUPLICAT* — mai am un document "
                 f"cu aceeași dată și sumă (#{doc_id}{added_part}).\n"
-                f"Dacă e alt bon real, poți salva oricum."
+                f"Dacă e alt bon real, îl salvezi liniștit."
             )
 
     return "\n".join(lines)
@@ -225,7 +225,7 @@ async def show_confirmation(chat_id, context, query=None):
     )
 
     text = (
-        "🔍 *Verifică datele citite*\n"
+        "🔍 *Am citit documentul — verifică, te rog*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         + "\n\n".join(blocks)
         + "\n\n━━━━━━━━━━━━━━━━━━━━\n"
@@ -242,8 +242,8 @@ async def show_confirmation(chat_id, context, query=None):
         )
     else:
         text += (
-            "_Verifică suma și data. Dacă ceva e greșit, corectează "
-            "înainte de salvare._"
+            "_Aruncă un ochi pe sumă și dată. Dacă ceva nu e bine, corectează "
+            "înainte să salvezi._"
         )
 
     if has_sure_dup:
@@ -319,8 +319,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     pending = get_pending(context)
     if not pending:
         await query.edit_message_text(
-            "⏳ Sesiunea de confirmare a expirat.\n"
-            "Trimite documentul din nou."
+            "⏳ A trecut prea mult timp și confirmarea a expirat.\n"
+            "Trimite-mi documentul din nou și o luăm de la capăt."
         )
         return
 
@@ -330,8 +330,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     if action == "cancel":
         clear_pending(context)
         await query.edit_message_text(
-            "❌ Anulat. Documentul *nu* a fost salvat.\n"
-            "Poți trimite din nou poza sau textul.",
+            "❌ Am anulat. N-am salvat nimic.\n"
+            "Trimite-mi din nou poza sau textul când vrei.",
             parse_mode="Markdown",
         )
         return
@@ -440,7 +440,7 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if idx >= len(items):
         context.user_data.pop(_EDIT_KEY, None)
-        await update.message.reply_text("⚠️ Document inexistent.")
+        await update.message.reply_text("⚠️ Nu mai găsesc documentul ăsta.")
         return True
 
     item = items[idx]
@@ -453,8 +453,8 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             validated = ExtractionItem(**test)
         except Exception:
             await update.message.reply_text(
-                "⚠️ Sumă invalidă. Scrie doar un număr.\n"
-                "Exemple: `300`, `300.50`, `1.250,50`",
+                "⚠️ Aia nu pare un număr. Scrie doar suma.\n"
+                "De exemplu: `300`, `300.50`, `1.250,50`",
                 parse_mode="Markdown",
             )
             return True
@@ -476,8 +476,8 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             validated = None
         if validated is None or validated.data is None:
             await update.message.reply_text(
-                "⚠️ Dată invalidă. Folosește formatul `ZZ.LL.AAAA`\n"
-                "Exemplu: `05.02.2026`",
+                "⚠️ Data nu pare în regulă. Scrie-o așa: `ZZ.LL.AAAA`\n"
+                "De exemplu: `05.02.2026`",
                 parse_mode="Markdown",
             )
             return True
