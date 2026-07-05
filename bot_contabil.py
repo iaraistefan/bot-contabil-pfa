@@ -414,7 +414,7 @@ def _build_confirm_message(results, activity) -> str:
     Construiește mesajul „✅ Salvat" din (item, doc_id, tx_ids) — DUPĂ commit.
     Doar formatare (zero I/O): un eșec aici nu poate pierde date deja salvate.
     """
-    msg_confirm = "✅ *Salvat:*\n"
+    msg_confirm = "✅ *Gata, am salvat:*\n"
     for item, doc_id, tx_ids in results:
         data_doc = item.data or datetime.now().strftime("%d.%m.%Y")
         tip = item.tip
@@ -450,7 +450,7 @@ def _build_confirm_message(results, activity) -> str:
             if ded_pct == 100:
                 lines.append(f"   💡 Deductibil: {ded_amount:.2f} RON (100%)")
             elif ded_pct == 0:
-                lines.append(f"   ⚠️ Nedeductibil fiscal (0%)")
+                lines.append(f"   ⚠️ Nu se deduce (0%)")
             else:
                 lines.append(
                     f"   💡 Deductibil: {ded_amount:.2f} RON "
@@ -2414,8 +2414,8 @@ async def execute_confirmed_save(update, context, user_id):
     pending = confirmare.get_pending(context)
     if not pending:
         await query.edit_message_text(
-            "⏳ Sesiunea de confirmare a expirat.\n"
-            "Trimite documentul din nou."
+            "⏳ A trecut prea mult timp și confirmarea a expirat.\n"
+            "Trimite-mi documentul din nou și o luăm de la capăt."
         )
         return
 
