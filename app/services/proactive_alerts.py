@@ -366,14 +366,14 @@ def _collect_all_obligations(
 def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
     """Construiește mesajul Telegram pentru o alertă zilnică."""
     if alert_type == ALERT_ADVANCE_7D:
-        header = "🟡 *AVERTISMENT FISCAL — 7 zile rămase*"
+        header = "🟡 *Peste 7 zile e un termen*"
     elif alert_type == ALERT_ADVANCE_3D:
-        header = "🟠 *URGENT — 3 zile rămase*"
+        header = "🟠 *Mai sunt 3 zile până la termen*"
     elif alert_type == ALERT_DUE_TODAY:
-        header = "🔴 *ASTĂZI EXPIRĂ TERMENUL!*"
+        header = "🔴 *Azi e ultima zi pentru acest termen*"
     elif alert_type.startswith("overdue"):
         zile = abs(obligation.zile_ramase)
-        header = f"❌ *TERMEN DEPĂȘIT cu {zile} zile*"
+        header = f"❌ *Termenul a trecut de {zile} zile*"
     else:
         header = "📅 *Reminder fiscal*"
 
@@ -417,8 +417,8 @@ def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
     lines.extend([
         "",
         "━━━━━━━━━━━━━━━━━━━━",
-        "💳 _Apasă_ `/plata_fiscala` _pentru detalii complete._",
-        "_⚠️ Verifică cu contabilul înainte de plată._",
+        "💳 _Apasă_ `/plata_fiscala` _și îți arăt tot ce trebuie._",
+        "_⚠️ Pentru siguranță, confirmă suma cu contabilul înainte să plătești._",
     ])
 
     return "\n".join(lines)
@@ -434,14 +434,14 @@ def _tva_plafon_message(st: dict, ca: float) -> str:
     pct = st["utilized_pct"]
     if st["status"] == "DEPASIT_PLAFON":
         return (
-            f"🔴 Ai depășit plafonul TVA de {threshold:.0f} RON (ai {ca:.0f} RON). "
-            f"Ai obligația să te înregistrezi în scopuri de TVA în 10 zile de la "
-            f"depășire."
+            f"🔴 Ai depășit plafonul de TVA de {threshold:.0f} RON (ai ajuns la "
+            f"{ca:.0f} RON). Trebuie să te înregistrezi ca plătitor de TVA în 10 "
+            f"zile de la depășire."
         )
     remaining = max(0.0, threshold - ca)
     return (
-        f"🟡 Aproape de plafon TVA: {pct:.0f}% ({ca:.0f} / {threshold:.0f} RON). "
-        f"Mai ai ~{remaining:.0f} lei până devii plătitor TVA obligatoriu."
+        f"🟡 Te apropii de plafonul de TVA: {pct:.0f}% ({ca:.0f} / {threshold:.0f} RON). "
+        f"Mai ai ~{remaining:.0f} lei până devii plătitor de TVA."
     )
 
 
@@ -456,7 +456,7 @@ def _maybe_send_plafon(session, bot_token, user, year, code, st, message) -> int
     alert_type = "prag_80" if status == "APROAPE_PLAFON" else "prag_depasit"
     if _was_alert_sent(session, user.id, code, year, 0, alert_type):
         return 0
-    caveat = "\n\n⚠️ Estimare orientativă — verifică cu contabilul."
+    caveat = "\n\n⚠️ E o estimare — pentru siguranță, confirmă cu contabilul."
     success = _send_telegram_message(bot_token, user.telegram_id, message + caveat)
     if not success:
         return 0                              # netrimis → NU marcăm → reîncearcă
@@ -703,7 +703,7 @@ def _compute_compliance_score(obligatii: List) -> Tuple[int, str, str]:
     elif score >= 70:
         return score, "Bun", "🟡"
     elif score >= 50:
-        return score, "Necesită acțiune", "🟠"
+        return score, "De rezolvat", "🟠"
     else:
         return score, "Critic", "🔴"
 
@@ -722,17 +722,17 @@ def _format_weekly_dashboard(
     upcoming = [o for o in obligatii_sorted if 7 < o.zile_ramase <= 30]
 
     lines = [
-        "📊 *DASHBOARD COMPLIANCE SĂPTĂMÂNAL*",
+        "📊 *Cum stai săptămâna asta*",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"📅 _{today.strftime('%d.%m')} – "
         f"{week_end.strftime('%d.%m.%Y')}_",
         "",
-        f"{verdict_emoji} *Score: {score}/100* — {verdict_label}",
+        f"{verdict_emoji} *Scor: {score}/100* — {verdict_label}",
         "",
     ]
 
     if overdue:
-        lines.append("❌ *OBLIGAȚII DEPĂȘITE:*")
+        lines.append("❌ *Ai termene depășite:*")
         for o in overdue:
             lines.append(
                 f"  • *{o.definitie.cod}* — depășit "
@@ -744,10 +744,10 @@ def _format_weekly_dashboard(
         lines.append("")
 
     if urgent:
-        lines.append("🟠 *TERMEN APROPIAT (≤7 zile):*")
+        lines.append("🟠 *Se apropie (≤7 zile):*")
         for o in urgent:
             zile_txt = (
-                "ASTĂZI" if o.zile_ramase == 0
+                "azi" if o.zile_ramase == 0
                 else f"{o.zile_ramase} zile"
             )
             lines.append(
@@ -759,7 +759,7 @@ def _format_weekly_dashboard(
         lines.append("")
 
     if upcoming:
-        lines.append("🟡 *DE URMĂRIT (8-30 zile):*")
+        lines.append("🟡 *De ținut minte (8-30 zile):*")
         for o in upcoming:
             lines.append(
                 f"  • {o.definitie.cod} — {o.zile_ramase} zile "
@@ -769,12 +769,12 @@ def _format_weekly_dashboard(
 
     if not overdue and not urgent and not upcoming:
         lines.append("✅ *Săptămână liniștită!*")
-        lines.append("_Nicio obligație fiscală apropiată._")
+        lines.append("_N-ai niciun termen fiscal apropiat — relaxează-te._")
         lines.append("")
 
     lines.extend([
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "💳 _Apasă_ `/plata_fiscala` _pentru IBAN și sume._",
+        "💳 _Apasă_ `/plata_fiscala` _și îți dau IBAN-ul și sumele._",
     ])
 
     return "\n".join(lines)
@@ -905,7 +905,7 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
         )
 
         lines = [
-            "🧪 *TEST ALERTE FISCALE*",
+            "🧪 *Verificare alerte*",
             "━━━━━━━━━━━━━━━━━━━━",
             "",
             f"👤 Profil: _{ctx['forma_juridica']} · "
@@ -917,10 +917,10 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
 
         if not obligatii:
             lines.append(
-                "✅ *Nicio obligație aplicabilă pentru luna curentă.*"
+                "✅ *N-ai nimic de plătit luna asta.*"
             )
         else:
-            lines.append(f"📋 *{len(obligatii)} obligații aplicabile:*")
+            lines.append(f"📋 *Ai {len(obligatii)} de plătit luna asta:*")
             lines.append("")
             for o in obligatii:
                 zile_str = (
@@ -938,8 +938,7 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
         lines.extend([
             "",
             "━━━━━━━━━━━━━━━━━━━━",
-            "_Alertele zilnice rulează la 8:00._",
-            "_Dashboard săptămânal: Luni 8:30._",
+            "_Îți trimit alertele zilnic la 8:00, iar bilanțul săptămânal lunea la 8:30._",
         ])
 
         msg = "\n".join(lines)
