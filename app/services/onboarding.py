@@ -442,7 +442,7 @@ async def send_step_question(
         msg = (
             "*🧾 Forma juridică*\n\n"
             "Ce formă juridică ai?\n"
-            "_Determină regulile contabile aplicate._"
+            "_De asta depind regulile contabile pe care le aplic._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -453,8 +453,8 @@ async def send_step_question(
         msg = (
             "*📊 Activitate principală*\n\n"
             "Care e domeniul tău principal?\n"
-            "_Determină ce categorii de cheltuieli/venituri "
-            "sunt auto-recunoscute._"
+            "_După asta știu ce cheltuieli și venituri să-ți "
+            "recunosc automat._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -467,7 +467,7 @@ async def send_step_question(
         msg = (
             "*💰 Regim TVA*\n\n"
             "Ești plătitor de TVA?\n"
-            f"_PFA-urile sub {prag_tva} lei cifră de afaceri/an sunt de obicei neplătitoare._"
+            f"_De obicei, PFA-urile sub {prag_tva} lei cifră de afaceri pe an nu sunt plătitoare._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -976,7 +976,7 @@ async def handle_onboarding_callback(
                 session.commit()
                 label = FORME_BY_CODE[sub]["label"]
                 await query.edit_message_text(
-                    f"✅ Formă juridică: *{label}*", parse_mode="Markdown",
+                    f"✅ Bun — Formă juridică: *{label}*", parse_mode="Markdown",
                 )
                 await send_step_question(update, context, STEP_ACTIVITATE, user_id)
             return
@@ -995,7 +995,7 @@ async def handle_onboarding_callback(
             else:
                 users_repo.set_onboarding_step(session, user, STEP_REGIM_TVA)
                 session.commit()
-                await query.edit_message_text(f"✅ Activitate: {act['label']}")
+                await query.edit_message_text(f"✅ Bun — Activitate: {act['label']}")
                 await send_step_question(update, context, STEP_REGIM_TVA, user_id)
             return
 
@@ -1009,7 +1009,7 @@ async def handle_onboarding_callback(
                 users_repo.set_onboarding_step(session, user, STEP_REGIM_IMPUNERE)
                 session.commit()
                 label = REGIM_TVA_BY_CODE[sub]["label"]
-                await query.edit_message_text(f"✅ Regim TVA: {label}")
+                await query.edit_message_text(f"✅ Bun — Regim TVA: {label}")
                 await send_step_question(update, context, STEP_REGIM_IMPUNERE, user_id)
             return
 
@@ -1028,7 +1028,7 @@ async def handle_onboarding_callback(
                 users_repo.set_onboarding_step(session, user, next_step)
                 session.commit()
                 await query.edit_message_text(
-                    f"✅ Regim impunere: {regim_impunere_label(sub)}"
+                    f"✅ Bun — Regim impunere: {regim_impunere_label(sub)}"
                 )
                 await send_step_question(update, context, next_step, user_id)
             return
