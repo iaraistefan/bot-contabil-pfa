@@ -377,12 +377,12 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
         "👋 *Bun venit la Coniar!*\n\n"
         "Sunt asistentul tău fiscal automat. Te ajut să:\n"
-        "• Înregistrezi automat bonuri/facturi din poze 📸\n"
-        "• Generezi Registrul de Încasări și Plăți 📂\n"
-        "• Calculezi profitul, TVA, contribuțiile 💰\n"
-        "• Primești alerte pentru termenele ANAF ⏰\n\n"
-        "Configurarea durează *sub un minut* — caut datele firmei "
-        "tale direct în registrul ANAF.\n"
+        "• Îți înregistrez bonurile și facturile din poze 📸\n"
+        "• Îți țin Registrul de Încasări și Plăți 📂\n"
+        "• Îți calculez profitul, TVA-ul, contribuțiile 💰\n"
+        "• Te anunț de termenele ANAF ⏰\n\n"
+        "Hai să te configurez — durează *sub un minut*. Îți caut "
+        "singur datele firmei în registrul ANAF.\n"
         "━━━━━━━━━━━━━━━━━━━━"
     )
     await context.bot.send_message(
@@ -412,9 +412,9 @@ async def send_step_question(
 
     if step == STEP_NUME_PERSONAL:
         msg = (
-            "*👤 Cum te numești?*\n\n"
+            "*👤 Cum te cheamă?*\n\n"
             "Scrie-mi prenumele și numele tău.\n"
-            "_Pentru personalizarea mesajelor — nu apare pe documente._"
+            "_Doar ca să știu cum să-ți spun — nu apare pe niciun document._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -424,13 +424,13 @@ async def send_step_question(
     elif step == STEP_CUI:
         nume = profile.get("name") or "salut"
         msg = (
-            f"*🔍 CUI-ul firmei tale*\n\n"
+            f"*🔍 Care e CUI-ul firmei tale?*\n\n"
             f"Bun, *{nume}*! Scrie-mi *CUI-ul* (codul fiscal) al "
             f"PFA-ului / firmei tale.\n\n"
             f"📝 Exemple acceptate:\n"
             f"• `53067338`\n"
             f"• `RO53067338`\n\n"
-            f"🔎 Caut automat în ANAF *toate* datele: denumire, formă "
+            f"🔎 Caut singur în ANAF *toate* datele: denumire, formă "
             f"juridică, activitate, regim TVA, adresă. Tu doar confirmi."
         )
         await context.bot.send_message(
@@ -739,7 +739,7 @@ async def handle_onboarding_text(
             session.commit()
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"✅ Bun, *{text}*!", parse_mode="Markdown",
+                text=f"✅ Îmi pare bine, *{text}*!", parse_mode="Markdown",
             )
             await send_step_question(update, context, STEP_CUI, user_id)
             return True
@@ -749,7 +749,7 @@ async def handle_onboarding_text(
             cui_text = text
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🔎 Cercetez CUI `{cui_text}` în registrul ANAF...",
+                text=f"🔎 Caut `{cui_text}` în registrul ANAF...",
                 parse_mode="Markdown",
             )
 
@@ -788,8 +788,8 @@ async def handle_onboarding_text(
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=(
-                            "⚠️ *Atenție:* firma apare ca *INACTIVĂ* în ANAF. "
-                            "Verifică situația — poți continua oricum."
+                            "⚠️ Firma apare ca inactivă în ANAF. Merită să "
+                            "verifici situația, dar putem continua oricum."
                         ),
                         parse_mode="Markdown",
                     )
@@ -800,9 +800,9 @@ async def handle_onboarding_text(
                 # ANAF nu a gasit -> fallback manual
                 err = anaf.get("error", "necunoscută")
                 msg = (
-                    f"⚠️ Nu am găsit CUI `{cui_text}` în ANAF.\n"
+                    f"⚠️ Nu am găsit `{cui_text}` în ANAF.\n"
                     f"_Motiv: {err}_\n\n"
-                    f"Putem continua manual — te întreb eu datele."
+                    f"Nicio grijă — continuăm manual, te întreb eu datele."
                 )
                 context.user_data["pending_cui"] = cui_text
                 await context.bot.send_message(
@@ -895,7 +895,7 @@ async def handle_onboarding_callback(
             users_repo.set_onboarding_step(session, user, STEP_CUI)
             session.commit()
             await query.edit_message_text(
-                "🔄 OK, trimite-mi alt CUI ca mesaj text.",
+                "🔄 Trimite-mi alt CUI, ca mesaj.",
             )
             return
 
@@ -907,7 +907,7 @@ async def handle_onboarding_callback(
             session.commit()
             context.user_data.pop("pending_cui", None)
             await query.edit_message_text(
-                "✅ CUI salvat. Continuăm manual."
+                "✅ Am notat CUI-ul. Continuăm manual."
             )
             await send_step_question(update, context, STEP_FORMA_JURIDICA, user_id)
             return
