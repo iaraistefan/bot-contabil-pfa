@@ -54,7 +54,7 @@ def test_tva_aproape(monkeypatch):
     assert n == 1                                        # doar TVA (CAS sub prag)
     msg = sent[0][1]
     assert "TVA" in msg and "Mai ai" in msg
-    assert "verifică cu contabilul" in msg              # caveat uniform
+    assert "confirmă cu contabilul" in msg              # caveat uniform
     assert any("PLAFON_TVA" in str(a) and "prag_80" in str(a) for a in logged)
 
 
