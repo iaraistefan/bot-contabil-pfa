@@ -566,7 +566,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
     if isinstance(update, Update) and update.effective_message:
         try:
             await update.effective_message.reply_text(
-                "❌ A apărut o eroare neașteptată.\nÎncearcă din nou."
+                "❌ Ceva n-a mers cum trebuia.\nÎncearcă din nou."
             )
         except Exception:
             pass
@@ -2344,7 +2344,7 @@ async def process_entry(
     user_id = ensure_user(update)
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="🔄 Analizez documentul (TVA 21%)..."
+        text="🔄 Citesc documentul..."
     )
     extraction = ai_client.extract_document(
         user_input=text_input,
@@ -2356,7 +2356,7 @@ async def process_entry(
         err_preview = "\n• ".join(extraction["validation_errors"][:3])
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=f"⚠️ Datele extrase nu sunt valide:\n• {err_preview}",
+            text=f"⚠️ Am citit ceva, dar nu pare în regulă:\n• {err_preview}",
         )
         return
 
@@ -2364,9 +2364,9 @@ async def process_entry(
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=(
-                "⚠️ Nu am putut citi datele.\n\n"
-                "Pentru cheltuieli încearcă formatul text:\n"
-                "`bon 05.04.2026 Lukoil 300 lei motorina`"
+                "⚠️ N-am reușit să citesc documentul.\n\n"
+                "Încearcă o poză mai clară, sau scrie-mi datele așa:\n"
+                "`bon 05.04.2026 Lukoil 300 lei motorină`"
             ),
             parse_mode="Markdown",
         )
@@ -2493,8 +2493,8 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if onboarding.user_is_in_onboarding(tg_id):
         await update.message.reply_text(
-            "⚠️ Te rog termină mai întâi configurarea profilului.\n"
-            "Folosește butoanele de mai sus, sau /start pentru a relua."
+            "⚠️ Hai să terminăm întâi configurarea.\n"
+            "Folosește butoanele de mai sus, sau /start ca s-o reiei."
         )
         return
 
@@ -2531,7 +2531,7 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
-                        text=f"⚠️ Imagine deja înregistrată pe {created_at_str}.",
+                        text=f"⚠️ Poza asta e deja înregistrată (din {created_at_str}).",
                     )
                     return
                 else:
