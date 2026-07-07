@@ -862,7 +862,7 @@ async def handle_onboarding_callback(
         # === Done (a sarit adaugarea masinii) ===
         if action == "done":
             await query.edit_message_text(
-                "👍 OK! Poți adăuga mașina oricând din "
+                "👍 Bine! Adaugi mașina oricând din "
                 "*⚙️ Setări → 🚗 Mașinile mele*.",
                 parse_mode="Markdown",
             )
@@ -1083,7 +1083,7 @@ async def handle_onboarding_callback(
             elif sub == "restart":
                 users_repo.reset_onboarding(session, user)
                 session.commit()
-                await query.edit_message_text("🔄 Reluăm de la început...")
+                await query.edit_message_text("🔄 Bine, o luăm de la capăt...")
                 await start_onboarding(update, context)
             return
 
@@ -1118,9 +1118,9 @@ async def _finalize(update, context, session, user, user_id):
     nume = profile.get("name") or "șofer"
 
     await query.edit_message_text(
-        "🎉 *Profil completat cu succes!*\n\n"
-        "Acum poți trimite poze cu bonuri/facturi sau screenshot-uri "
-        "Bolt — botul te ajută cu restul.",
+        "🎉 *Gata, ești configurat!*\n\n"
+        "De acum trimite-mi poze cu bonuri, facturi sau screenshot-uri "
+        "Bolt — mă ocup eu de rest.",
         parse_mode="Markdown",
     )
 
@@ -1130,8 +1130,8 @@ async def _finalize(update, context, session, user, user_id):
         text=(
             "🔑 *Coduri fiscale (opțional)*\n\n"
             "Dacă ai *cod special de TVA* (art. 317 — pentru tranzacții cu "
-            "firme din UE) sau vrei să salvezi *CNP-ul* pentru Declarația "
-            "Unică, le poți adăuga acum. Le poți seta oricând și din "
+            "firme din UE) sau vrei să-mi lași *CNP-ul* pentru Declarația "
+            "Unică, le poți adăuga acum. Sau oricând mai târziu, din "
             "`/coduri_fiscale`."
         ),
         parse_mode="Markdown",
@@ -1143,9 +1143,9 @@ async def _finalize(update, context, session, user, user_id):
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                f"🚗 *{nume}, hai să-ți configurăm mașina!*\n\n"
-                "Pentru foaia de parcurs și deductibilitatea combustibilului, "
-                "adaugă mașina cu care lucrezi."
+                f"🚗 *{nume}, hai să-ți adăugăm mașina!*\n\n"
+                "Ca să-ți țin foaia de parcurs și să-ți deduc combustibilul, "
+                "spune-mi cu ce mașină lucrezi."
             ),
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
@@ -1157,7 +1157,7 @@ async def _finalize(update, context, session, user, user_id):
         from bot_contabil import build_main_menu
         await context.bot.send_message(
             chat_id=chat_id,
-            text="📋 Meniu principal:",
+            text="📋 Gata! Iată meniul tău:",
             reply_markup=build_main_menu(),
         )
 
