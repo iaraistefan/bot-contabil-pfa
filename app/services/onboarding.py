@@ -368,7 +368,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"start_onboarding error: {e}")
         await context.bot.send_message(
             chat_id=chat_id,
-            text="❌ Eroare la inițializare. Încearcă din nou cu /start."
+            text="❌ Ceva n-a mers la pornire. Încearcă din nou cu /start."
         )
         return
     finally:
@@ -729,7 +729,7 @@ async def handle_onboarding_text(
             if len(text) < 2:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="⚠️ Numele e prea scurt. Trimite minim 2 caractere.",
+                    text="⚠️ Numele e cam scurt — scrie-mi cel puțin 2 litere.",
                 )
                 return True
             users_repo.advance_onboarding_step(
@@ -815,8 +815,7 @@ async def handle_onboarding_text(
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "⚠️ Te rog folosește butoanele de mai sus pentru "
-                "a răspunde la întrebarea curentă."
+                "⚠️ Pentru asta, folosește butoanele de mai sus. 🙂"
             ),
         )
         return True
@@ -845,7 +844,7 @@ async def handle_onboarding_callback(
     try:
         user = users_repo.get_by_telegram_id(session, telegram_id=tg_user.id)
         if not user:
-            await query.edit_message_text("⚠️ Eroare identificare utilizator.")
+            await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton.")
             return
         user_id = user.id
         action = parts[1] if len(parts) > 1 else ""
@@ -856,7 +855,7 @@ async def handle_onboarding_callback(
             users_repo.reset_onboarding(session, user)
             session.commit()
             await query.edit_message_text(
-                "❌ Onboarding anulat.\nPoți relua oricând cu /start."
+                "❌ Am oprit configurarea.\nO reiei oricând cu /start."
             )
             return
 
@@ -880,13 +879,13 @@ async def handle_onboarding_callback(
             if sub == "nume":
                 users_repo.set_onboarding_step(session, user, STEP_CUI)
                 session.commit()
-                await query.edit_message_text("⏭️ Sărit pasul nume.")
+                await query.edit_message_text("⏭️ Am sărit peste nume.")
                 await send_step_question(update, context, STEP_CUI, user_id)
             elif sub == "cui":
                 # Fara CUI -> flux manual complet
                 users_repo.set_onboarding_step(session, user, STEP_FORMA_JURIDICA)
                 session.commit()
-                await query.edit_message_text("⏭️ Sărit CUI. Continuăm manual.")
+                await query.edit_message_text("⏭️ Am sărit peste CUI. Continuăm manual.")
                 await send_step_question(update, context, STEP_FORMA_JURIDICA, user_id)
             return
 
@@ -1093,7 +1092,7 @@ async def handle_onboarding_callback(
         logger.exception("handle_onboarding_callback error")
         try:
             await query.edit_message_text(
-                "⚠️ N-am putut continua configurarea. Încearcă din nou cu /start."
+                "⚠️ N-am reușit să continui configurarea. Încearcă din nou cu /start."
             )
         except Exception:
             pass
