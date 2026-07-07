@@ -592,10 +592,10 @@ async def _show_anaf_summary(
     if activity:
         lines.append(f"🏷️ CAEN `{caen}` → *{activity_label}*")
     else:
-        lines.append(f"🏷️ CAEN: `{caen}` → _activitate nedetectată_")
+        lines.append(f"🏷️ CAEN: `{caen}` → _n-am recunoscut activitatea_")
 
     lines.append(f"💰 TVA: *{regim_tva_label}*")
-    lines.append(f"📈 Impunere: *{regim_imp}* _(presupus)_")
+    lines.append(f"📈 Impunere: *{regim_imp}* _(am presupus)_")
 
     # Regim nerezident D100 PER-PLATFORMĂ — afișat doar dacă e setat (ridesharing).
     # Bolt cu fallback la deprecatul `regim_nerezident` (useri pre-migrare). #3 + sub-pas C.
@@ -617,13 +617,13 @@ async def _show_anaf_summary(
 
     if forma_lipsa:
         lines.append(
-            "⚠️ Nu am putut detecta forma juridică. "
-            "Apasă mai jos ca să o completezi."
+            "⚠️ N-am reușit să detectez forma juridică. "
+            "Completeaz-o din butonul de mai jos."
         )
     else:
         lines.append(
-            "_Regimul de impunere e o presupunere — verifică-l dacă nu e corect._\n\n"
-            "*Totul e corect?*"
+            "_Regimul de impunere e o presupunere de-a mea — schimbă-l dacă nu e așa._\n\n"
+            "*E totul corect?*"
         )
 
     text = "\n".join(lines)
@@ -678,7 +678,7 @@ async def _show_summary(
         nerez_line += f"🌍 *Nerezident Uber:* {nerezident_label(regim_uber)}\n"
 
     msg = (
-        "*📋 Rezumat profil*\n"
+        "*📋 Uite ce am despre tine*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         f"👤 *Nume:* {profile.get('name') or '—'}\n"
         f"🏢 *Firmă:* {profile.get('firma_nume') or '—'}\n"
@@ -691,7 +691,7 @@ async def _show_summary(
         f"{nerez_line}"
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
-        "Confirmi datele?"
+        "E totul în regulă?"
     )
 
     await context.bot.send_message(
