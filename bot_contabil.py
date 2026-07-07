@@ -2634,7 +2634,7 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     tg_id = update.effective_user.id
     if onboarding.user_is_in_onboarding(tg_id):
         await update.message.reply_text(
-            "⚠️ Te rog termină mai întâi configurarea profilului (/start)."
+            "⚠️ Hai să terminăm întâi configurarea. Deschide /start."
         )
         return
 
@@ -2648,7 +2648,7 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
         )
         return
     if doc.file_size and doc.file_size > 10 * 1024 * 1024:
-        await update.message.reply_text("⚠️ Fișier prea mare (max 10 MB).")
+        await update.message.reply_text("⚠️ Fișierul e prea mare — maxim 10 MB.")
         return
 
     user_id = ensure_user(update)
@@ -2665,22 +2665,22 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     )
     source_file_id = sf_info["id"] if sf_info else None
 
-    await update.message.reply_text("📄 Procesez extrasul…")
+    await update.message.reply_text("📄 Citesc extrasul…")
     from app.integrations.imports.bt_parser import parse_bt_pdf
     from app.integrations.imports.bank_statement import BankStatementError
     try:
         txns = parse_bt_pdf(file_bytes)
     except BankStatementError as e:
         await update.message.reply_text(
-            f"⚠️ Nu pot citi sigur extrasul: {e}\n\n"
-            "Deocamdată suport doar extrase *Banca Transilvania* (PDF).",
+            f"⚠️ Nu reușesc să citesc bine extrasul: {e}\n\n"
+            "Deocamdată pot citi doar extrase *Banca Transilvania* (PDF).",
             parse_mode="Markdown",
         )
         return
     except Exception as e:
         logger.error(f"bank_statement parse error user={user_id}: {e}")
         await update.message.reply_text(
-            "⚠️ Nu am putut procesa fișierul. Verifică să fie un extras BT în format PDF."
+            "⚠️ N-am reușit să procesez fișierul. Verifică să fie un extras BT în format PDF."
         )
         return
 
