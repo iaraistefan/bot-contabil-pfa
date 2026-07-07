@@ -497,7 +497,7 @@ async def send_step_question(
             "platformă și de certificatul de rezidență fiscală.\n\n"
             "*Ce platforme folosești?*\n\n"
             "_Poți schimba oricând în Setări. Dacă apare o factură de la o "
-            "platformă pe care n-ai configurat-o, te anunțăm înainte de D100._"
+            "platformă pe care n-ai configurat-o, te anunț înainte de D100._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -516,7 +516,7 @@ async def send_step_question(
             "• *Nu am certificatul* → impozit *16%* (stopaj la sursă)\n\n"
             "_Certificatul e al firmei Bolt (Bolt Operations OÜ), valabil pe an. "
             "Nu îl ai? Îl ceri de la suportul Bolt. Verifică anul înainte de "
-            "depunere. Alegerea îți aparține — nu alegem noi._"
+            "depunere. Alegerea e a ta — eu doar îți arăt opțiunile._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
@@ -533,8 +533,8 @@ async def send_step_question(
             "• *Da, am certificatul* → *0%* (scutire; doar D207, fără D100)\n"
             "• *Nu am certificatul* → *16%* (stopaj la sursă)\n\n"
             "_Certificatul e al firmei Uber (Uber B.V.), valabil pe an. Nu există "
-            "cota de 2% pentru Uber (aceea e doar pentru Bolt). Alegerea îți "
-            "aparține — nu alegem noi._"
+            "cota de 2% pentru Uber (aceea e doar pentru Bolt). Alegerea e a "
+            "ta — eu doar îți arăt opțiunile._"
         )
         await context.bot.send_message(
             chat_id=chat_id, text=msg, parse_mode="Markdown",
