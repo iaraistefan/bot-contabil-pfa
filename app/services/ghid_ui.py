@@ -103,7 +103,7 @@ def _intro(personalizat: bool, nudge: bool) -> str:
 def _card(key: str) -> str:
     d = DEFINITII_OBLIGATII.get(key)
     if d is None:
-        return "⚠️ Declarație necunoscută."
+        return "⚠️ Nu recunosc declarația asta."
     linii = [f"📖 *{d.cod} — {d.nume}*", "━━━━━━━━━━━━━━━━━━━━", ""]
     if d.ce_e:
         linii += [f"🔹 *Ce e?*\n{d.ce_e}", ""]
@@ -147,7 +147,7 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = _user_id(update)
     if user_id is None:
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text="⚠️ Nu te-am putut identifica. Deschide din /start.")
+            chat_id=update.effective_chat.id, text="⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     text, kb = _lista_pentru(user_id)
     await context.bot.send_message(
@@ -175,7 +175,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     finally:
         session.close()
     if uid is None:
-        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide din /start.")
+        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     text, kb = _lista_pentru(uid, force_all=(action == "all"))
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
