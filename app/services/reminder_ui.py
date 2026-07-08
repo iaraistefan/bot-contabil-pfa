@@ -132,20 +132,20 @@ def _format_status_message(settings: dict) -> str:
     )
 
     return (
-        f"⏰ *REMINDER-URI OBLIGAȚII FISCALE*\n"
+        f"⏰ *Reminder-uri pentru obligații*\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"*Status*: {enabled_label}\n"
         f"*Oră zilnică*: `{settings['hour']:02d}:00`\n"
         f"*Avans alertă*: `{settings['advance_days']} zile` "
         f"_(cu cât înainte de termen)_\n\n"
-        f"_Bot-ul îți trimite reminder-uri zilnice cu obligațiile "
-        f"fiscale apropiate (D301, D100, D212, etc.):_\n\n"
-        f"  • 🟡 *{settings['advance_days']} zile rămase* — Avertisment\n"
-        f"  • 🟠 *3 zile rămase* — Urgent\n"
-        f"  • 🔴 *Ziua termenului* — ASTĂZI EXPIRĂ\n"
+        f"_Îți trimit zilnic reminder-uri cu obligațiile "
+        f"apropiate (D301, D100, D212, etc.):_\n\n"
+        f"  • 🟡 *{settings['advance_days']} zile rămase* — din timp\n"
+        f"  • 🟠 *3 zile rămase* — se apropie\n"
+        f"  • 🔴 *Ziua termenului* — ultima zi\n"
         f"  • ❌ *Depășit* — zilnic 7 zile, apoi săptămânal\n\n"
-        f"_Anti-spam: niciodată mai mult de o alertă pentru "
-        f"aceeași obligație + tip alertă._\n\n"
+        f"_Nu te sâcâi: primești o singură alertă pentru "
+        f"fiecare obligație și tip._\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -218,7 +218,7 @@ async def handle_callback(
         user = users_repo.get_by_telegram_id(session, telegram_id=tg_id)
         if not user:
             await query.edit_message_text(
-                "⚠️ Eroare identificare utilizator."
+                "⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar."
             )
             return
         user_id = user.id
@@ -258,9 +258,9 @@ async def handle_callback(
         # ─── PICKER ORĂ ───────────────────────────────────────
         if action == "hour":
             await query.edit_message_text(
-                "⏰ *Alege ora pentru reminder-uri zilnice:*\n\n"
-                "_Ora la care vei primi alertele despre obligațiile "
-                "fiscale apropiate._",
+                "⏰ *La ce oră vrei să-ți trimit reminder-urile?*\n\n"
+                "_Atunci îți trimit alertele despre obligațiile "
+                "apropiate._",
                 parse_mode="Markdown",
                 reply_markup=_build_hour_picker(),
             )
@@ -273,7 +273,7 @@ async def handle_callback(
                 if not (0 <= new_hour <= 23):
                     raise ValueError("Out of range")
             except (ValueError, IndexError):
-                await query.edit_message_text("❌ Oră invalidă.")
+                await query.edit_message_text("❌ Nu pare o oră validă.")
                 return
 
             _update_user_setting(
@@ -291,9 +291,9 @@ async def handle_callback(
         # ─── PICKER AVANS ─────────────────────────────────────
         if action == "advance":
             await query.edit_message_text(
-                "📅 *Alege cu câte zile înainte să primești prima alertă:*\n\n"
-                "_Ex: 7 zile = primești alertă cu 7 zile înainte de termen, "
-                "apoi cu 3 zile, ziua termenului, și după depășire._",
+                "📅 *Cu câte zile înainte să te anunț prima dată?*\n\n"
+                "_Ex: 7 zile = te anunț cu 7 zile înainte, "
+                "apoi cu 3 zile, în ziua termenului, și după._",
                 parse_mode="Markdown",
                 reply_markup=_build_advance_picker(),
             )
@@ -306,7 +306,7 @@ async def handle_callback(
                 if not (1 <= new_days <= 30):
                     raise ValueError("Out of range")
             except (ValueError, IndexError):
-                await query.edit_message_text("❌ Număr zile invalid.")
+                await query.edit_message_text("❌ Nu pare un număr de zile valid.")
                 return
 
             _update_user_setting(
@@ -324,7 +324,7 @@ async def handle_callback(
         # ─── TEST MANUAL ──────────────────────────────────────
         if action == "test":
             await query.edit_message_text(
-                "🔄 _Rulez test alerte pentru luna curentă..._",
+                "🔄 _Verific alertele pentru luna asta..._",
                 parse_mode="Markdown",
             )
 
@@ -342,34 +342,34 @@ async def handle_callback(
 
                     if obligatii_count == 0:
                         msg = (
-                            "✅ *Test reușit!*\n\n"
-                            "Nu există obligații fiscale aplicabile pentru "
-                            "luna curentă pe profilul tău.\n\n"
-                            "_Verifică profilul cu /profil dacă crezi că "
-                            "este o eroare._"
+                            "✅ *Gata!*\n\n"
+                            "N-ai nicio obligație de plătit "
+                            "luna asta.\n\n"
+                            "_Dacă ți se pare o greșeală, verifică-ți "
+                            "profilul cu /profil._"
                         )
                     else:
                         obligatii_str = ", ".join(obligatii_list)
                         msg = (
-                            f"✅ *Test reușit!*\n\n"
-                            f"Am identificat *{obligatii_count}* obligații "
-                            f"aplicabile:\n"
+                            f"✅ *Gata!*\n\n"
+                            f"Ai *{obligatii_count}* obligații "
+                            f"luna asta:\n"
                             f"`{obligatii_str}`\n\n"
-                            f"Verifică mesajul detaliat de mai sus 📋\n\n"
-                            f"_În condiții normale primești alerte doar "
-                            f"pentru obligațiile cu termen apropiat._"
+                            f"Uite detaliile mai sus 📋\n\n"
+                            f"_În mod normal, îți trimit alerte doar "
+                            f"pentru cele cu termen apropiat._"
                         )
                 else:
                     err = result.get("error", "necunoscut")
                     msg = (
-                        f"❌ *Test eșuat*\n\n"
-                        f"Eroare: `{err}`\n\n"
-                        f"_Verifică log-ul pentru detalii._"
+                        f"❌ *N-a mers testul*\n\n"
+                        f"Motiv: `{err}`\n\n"
+                        f"_Detalii în log._"
                     )
             except Exception as e:
                 logger.error(f"Test alerts error: {e}")
                 msg = (
-                    f"❌ *Eroare la test*: `{str(e)[:200]}`"
+                    f"❌ *Ceva n-a mers la test*: `{str(e)[:200]}`"
                 )
 
             settings = _get_user_settings(session, user_id)
@@ -384,7 +384,7 @@ async def handle_callback(
         logger.error(f"reminder_ui callback error: {e}")
         try:
             await query.edit_message_text(
-                f"❌ Eroare: {str(e)[:200]}"
+                f"❌ Ceva n-a mers cum trebuia: {str(e)[:200]}"
             )
         except Exception:
             pass
@@ -414,7 +414,7 @@ async def show_main_menu(
         user = users_repo.get_by_telegram_id(session, telegram_id=tg_id)
         if not user:
             await query.edit_message_text(
-                "⚠️ Eroare identificare utilizator."
+                "⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar."
             )
             return
 
