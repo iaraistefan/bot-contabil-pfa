@@ -255,7 +255,7 @@ async def _start_add_wizard(update, context, user_id):
         await update.callback_query.edit_message_text(
             f"⚠️ Ai atins limita de {max_v} "
             f"{'mașină' if max_v == 1 else 'mașini'} pentru forma ta juridică.\n\n"
-            "Editează mașina existentă dacă vrei să o schimbi.",
+            "Dacă vrei s-o schimbi, editează mașina existentă.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("⬅️ Înapoi", callback_data="vehicul|menu")
             ]]),
@@ -268,9 +268,9 @@ async def _start_add_wizard(update, context, user_id):
     await update.callback_query.edit_message_text(
         "➕ *Adaugă mașină* (1/4)\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Scrie *numărul de înmatriculare*.\n"
+        "Scrie-mi *numărul de înmatriculare*.\n"
         "Exemplu: `BN 12 ABC`\n\n"
-        "_Scrie /anulare pentru a renunța._",
+        "_Scrie /anulare dacă vrei să renunți._",
         parse_mode="Markdown",
     )
 
@@ -517,11 +517,11 @@ async def _finalize_add(update, context, wizard, tip_detinere):
     nume = data.get("marca_model") or "—"
     tip_label = TIP_DETINERE_LABELS.get(tip_detinere, "—")
     msg = (
-        "✅ *Mașină adăugată!*\n"
+        "✅ *Gata, ți-am adăugat mașina!*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         f"🚗 {data.get('nr_inmatriculare')} — {nume}\n"
         f"⛽ {data.get('norma_consum', 7.5):g} L/100km · {tip_label}\n\n"
-        "Acum poți folosi foaia de parcurs pentru această mașină."
+        "De acum poți folosi foaia de parcurs pentru ea."
     )
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("🚗 Mașinile mele", callback_data="vehicul|menu")
@@ -566,7 +566,7 @@ async def _apply_edit(update, context, wizard, field, value):
     finally:
         session.close()
 
-    msg = "✅ Modificare salvată."
+    msg = "✅ Am salvat modificarea."
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("🚗 Vezi mașina", callback_data=f"vehicul|view|{vehicul_id}")
     ]])
