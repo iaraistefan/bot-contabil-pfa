@@ -157,9 +157,9 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE,
         text = (
             "🚗 *Mașinile mele*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Nu ai nicio mașină înregistrată.\n\n"
-            "Adaugă mașina cu care lucrezi — e necesară pentru "
-            "foaia de parcurs și deductibilitatea combustibilului."
+            "N-ai nicio mașină încă.\n\n"
+            "Adaugă mașina cu care lucrezi — îmi trebuie pentru "
+            "foaia de parcurs și ca să-ți deduc combustibilul."
         )
     else:
         lines = [_vehicul_line(v) for v in vehicule_list]
@@ -172,7 +172,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE,
             if max_v == 1:
                 text += (
                     "\n\n_Forma ta juridică permite o singură mașină. "
-                    "Pentru a schimba mașina, editeaz-o pe cea existentă._"
+                    "Ca s-o schimbi, editeaz-o pe cea existentă._"
                 )
 
     markup = _build_menu(vehicule_list, can_add)
@@ -203,7 +203,7 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
     try:
         v = vehicule_repo.get_by_id(session, vehicul_id, user_id)
         if not v:
-            await update.callback_query.edit_message_text("⚠️ Mașina nu a fost găsită.")
+            await update.callback_query.edit_message_text("⚠️ Nu găsesc mașina asta.")
             return
         nume = v.marca_model or "—"
         tip = TIP_DETINERE_LABELS.get(v.tip_detinere or "", "—")
@@ -281,7 +281,7 @@ async def _start_edit_wizard(update, context, user_id, vehicul_id):
     try:
         v = vehicule_repo.get_by_id(session, vehicul_id, user_id)
         if not v:
-            await update.callback_query.edit_message_text("⚠️ Mașina nu a fost găsită.")
+            await update.callback_query.edit_message_text("⚠️ Nu găsesc mașina asta.")
             return
     finally:
         session.close()
@@ -318,15 +318,15 @@ async def _edit_field(update, context, user_id, vehicul_id, field):
 
     # nr / marca -> input text
     prompts = {
-        "nr": "Scrie noul *număr de înmatriculare*.\nExemplu: `BN 12 ABC`",
-        "marca": "Scrie noua *marcă și model*.\nExemplu: `Dacia Logan`",
+        "nr": "Scrie-mi noul *număr de înmatriculare*.\nExemplu: `BN 12 ABC`",
+        "marca": "Scrie-mi noua *marcă și model*.\nExemplu: `Dacia Logan`",
     }
     context.user_data[_WIZARD_KEY] = {
         "mode": "edit", "step": field, "vehicul_id": vehicul_id, "data": {},
     }
     await update.callback_query.edit_message_text(
         f"✏️ *Editare*\n\n{prompts.get(field, 'Scrie noua valoare.')}\n\n"
-        "_Scrie /anulare pentru a renunța._",
+        "_Scrie /anulare dacă vrei să renunți._",
         parse_mode="Markdown",
     )
 
@@ -451,7 +451,7 @@ async def handle_wizard_text(update: Update,
         consum = _parse_consum(text)
         if consum is None:
             await update.message.reply_text(
-                "⚠️ Valoare invalidă. Scrie un număr între 3 și 25, ex: `7.5`",
+                "⚠️ Nu pare o valoare validă. Scrie un număr între 3 și 25, ex: `7.5`",
                 parse_mode="Markdown",
             )
             return True
@@ -509,7 +509,7 @@ async def _finalize_add(update, context, wizard, tip_detinere):
     except Exception as e:
         session.rollback()
         logger.error(f"finalize_add error: {e}")
-        await _safe_reply(update, context, "❌ Eroare la salvarea mașinii.")
+        await _safe_reply(update, context, "❌ N-am reușit să salvez mașina.")
         return
     finally:
         session.close()
@@ -547,7 +547,7 @@ async def _apply_edit(update, context, wizard, field, value):
     try:
         v = vehicule_repo.get_by_id(session, vehicul_id, user_id)
         if not v:
-            await _safe_reply(update, context, "⚠️ Mașina nu a fost găsită.")
+            await _safe_reply(update, context, "⚠️ Nu găsesc mașina asta.")
             return
         before = vehicule_repo.to_dict(v)
         vehicule_repo.update(session, v, **{field: value})
@@ -561,7 +561,7 @@ async def _apply_edit(update, context, wizard, field, value):
     except Exception as e:
         session.rollback()
         logger.error(f"apply_edit error: {e}")
-        await _safe_reply(update, context, "❌ Eroare la salvare.")
+        await _safe_reply(update, context, "❌ N-am reușit să salvez.")
         return
     finally:
         session.close()
@@ -600,7 +600,7 @@ async def _ask_delete(update, context, user_id, vehicul_id):
     try:
         v = vehicule_repo.get_by_id(session, vehicul_id, user_id)
         if not v:
-            await update.callback_query.edit_message_text("⚠️ Mașina nu a fost găsită.")
+            await update.callback_query.edit_message_text("⚠️ Nu găsesc mașina asta.")
             return
         nr = v.nr_inmatriculare
     finally:
@@ -625,7 +625,7 @@ async def _do_delete(update, context, user_id, vehicul_id):
     try:
         v = vehicule_repo.get_by_id(session, vehicul_id, user_id)
         if not v:
-            await update.callback_query.edit_message_text("⚠️ Mașina nu a fost găsită.")
+            await update.callback_query.edit_message_text("⚠️ Nu găsesc mașina asta.")
             return
         before = vehicule_repo.to_dict(v)
         nr = v.nr_inmatriculare
@@ -639,13 +639,13 @@ async def _do_delete(update, context, user_id, vehicul_id):
     except Exception as e:
         session.rollback()
         logger.error(f"do_delete error: {e}")
-        await update.callback_query.edit_message_text("❌ Eroare la ștergere.")
+        await update.callback_query.edit_message_text("❌ N-am reușit să șterg.")
         return
     finally:
         session.close()
 
     await update.callback_query.edit_message_text(
-        f"✅ Mașina *{nr}* a fost ștearsă.",
+        f"✅ Am șters mașina *{nr}*.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🚗 Mașinile mele", callback_data="vehicul|menu")
@@ -663,7 +663,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     user_id = _get_user_id(update)
     if not user_id:
-        await query.edit_message_text("⚠️ Eroare identificare utilizator.")
+        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     action = parts[1] if len(parts) > 1 else ""
@@ -704,7 +704,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception as e:
         logger.error(f"vehicul callback error parts={parts}: {e}")
         try:
-            await query.edit_message_text(f"❌ Eroare: {str(e)[:150]}")
+            await query.edit_message_text(f"❌ Ceva n-a mers cum trebuia: {str(e)[:150]}")
         except Exception:
             pass
 
@@ -713,7 +713,7 @@ async def _handle_setc(update, context, consum):
     """Buton consum apasat in wizard."""
     wizard = context.user_data.get(_WIZARD_KEY)
     if not wizard:
-        await update.callback_query.edit_message_text("⚠️ Sesiune expirată.")
+        await update.callback_query.edit_message_text("⚠️ A trecut prea mult timp — începe din nou.")
         return
 
     if wizard.get("mode") == "add":
@@ -728,11 +728,11 @@ async def _handle_tip(update, context, tip):
     """Buton tip detinere apasat in wizard."""
     wizard = context.user_data.get(_WIZARD_KEY)
     if not wizard:
-        await update.callback_query.edit_message_text("⚠️ Sesiune expirată.")
+        await update.callback_query.edit_message_text("⚠️ A trecut prea mult timp — începe din nou.")
         return
 
     if tip not in TIP_DETINERE_LABELS:
-        await update.callback_query.edit_message_text("⚠️ Tip invalid.")
+        await update.callback_query.edit_message_text("⚠️ Nu recunosc tipul ăsta.")
         return
 
     if wizard.get("mode") == "add":
