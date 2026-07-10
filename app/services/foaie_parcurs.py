@@ -176,7 +176,7 @@ def _execute_start(user_id: int, km: int, purpose: str = None) -> dict:
     """
     if km is None or km <= 0:
         return {"ok": False, "message": (
-            "⚠️ Kilometrajul nu e valid. Scrie doar numărul de pe bord "
+            "⚠️ Nu pare un kilometraj valid. Scrie doar numărul de pe bord "
             "(ex: 125430)."
         )}
 
@@ -196,8 +196,8 @@ def _execute_start(user_id: int, km: int, purpose: str = None) -> dict:
         vehicul = vehicule_repo.get_default(session, user_id)
         if not vehicul:
             return {"ok": False, "message": (
-                "⚠️ Nu ai nicio mașină înregistrată.\n\n"
-                "Adaugă întâi mașina din meniul *🚗 Mașinile mele*."
+                "⚠️ N-ai nicio mașină încă.\n\n"
+                "Adaugă-ți întâi mașina din *🚗 Mașinile mele*."
             )}
 
         # 3. Sanity check fata de km cunoscut
@@ -227,19 +227,19 @@ def _execute_start(user_id: int, km: int, purpose: str = None) -> dict:
         zi = now.strftime("%d.%m.%Y")
         traseu_line = f"\n📍 Traseu: {purpose}" if purpose else ""
         return {"ok": True, "message": (
-            "🟢 *Tură pornită!*\n"
+            "🟢 *Am pornit tura!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛣️ Bord start: *{_fmt_km(km)} km*\n"
             f"📅 Data: *{zi}*\n"
             f"🕐 Ora: *{ora}*\n"
             f"🚙 Mașina: {vehicul.nr_inmatriculare}{traseu_line}\n\n"
-            f"_Când termini cursa, apasă butonul Închide tura._"
+            f"_Când termini, apasă butonul Închide tura._"
             f"{avertisment}"
         )}
     except Exception as e:
         session.rollback()
         logger.error(f"_execute_start error: {e}")
-        return {"ok": False, "message": "❌ Eroare la pornirea turei."}
+        return {"ok": False, "message": "❌ N-am reușit să pornesc tura."}
     finally:
         session.close()
 
@@ -250,7 +250,7 @@ def _execute_stop(user_id: int, km: int) -> dict:
     """
     if km is None or km <= 0:
         return {"ok": False, "message": (
-            "⚠️ Kilometrajul nu e valid. Scrie doar numărul de pe bord "
+            "⚠️ Nu pare un kilometraj valid. Scrie doar numărul de pe bord "
             "(ex: 125680)."
         )}
 
@@ -259,8 +259,8 @@ def _execute_stop(user_id: int, km: int) -> dict:
         open_trip = trip_repo.get_open_trip(session, user_id)
         if not open_trip:
             return {"ok": False, "message": (
-                "⚠️ Nu ai nicio tură pornită.\n\n"
-                "Pornește una din meniu cu butonul Pornește o tură."
+                "⚠️ N-ai nicio tură pornită.\n\n"
+                "Pornește una cu butonul Pornește o tură."
             )}
 
         start_km = open_trip.odometer_start or 0
@@ -305,17 +305,17 @@ def _execute_stop(user_id: int, km: int) -> dict:
             interval = f"\n🕐 Interval: {open_trip.ora_start} → {ora_stop}"
 
         return {"ok": True, "message": (
-            "🏁 *Tură încheiată!*\n"
+            "🏁 *Am încheiat tura!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛣️ {_fmt_km(start_km)} → {_fmt_km(km)} km\n"
             f"📊 *Parcurși azi: {_fmt_km(km_parcursi)} km*{interval}\n\n"
-            f"_Tura a fost adăugată în foaia de parcurs._"
+            f"_Am adăugat-o în foaia ta de parcurs._"
             f"{avertisment}"
         )}
     except Exception as e:
         session.rollback()
         logger.error(f"_execute_stop error: {e}")
-        return {"ok": False, "message": "❌ Eroare la închiderea turei."}
+        return {"ok": False, "message": "❌ N-am reușit să închid tura."}
     finally:
         session.close()
 
@@ -333,8 +333,8 @@ def _execute_complete(user_id: int, km_start: int, km_stop: int) -> dict:
         vehicul = vehicule_repo.get_default(session, user_id)
         if not vehicul:
             return {"ok": False, "message": (
-                "⚠️ Nu ai nicio mașină înregistrată.\n\n"
-                "Adaugă întâi mașina din meniul *🚗 Mașinile mele*."
+                "⚠️ N-ai nicio mașină încă.\n\n"
+                "Adaugă-ți întâi mașina din *🚗 Mașinile mele*."
             )}
 
         km_parcursi = km_stop - km_start
@@ -360,7 +360,7 @@ def _execute_complete(user_id: int, km_start: int, km_stop: int) -> dict:
             )
 
         return {"ok": True, "message": (
-            "✅ *Tură înregistrată!*\n"
+            "✅ *Am înregistrat tura!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛣️ {_fmt_km(km_start)} → {_fmt_km(km_stop)} km\n"
             f"📊 *Parcurși: {_fmt_km(km_parcursi)} km*\n"
@@ -370,7 +370,7 @@ def _execute_complete(user_id: int, km_start: int, km_stop: int) -> dict:
     except Exception as e:
         session.rollback()
         logger.error(f"_execute_complete error: {e}")
-        return {"ok": False, "message": "❌ Eroare la înregistrarea turei."}
+        return {"ok": False, "message": "❌ N-am reușit să înregistrez tura."}
     finally:
         session.close()
 
@@ -494,7 +494,7 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _reply_result(update, result)
         else:
             await update.message.reply_text(
-                "⚠️ Comandă neînțeleasă.\n\n"
+                "⚠️ N-am înțeles comanda.\n\n"
                 "Cel mai simplu: apasă butonul *🛣️ Foaie parcurs* din meniu "
                 "și folosește butoanele.",
                 parse_mode="Markdown",
@@ -584,7 +584,7 @@ async def _show_status(update, context, user_id, via_callback=False):
         zi = ""
         if open_trip.trip_date:
             zi = open_trip.trip_date.strftime("%d.%m")
-        lines.append("🟢 *TURĂ ÎN CURS*")
+        lines.append("🟢 *Tură în curs*")
         lines.append(f"   Pornită {zi}{ora}")
         lines.append(f"   Bord start: *{_fmt_km(open_trip.odometer_start)} km*")
         lines.append("")
@@ -633,7 +633,7 @@ async def _show_status(update, context, user_id, via_callback=False):
 
     if summary["nr_ture"] == 0 and not open_trip:
         lines.append("")
-        lines.append("_Nicio tură încă. Apasă butonul Pornește o tură._")
+        lines.append("_N-ai nicio tură încă. Apasă butonul Pornește o tură._")
 
     # Sectiunea combustibil deductibil
     fuel_summary = None
@@ -707,7 +707,7 @@ async def _ask_km(update, context, action: str):
         example = "Exemplu: `125430`"
     else:
         title = "🏁 *Închide tura*"
-        hint = "Scrie acum *kilometrajul de pe bord* (cât arată odometrul ACUM)."
+        hint = "Scrie acum *kilometrajul de pe bord* (cât arată odometrul acum)."
         example = "Exemplu: `125680`"
 
     text = (
@@ -739,7 +739,7 @@ async def _show_jurnal(update, context, user_id, year, month):
 
     if not trips:
         await update.callback_query.edit_message_text(
-            f"📭 Nicio tură în {LUNI_LONG[month]} {year}.",
+            f"📭 N-ai nicio tură în {LUNI_LONG[month]} {year}.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")
             ]]),
@@ -779,7 +779,7 @@ async def _show_jurnal(update, context, user_id, year, month):
 
     text = "\n".join(lines)
     if len(text) > 4000:
-        text = text[:3900] + "\n\n_...listă prea lungă, trunchiată._"
+        text = text[:3900] + "\n\n_...lista e prea lungă, am scurtat-o._"
 
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton(
@@ -805,7 +805,7 @@ async def _send_excel(update, context, user_id, year, month):
         trips = trip_repo.list_for_month(session, user_id, year, month)
         if not trips:
             await query.edit_message_text(
-                f"📭 Nicio tură în {LUNI_LONG[month]} {year}."
+                f"📭 N-ai nicio tură în {LUNI_LONG[month]} {year}."
             )
             return
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -821,7 +821,7 @@ async def _send_excel(update, context, user_id, year, month):
         summary = compute_month_summary(trips)
     except Exception as e:
         logger.error(f"send_excel error: {e}")
-        await query.edit_message_text("❌ Eroare la generarea foii Excel.")
+        await query.edit_message_text("❌ N-am reușit să generez foaia Excel.")
         return
     finally:
         session.close()
@@ -839,12 +839,12 @@ async def _send_excel(update, context, user_id, year, month):
             f"📊 *Foaie de parcurs — {LUNI_LONG[month]} {year}*\n\n"
             f"🛣️ Total business: {_fmt_km(summary['km_business'])} km\n"
             f"⛽ Combustibil normat: {ded['litri_normati']:g} litri\n\n"
-            f"_Tipărește: Landscape A4. Verifică cu contabilul._"
+            f"_Tipărește: Landscape A4. Confirmă cu contabilul._"
         ),
         parse_mode="Markdown",
     )
     await query.edit_message_text(
-        f"✅ Foaie de parcurs generată pentru {LUNI_LONG[month]} {year}.",
+        f"✅ Ți-am generat foaia de parcurs pentru {LUNI_LONG[month]} {year}.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🛣️ Foaie de parcurs", callback_data="parcurs|status")
         ]]),
@@ -861,7 +861,7 @@ async def _show_luni_picker(update, context, user_id):
 
     if not months:
         await update.callback_query.edit_message_text(
-            "📭 Nu există ture înregistrate încă.",
+            "📭 N-ai nicio tură înregistrată încă.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("⬅️ Înapoi", callback_data="parcurs|status")
             ]]),
