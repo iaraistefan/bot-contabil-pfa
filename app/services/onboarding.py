@@ -1118,7 +1118,7 @@ async def _finalize(update, context, session, user, user_id):
     nume = profile.get("name") or "șofer"
 
     await query.edit_message_text(
-        "🎉 *Gata, ești configurat!*\n\n"
+        f"🎉 *Gata, {nume}, ești configurat!*\n\n"
         "De acum trimite-mi poze cu bonuri, facturi sau screenshot-uri "
         "Bolt — mă ocup eu de rest.",
         parse_mode="Markdown",
