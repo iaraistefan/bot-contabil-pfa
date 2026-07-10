@@ -411,7 +411,7 @@ async def handle_wizard_text(update: Update,
     user_id = _get_user_id(update)
     if not user_id:
         cancel_wizard(context)
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return True
 
     if km is None or km <= 0:
@@ -432,7 +432,7 @@ async def handle_wizard_text(update: Update,
     elif action == "stop":
         result = _execute_stop(user_id, km)
     else:
-        await update.message.reply_text("⚠️ Acțiune necunoscută.")
+        await update.message.reply_text("⚠️ Nu recunosc acțiunea asta.")
         return True
 
     markup = InlineKeyboardMarkup([[
@@ -463,7 +463,7 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = _get_user_id(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     if not rest:
@@ -897,27 +897,27 @@ async def handle_delete_command(update: Update, context: ContextTypes.DEFAULT_TY
     """Comanda /sterge_tura <id>."""
     user_id = _get_user_id(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     args = context.args or []
     if not args:
         await update.message.reply_text(
-            "⚠️ Specifică ID-ul turei.\nExemplu: `/sterge_tura 12`",
+            "⚠️ Spune-mi ID-ul turei.\nExemplu: `/sterge_tura 12`",
             parse_mode="Markdown",
         )
         return
 
     trip_id = _parse_int(args[0])
     if trip_id is None:
-        await update.message.reply_text("⚠️ ID invalid.")
+        await update.message.reply_text("⚠️ ID-ul nu pare valid.")
         return
 
     session = get_session()
     try:
         trip = trip_repo.get_by_id(session, trip_id, user_id)
         if not trip:
-            await update.message.reply_text(f"⚠️ Tura #{trip_id} nu a fost găsită.")
+            await update.message.reply_text(f"⚠️ Nu găsesc tura #{trip_id}.")
             return
         zi = trip.trip_date.strftime("%d.%m.%Y") if trip.trip_date else "—"
         km = _fmt_km(trip.km)
@@ -939,7 +939,7 @@ async def _do_delete_trip(update, context, user_id, trip_id):
     try:
         trip = trip_repo.get_by_id(session, trip_id, user_id)
         if not trip:
-            await update.callback_query.edit_message_text("⚠️ Tura nu a fost găsită.")
+            await update.callback_query.edit_message_text("⚠️ Nu găsesc tura asta.")
             return
         before = trip_repo.to_dict(trip)
         trip_repo.delete(session, trip)
@@ -952,13 +952,13 @@ async def _do_delete_trip(update, context, user_id, trip_id):
     except Exception as e:
         session.rollback()
         logger.error(f"do_delete_trip error: {e}")
-        await update.callback_query.edit_message_text("❌ Eroare la ștergere.")
+        await update.callback_query.edit_message_text("❌ N-am reușit să șterg tura.")
         return
     finally:
         session.close()
 
     await update.callback_query.edit_message_text(
-        f"✅ Tura #{trip_id} a fost ștearsă.",
+        f"✅ Am șters tura #{trip_id}.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🛣️ Foaie de parcurs", callback_data="parcurs|status")
         ]]),
@@ -974,7 +974,7 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
     cancel_wizard(context)  # daca era un wizard vechi agatat, il curatam
     user_id = _get_user_id(update)
     if not user_id:
-        await update.message.reply_text("⚠️ Eroare identificare utilizator.")
+        await update.message.reply_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
     await _show_status(update, context, user_id, via_callback=False)
 
@@ -985,7 +985,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
     query = update.callback_query
     user_id = _get_user_id(update)
     if not user_id:
-        await query.edit_message_text("⚠️ Eroare identificare utilizator.")
+        await query.edit_message_text("⚠️ Nu te-am putut identifica. Deschide botul din nou din buton și încearcă iar.")
         return
 
     action = parts[1] if len(parts) > 1 else ""
@@ -1022,6 +1022,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception as e:
         logger.error(f"parcurs callback error parts={parts}: {e}")
         try:
-            await query.edit_message_text(f"❌ Eroare: {str(e)[:150]}")
+            await query.edit_message_text(f"❌ Ceva n-a mers cum trebuia: {str(e)[:150]}")
         except Exception:
             pass
