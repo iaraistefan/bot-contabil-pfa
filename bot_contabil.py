@@ -2443,6 +2443,11 @@ async def execute_confirmed_save(update, context, user_id):
     committed = False
     results = []
     try:
+        # Prima cheltuială? (ÎNAINTE de persist — după commit count-ul ar fi ≥1)
+        is_first_expense = documents_repo.count_by_tip(
+            session, user_id, DocType.CHELTUIALA
+        ) == 0
+
         results = _persist_all_items(
             session, items=items, user_id=user_id,
             source_file_id=source_file_id, raw_response=raw_response,
@@ -2472,10 +2477,20 @@ async def execute_confirmed_save(update, context, user_id):
     # === Commit reușit → efecte DOAR acum. Un eșec de MESAJ ≠ pierdere de date
     # (datele sunt deja comise), deci nu raportăm fals „n-am salvat". ===
     confirmare.clear_pending(context)
+    msg = _build_confirm_message(results, activity)
+    # Delight prima-dată: nota o SINGURĂ dată la sfârșit, doar dacă batch-ul
+    # conține efectiv o cheltuială și e prima a userului (coloana 3).
+    if is_first_expense and any(
+        it.tip == DocType.CHELTUIALA for it, _, _ in results
+    ):
+        msg += (
+            "\n\n_Asta a fost prima ta cheltuială. Trimite-mi așa fiecare "
+            "bon — la finalul lunii ți le adun în registru._"
+        )
     try:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=_build_confirm_message(results, activity),
+            text=msg,
             parse_mode="Markdown",
         )
     except Exception:

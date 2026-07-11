@@ -282,6 +282,10 @@ def _execute_stop(user_id: int, km: int) -> dict:
         now = _now_ro()
         ora_stop = now.strftime("%H:%M")
 
+        # Prima tură? (ÎNAINTE de close — open_trip e încă OPEN, nu se numără
+        # pe sine; după close ar deveni 1)
+        is_first = trip_repo.count_closed(session, user_id) == 0
+
         trip_repo.close_trip(
             session, open_trip, odometer_end=km, ora_stop=ora_stop
         )
@@ -304,13 +308,19 @@ def _execute_stop(user_id: int, km: int) -> dict:
         if open_trip.ora_start:
             interval = f"\n🕐 Interval: {open_trip.ora_start} → {ora_stop}"
 
+        prima_tura = (
+            "\n\n_Asta a fost prima ta tură. La fel de simplu de fiecare "
+            "dată — la sfârșit de lună îți generez foaia completă pentru "
+            "ANAF._"
+        ) if is_first else ""
+
         return {"ok": True, "message": (
             "🏁 *Am încheiat tura!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛣️ {_fmt_km(start_km)} → {_fmt_km(km)} km\n"
             f"📊 *Parcurși azi: {_fmt_km(km_parcursi)} km*{interval}\n\n"
             f"_Am adăugat-o în foaia ta de parcurs._"
-            f"{avertisment}"
+            f"{avertisment}{prima_tura}"
         )}
     except Exception as e:
         session.rollback()
@@ -340,6 +350,9 @@ def _execute_complete(user_id: int, km_start: int, km_stop: int) -> dict:
         km_parcursi = km_stop - km_start
         now = _now_ro()
 
+        # Prima tură? (ÎNAINTE de create — după inserare count-ul ar fi ≥1)
+        is_first = trip_repo.count_closed(session, user_id) == 0
+
         trip = trip_repo.create_complete(
             session, user_id=user_id, vehicul_id=vehicul.id,
             odometer_start=km_start, odometer_end=km_stop,
@@ -359,13 +372,19 @@ def _execute_complete(user_id: int, km_start: int, km_stop: int) -> dict:
                 f"\n\n⚠️ _{_fmt_km(km_parcursi)} km pare mult pentru o tură._"
             )
 
+        prima_tura = (
+            "\n\n_Asta a fost prima ta tură. La fel de simplu de fiecare "
+            "dată — la sfârșit de lună îți generez foaia completă pentru "
+            "ANAF._"
+        ) if is_first else ""
+
         return {"ok": True, "message": (
             "✅ *Am înregistrat tura!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛣️ {_fmt_km(km_start)} → {_fmt_km(km_stop)} km\n"
             f"📊 *Parcurși: {_fmt_km(km_parcursi)} km*\n"
             f"🚙 Mașina: {vehicul.nr_inmatriculare}"
-            f"{avertisment}"
+            f"{avertisment}{prima_tura}"
         )}
     except Exception as e:
         session.rollback()
