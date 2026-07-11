@@ -9,6 +9,15 @@ from sqlalchemy.orm import Session
 from app.models import Document
 
 
+def count_by_tip(session, user_id: int, tip) -> int:
+    """Numarul de documente de un tip dat ale userului (pentru detectia 'prima cheltuiala')."""
+    return (
+        session.query(Document)
+        .filter(Document.user_id == user_id, Document.tip == tip)
+        .count()
+    )
+
+
 def create(
     session: Session,
     *,

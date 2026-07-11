@@ -139,6 +139,18 @@ def list_closed_for_month(session, user_id: int, year: int, month: int):
     )
 
 
+def count_closed(session, user_id: int) -> int:
+    """Numarul de ture inchise ale userului (pentru detectia 'prima tura')."""
+    return (
+        session.query(TripLog)
+        .filter(
+            TripLog.user_id == user_id,
+            TripLog.status == TRIP_STATUS_CLOSED,
+        )
+        .count()
+    )
+
+
 def available_months(session, user_id: int):
     """Lista (an, luna) pentru care exista ture, descrescator."""
     rows = (
