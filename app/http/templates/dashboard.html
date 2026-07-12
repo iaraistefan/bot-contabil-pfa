@@ -1364,7 +1364,7 @@
     NORMA_DOAR_DIN_2026:{titlu:"Norma — doar din 2026",ton:"info",
       text:"Pentru ridesharing, impozitarea pe normă e disponibilă abia din 2026. Anul acesta se aplică obligatoriu sistemul real."},
     PLAFON_DEPASIT:{titlu:"Ai depășit plafonul de normă",ton:"atentie",
-      text:"Ai depășit plafonul de 126.038 lei venit brut (2026). De anul viitor treci pe sistem real — peste acest plafon nu mai e o alegere, așa cere legea."},
+      text:"Ai depășit plafonul de 126.038 lei venit brut (2026). Azi nu trebuie să faci nimic — de anul viitor treci pe sistem real, fiindcă peste acest plafon așa cere legea."},
     REVENIRE_NORMA_2ANI:{titlu:"Revenirea la normă durează",ton:"atentie",
       text:"Ești pe sistem real. Poți reveni la normă abia după minimum 2 ani fiscali pe real — verifică cu contabilul de când ești pe real."},
     SCHIMBARE_ANUL_URMATOR:{titlu:"Schimbarea se face de anul viitor",ton:"info",
@@ -1480,6 +1480,7 @@
       +`<div class="eyebrow">Taxe estimate <span class="yr">· ${d.an} · la zi</span></div>`
       +`<div class="htot"><span class="htot-n">${RON(d.total_plata)}</span><span class="cur">RON</span></div>`
       +`<div class="htot-lab">Total de plată — impozit + CAS + CASS</div>`
+      +`<div class="hint" style="margin-top:var(--sp-2)">Estimare pe tot anul, nu de plată acum. Termenele sunt pe fiecare obligație, mai jos.</div>`
       +`<div class="profit"><div class="it"><span class="dt g"></span><b>Venit net</b><span>&nbsp;${RON(d.venit_net)} lei</span></div>`
       +`<div class="it"><span class="dt a"></span><b>Rămâne după taxe</b><span>&nbsp;${RON(ramane)} lei</span></div></div>`
       +`<div class="divider"></div><div class="break-lab">Din ce se compune · apasă pentru explicație</div>`
@@ -1710,7 +1711,7 @@
     VAT_IN:'<svg width="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>'};
   function renderActivity(tx){
     const box=document.getElementById("ov-activity");if(!box)return;
-    if(!tx.length){box.innerHTML='<div class="hint" style="padding:var(--sp-3)">Nicio tranzacție în '+MONTHS[M]+'.</div>';return;}
+    if(!tx.length){box.innerHTML='<div class="hint" style="padding:var(--sp-3)">Nicio tranzacție în '+MONTHS[M]+' încă.</div>';return;}
     box.innerHTML=tx.slice(0,6).map(t=>{
       const inc=t.tx_type==="INCOME";
       const col=inc?"green":(t.tx_type==="VAT_OUT"?"gold":"red");
@@ -1796,7 +1797,7 @@
           const w=Math.round(Number(i.amount_brut||0)/max*100);
           const ded=i.deductibility_pct<100?`${i.deductibility_pct}% deductibil`:"100% deductibil";
           return `<div class="row"><div class="ic ${i.deductibility_pct<100?'gold':'red'}">${i.icon?'<span style="font-size:var(--text-base)">'+escHtml(i.icon)+'</span>':ICO.EXPENSE}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">${ded}</div><div class="bar-track"><div class="bar-fill ${colorFor(i.deductibility_pct)}" style="width:${w}%"></div></div></div><div class="amt neg num">${RON(i.amount_brut)}</div></div>`;
-        }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:var(--sp-3)">Nicio cheltuială în '+MONTHS[M]+'.</div>');
+        }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:var(--sp-3)">Nicio cheltuială în '+MONTHS[M]+' încă.</div>');
       }
       drawDonut("chDonut", items);
     }catch(e){console.error(e);}
@@ -1821,7 +1822,7 @@
         tb.innerHTML = ture.length? ture.map(t=>{
           const interval=escHtml(t.ora_start||"—")+" → "+escHtml(t.ora_stop||"—");
           return `<tr><td>${dmy(t.trip_date)}</td><td>${interval}</td><td class="r num">${t.odometer_start??"—"}</td><td class="r num">${t.odometer_end??"—"}</td><td class="r num pos">${KM(t.km)}</td></tr>`;
-        }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio tură în '+MONTHS[M]+'.</td></tr>');
+        }).join("") : (isNew ? '<tr><td colspan="5">'+pgEmpty("i-road","Aici e foaia ta de parcurs (km business)","Justifică combustibilul deductibil. Pornește prima tură din bot.","Pornește o tură în bot")+'</td></tr>' : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio tură în '+MONTHS[M]+' încă.</td></tr>');
       }
       // vehicul + combustibil
       const vb=document.getElementById("pc-vehicul");
@@ -1906,7 +1907,7 @@
       });
       const tb=document.getElementById("reg-tbody");
       const isNew=await isNewUser();
-      if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:var(--sp-3)">Nicio înregistrare în '+MONTHS[M]+'.</td></tr>');
+      if(tb)tb.innerHTML = rows.length?rows.join(""):(isNew ? '<tr><td colspan="7">'+pgEmpty("i-ledger","Registrul se completează automat","Din documentele tale (obligatoriu OMFP 170/2015). Trimite primul document în bot.","Trimite document în bot")+'</td></tr>' : '<tr><td colspan="7" class="hint" style="padding:var(--sp-3)">Nicio înregistrare în '+MONTHS[M]+' încă.</td></tr>');
       setNum("reg-inc", inc, RON);
       setNum("reg-plati", plati, RON);
       setNum("reg-sold", inc-plati, RON);
@@ -2012,7 +2013,7 @@
             ? `<a class="btn btn-primary" style="padding:var(--sp-2) var(--sp-3)" href="#" onclick="openPlata('${o.cod} — ${o.nume.replace(/'/g,'')}','${sumaJs}','${cont}','${identif}');return false;">Plătește</a>`
             : `<a class="btn btn-ghost" style="padding:var(--sp-2) var(--sp-3)" href="https://www.ghiseul.ro" target="_blank">Deschide ghișeul.ro</a>`;
           return `<tr><td data-label="Obligație"><b>${escHtml(o.cod)}</b><div class="m" style="font-size:var(--text-xs);color:var(--muted-2)">${escHtml(o.nume.slice(0,28))}</div></td><td class="num" data-label="Cont" style="font-size:var(--text-xs)">${escHtml(cont)}</td><td class="r num neu" data-label="Sumă">${suma}</td><td class="r" data-label="Termen">${termen}</td><td class="r" data-label="">${btn}</td></tr>`;
-        }).join("") : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio plată scadentă pentru '+MONTHS[M]+'.</td></tr>';
+        }).join("") : '<tr><td colspan="5" class="hint" style="padding:var(--sp-3)">Nicio plată scadentă în '+MONTHS[M]+' — ești la zi.</td></tr>';
       }
     }catch(e){
       console.error(e);
