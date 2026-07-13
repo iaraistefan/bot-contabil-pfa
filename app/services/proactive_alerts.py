@@ -435,8 +435,9 @@ def _tva_plafon_message(st: dict, ca: float) -> str:
     if st["status"] == "DEPASIT_PLAFON":
         return (
             f"🔴 Ai depășit plafonul de TVA de {threshold:.0f} RON (ai ajuns la "
-            f"{ca:.0f} RON). Nu intra în panică — ai la dispoziție 10 zile de la "
-            f"depășire ca să te înregistrezi ca plătitor de TVA."
+            f"{ca:.0f} RON). Nu intra în panică — de la depășire treci pe regim cu "
+            f"TVA, iar înregistrarea ca plătitor o depui până în 10 zile de la "
+            f"sfârșitul lunii."
         )
     remaining = max(0.0, threshold - ca)
     return (
