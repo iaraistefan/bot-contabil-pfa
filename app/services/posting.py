@@ -487,7 +487,12 @@ def _post_cheltuiala(
     if category_override is not None:
         # ⭐ FELIA 3 — onorăm clasificarea deterministă; NU re-clasificăm pe text.
         category_code = category_override
-        deductibility_pct = activity.get_deductibility_pct(category_code)
+        cat_obj = activity.get_expense_category(category_code)
+        deductibility_pct = (
+            _resolve_auto_deductibility(session, user_id, cat_obj)
+            if cat_obj is not None
+            else activity.get_deductibility_pct(category_code)  # None → 100, ca azi
+        )
         logger.info(
             f"CHELTUIALA override: category={category_code} "
             f"pct={deductibility_pct}% (skip detect_expense_category)"
@@ -505,8 +510,14 @@ def _post_cheltuiala(
                 f"text='{platforma} {detalii}' → fallback to {CAT_OTHER_EXPENSE}"
             )
         else:
-            # ⭐ DEDUCTIBILITY DINAMICĂ din activitate
-            deductibility_pct = activity.get_deductibility_pct(category_code)
+            # ⭐ DEDUCTIBILITY DINAMICĂ din activitate (regim-aware pt categoriile
+            # auto — ACUM byte-identic, MIXT→50; pas 5 va activa EXCLUSIV→100)
+            cat_obj = activity.get_expense_category(category_code)
+            deductibility_pct = (
+                _resolve_auto_deductibility(session, user_id, cat_obj)
+                if cat_obj is not None
+                else activity.get_deductibility_pct(category_code)  # None → 100, ca azi
+            )
 
     # ════════════════════════════════════════════════════════
     # === NEW (Pas 8.4b) — VAT Engine pentru tratament TVA ===
