@@ -57,6 +57,7 @@ class RidesharingActivity(BaseActivity):
         # -- Combustibil -- DEDUCTIBIL 50% (auto mixt) --
         ExpenseCategory(
             code="fuel",
+            is_auto_mixt=True,
             label="Combustibil auto",
             icon="⛽",
             keywords=[
@@ -99,6 +100,7 @@ class RidesharingActivity(BaseActivity):
         # -- Service auto / consumabile -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_service",
+            is_auto_mixt=True,
             label="Service / Consumabile auto",
             icon="🔧",
             keywords=[
@@ -149,6 +151,7 @@ class RidesharingActivity(BaseActivity):
         # -- Asigurari auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_insurance",
+            is_auto_mixt=True,
             label="Asigurări auto (RCA, CASCO)",
             icon="🛡️",
             keywords=[
@@ -170,6 +173,7 @@ class RidesharingActivity(BaseActivity):
         # -- Spalatorie auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_wash",
+            is_auto_mixt=True,
             label="Spălătorie auto",
             icon="🧽",
             keywords=[
@@ -220,6 +224,7 @@ class RidesharingActivity(BaseActivity):
         # -- Materiale / Accesorii auto -- DEDUCTIBIL 50% --
         ExpenseCategory(
             code="car_supplies",
+            is_auto_mixt=True,
             label="Accesorii auto / Consumabile",
             icon="🔩",
             keywords=[

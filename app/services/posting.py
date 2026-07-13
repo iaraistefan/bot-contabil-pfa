@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 
 from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
+from app.repositories import vehicule as vehicule_repo
 from app.domain import tax_rules
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
@@ -111,6 +112,34 @@ def _can_deduct_vat(session: Session, user_id: int) -> bool:
     if not user:
         return False
     return user.regim_tva == "PLATITOR_21"
+
+
+def _resolve_auto_deductibility(session, user_id, category) -> int:
+    """
+    Deductibilitatea unei categorii de cheltuială, ținând cont de regimul de
+    utilizare al vehiculului pentru categoriile AUTO (art. 25 alin. (3) lit. l)).
+
+    - Categorie NON-auto (is_auto_mixt False) → procentul static al categoriei,
+      IDENTIC cu get_deductibility_pct (neatins).
+    - Categorie AUTO → citește vehiculul default + regim_utilizare.
+
+    ⚠️ ACUM întoarce procentul de bază (MIXT → 50) pentru TOATE categoriile auto,
+    identic cu comportamentul actual — helper IZOLAT, NEapelat încă din posting
+    (fluxul rămâne byte-identic). Structura e pregătită pentru felia care ACTIVEAZĂ
+    regimul (după confirmare CECCAR): EXCLUSIV → 100 (vezi TODO mai jos).
+    Fallback fără vehicul → procentul de bază (50 pt auto). None-safe.
+    """
+    base_pct = category.get_effective_deductibility()
+    if not getattr(category, "is_auto_mixt", False):
+        return base_pct
+
+    vehicul = vehicule_repo.get_default(session, user_id)
+    regim = (getattr(vehicul, "regim_utilizare", None) or "MIXT") if vehicul else "MIXT"
+    # TODO (pasul 5, DUPĂ CECCAR): if regim == "EXCLUSIV": return 100
+    #   (deductibilitate integrală pt vehicul folosit exclusiv business, justificat
+    #    prin foaie de parcurs). ACUM: toate rămân pe base_pct → zero schimbare.
+    _ = regim  # citit pt pregătirea structurii; neutilizat încă (intenționat)
+    return base_pct
 
 
 def _detect_expense_category(

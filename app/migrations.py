@@ -455,6 +455,18 @@ MIGRATIONS = [
             "UPDATE documents SET vat_id = 'EE102090374' WHERE vat_id = 'EE102094445'",
         ],
     },
+    {
+        "id": "022_vehicule_regim_utilizare",
+        "description": (
+            "Regim auto felia 1: adauga regim_utilizare pe vehicule (MIXT/EXCLUSIV) "
+            "pentru deductibilitatea auto configurabila. DEFAULT 'MIXT' pe toate "
+            "randurile existente + noi = comportamentul actual (50%). Aditiv, ZERO "
+            "schimbare de comportament (nimeni nu-l citeste inca). Idempotent."
+        ),
+        "sql": [
+            "ALTER TABLE vehicule ADD COLUMN IF NOT EXISTS regim_utilizare VARCHAR(20) NOT NULL DEFAULT 'MIXT'",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
