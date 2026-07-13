@@ -437,9 +437,10 @@ class FiscalProfile:
         if total_income_ron >= threshold:
             status = "DEPASIT_PLAFON"
             message = (
-                f"⚠️ ATENȚIE — ai depășit plafonul TVA "
+                f"⚠️ Ai depășit plafonul TVA "
                 f"({total_income_ron:.0f} / {threshold:.0f} RON). "
-                f"Trebuie să te înregistrezi ca plătitor TVA în 10 zile!"
+                f"De la depășire treci pe regim cu TVA — înregistrarea ca "
+                f"plătitor o depui până în 10 zile de la sfârșitul lunii."
             )
         elif utilized_pct >= 80:
             status = "APROAPE_PLAFON"
