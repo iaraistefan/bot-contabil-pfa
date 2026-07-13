@@ -53,6 +53,13 @@ class ExpenseCategory:
     deductibility: DeductibilityRule = DeductibilityRule.FULL
     deductibility_percent: int = 100  # Folosit dacă deductibility=CUSTOM
     deductibility_note: str = ""      # Explicație pentru user
+    # Cheltuială auto pe VEHICUL cu utilizare mixtă (art. 25 alin. (3) lit. l)):
+    # 50% când mașina e mixtă (personal+business), 100% dacă e exclusiv business
+    # justificat prin foaie de parcurs. Flag DESCRIPTIV — marchează categoriile a
+    # căror deductibilitate depinde de regimul de utilizare al vehiculului (NU
+    # telefonul, care e 50% din alt motiv). Momentan nimeni nu-l citește (pur
+    # aditiv); pregătește regimul auto configurabil MIXT/EXCLUSIV.
+    is_auto_mixt: bool = False
 
     # TVA
     default_vat_treatment: VATTreatment = VATTreatment.STANDARD_21

@@ -474,6 +474,12 @@ class Vehicul(Base):
     marca_model = Column(String(120), nullable=True)
     norma_consum = Column(Float, nullable=False, default=7.5)
     tip_detinere = Column(String(20), nullable=True)
+    # Regim de utilizare al vehiculului pt deductibilitate auto (art. 25 alin.
+    # (3) lit. l)): MIXT = personal+business → 50% · EXCLUSIV = doar business
+    # justificat prin foaie de parcurs → 100%. Default MIXT = comportamentul
+    # actual (toate mașinile 50%). ⚠️ Momentan NIMENI nu-l citește (pur aditiv);
+    # deductibilitatea rămâne 50% până la felia care activează regimul (după CECCAR).
+    regim_utilizare = Column(String(20), nullable=False, default="MIXT")
     km_curent = Column(Integer, nullable=True)
     activ = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
