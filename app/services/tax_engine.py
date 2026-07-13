@@ -19,7 +19,7 @@ from typing import Dict, Any, List, Type, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Transaction, User
+from app.models import Transaction, User, Vehicul
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
 
@@ -474,6 +474,12 @@ def _d212_fingerprint(session: Session, user_id: int, an: int):
     (count, max_id, sum(amount_brut)) pe tranzactiile (user, an, locked=False)
     — FILTRU IDENTIC cu compute_period. Orice add/delete/lock/edit-suma o schimba.
     (Nu exista update in-place pe tx in cod -> count/max_id/sum sunt suficiente.)
+
+    + 2 semnale de PROFIL/VEHICUL (User.updated_at + max(Vehicul.updated_at)):
+    orice modificare de regim/tip_detinere muta un `updated_at` (onupdate auto) ->
+    fingerprint nou -> recompute. Pregateste terenul pentru deductibilitate
+    configurabila (fara ele, o schimbare de regim ar lasa D212 stale). None-safe:
+    user fara vehicul -> veh_upd None -> 0.0.
     """
     cnt, max_id, total = (
         session.query(
@@ -488,7 +494,20 @@ def _d212_fingerprint(session: Session, user_id: int, an: int):
         )
         .one()
     )
-    return (int(cnt or 0), int(max_id or 0), round(float(total or 0.0), 2))
+    user_upd = (
+        session.query(User.updated_at)
+        .filter(User.id == user_id)
+        .scalar()
+    )
+    veh_upd = (
+        session.query(func.max(Vehicul.updated_at))
+        .filter(Vehicul.user_id == user_id)
+        .scalar()
+    )
+    user_ts = user_upd.timestamp() if user_upd else 0.0
+    veh_ts = veh_upd.timestamp() if veh_upd else 0.0
+    return (int(cnt or 0), int(max_id or 0), round(float(total or 0.0), 2),
+            user_ts, veh_ts)
 
 
 def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
