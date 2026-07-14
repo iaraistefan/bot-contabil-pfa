@@ -42,7 +42,11 @@ from app.repositories import vehicule as vehicule_repo
 from app.domain import tax_rules
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
-from app.models import User, Document
+from app.models import (
+    User, Document,
+    TIP_DETINERE_COMODAT, TIP_DETINERE_PROPRIETATE,
+    TIP_DETINERE_LEASING, TIP_DETINERE_INCHIRIERE,
+)
 
 # === NEW (Pas 8.4b) — VAT Engine ===
 from app.domain.vat_engine import (
@@ -123,11 +127,12 @@ def _resolve_auto_deductibility(session, user_id, category) -> int:
       IDENTIC cu get_deductibility_pct (neatins).
     - Categorie AUTO → citește vehiculul default + regim_utilizare.
 
-    Regim EXCLUSIV (felia 5A ACTIVĂ) → 100 pentru categoriile auto pure
+    Regim EXCLUSIV (felia 5A) → 100 pentru categoriile auto pure
     (fuel/car_service/car_wash/car_supplies). Categoriile cu depinde_tip_detinere
-    (RCA/CASCO) rămân pe base_pct — se aprind la 5B (comodat 0%). MIXT → base_pct
-    (50) mereu (default opt-in). Fallback fără vehicul → base_pct (50 pt auto).
-    None-safe.
+    (RCA/CASCO, felia 5B): COMODAT → 0 (nedeductibil); proprietate/leasing/
+    închiriere → regula de regim (EXCLUSIV 100 / MIXT 50); tip nedeclarat →
+    conservator base_pct (50). MIXT → base_pct (50) mereu (default opt-in).
+    Fallback fără vehicul → base_pct (50 pt auto). None-safe.
     """
     base_pct = category.get_effective_deductibility()
     if not getattr(category, "is_auto_mixt", False):
@@ -135,13 +140,26 @@ def _resolve_auto_deductibility(session, user_id, category) -> int:
 
     vehicul = vehicule_repo.get_default(session, user_id)
     regim = (getattr(vehicul, "regim_utilizare", None) or "MIXT") if vehicul else "MIXT"
-    # Felia 5A: vehicul folosit EXCLUSIV business → deductibilitate integrală 100%
-    # (justificat prin foaie de parcurs, art. 25 alin. (3) lit. l)). Se aplică celor
-    # 4 categorii auto pure (fuel/car_service/car_wash/car_supplies). Categoriile
-    # dependente de tipul de deținere (RCA/CASCO — depinde_tip_detinere) rămân pe
-    # base_pct: se aprind la 5B, cu logică separată pe comodat. MIXT → base_pct (50)
-    # mereu (default opt-in, neatins).
-    if regim == "EXCLUSIV" and not getattr(category, "depinde_tip_detinere", False):
+
+    # Felia 5B: categorii dependente de TIPUL DE DEȚINERE (RCA/CASCO —
+    # depinde_tip_detinere). Pe COMODAT (mașină personală) asigurarea e
+    # nedeductibilă (0%). Pe deținere DECLARATĂ non-comodat (proprietate/leasing/
+    # închiriere) cade pe aceeași regulă de regim ca celelalte auto. Tip nedeclarat
+    # (None/necunoscut) → conservator pe base_pct (50), NU 100. Case-insensitive:
+    # tip_detinere poate fi salvat lowercase (wizard web) sau UPPERCASE (bot).
+    if getattr(category, "depinde_tip_detinere", False):
+        tip = (getattr(vehicul, "tip_detinere", None) or "").upper() if vehicul else ""
+        if tip == TIP_DETINERE_COMODAT:
+            return 0
+        if tip not in (TIP_DETINERE_PROPRIETATE, TIP_DETINERE_LEASING,
+                       TIP_DETINERE_INCHIRIERE):
+            return base_pct  # None/nedeclarat → conservator (nu urcăm la 100)
+        # non-comodat DECLARAT → cade pe regula de regim de mai jos
+
+    # Felia 5A + 5B non-comodat: vehicul folosit EXCLUSIV business →
+    # deductibilitate integrală 100% (justificat prin foaie de parcurs,
+    # art. 25 alin. (3) lit. l)). MIXT → base_pct (50) mereu (default opt-in).
+    if regim == "EXCLUSIV":
         return 100
     return base_pct
 
