@@ -165,6 +165,9 @@ def classify_bt(txn: BankTxn, activity: Type) -> BankTxnClasificat:
     if direction == "OUT":
         cat, score = activity.detect_expense_category(None, _denoise(txn.descriere or ""))
         if cat is not None and score >= _SCORE_MIN:
+            # valoare statică indicativă; deductibilitatea autoritară se calculează
+            # la postare (regim-aware). Câmpul nu se afișează — vezi post_bank pt
+            # sumarul real.
             ded = activity.get_deductibility_pct(cat.code)
             return BankTxnClasificat(
                 txn, CHELTUIALA_BUSINESS, cat.label,

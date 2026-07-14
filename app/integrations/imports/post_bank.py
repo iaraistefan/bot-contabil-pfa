@@ -158,7 +158,16 @@ def post_bank_expenses(
                 f"(doc orfan evitat → rollback)"
             )
 
-        ded_pct = activity.get_deductibility_pct(cat)
+        # Sumarul „X lei deductibili" (format_result) trebuie să reflecte EXACT
+        # ce s-a scris în registru. Tx-ul a trecut prin _resolve_auto_deductibility
+        # (regim-aware: EXCLUSIV→100, comodat insurance→0); recalculăm la fel aici
+        # (oglindește pattern-ul din _post_cheltuiala 5A/5B). Fallback None → static.
+        cat_obj = activity.get_expense_category(cat)
+        ded_pct = (
+            posting._resolve_auto_deductibility(session, user_id, cat_obj)
+            if cat_obj is not None
+            else activity.get_deductibility_pct(cat)
+        )
         deductibil_sum += round(r.txn.suma * ded_pct / 100.0, 2)
         posted.append({
             "doc_id": doc.id,
