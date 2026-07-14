@@ -123,11 +123,11 @@ def _resolve_auto_deductibility(session, user_id, category) -> int:
       IDENTIC cu get_deductibility_pct (neatins).
     - Categorie AUTO → citește vehiculul default + regim_utilizare.
 
-    ⚠️ ACUM întoarce procentul de bază (MIXT → 50) pentru TOATE categoriile auto,
-    identic cu comportamentul actual — helper IZOLAT, NEapelat încă din posting
-    (fluxul rămâne byte-identic). Structura e pregătită pentru felia care ACTIVEAZĂ
-    regimul (după confirmare CECCAR): EXCLUSIV → 100 (vezi TODO mai jos).
-    Fallback fără vehicul → procentul de bază (50 pt auto). None-safe.
+    Regim EXCLUSIV (felia 5A ACTIVĂ) → 100 pentru categoriile auto pure
+    (fuel/car_service/car_wash/car_supplies). Categoriile cu depinde_tip_detinere
+    (RCA/CASCO) rămân pe base_pct — se aprind la 5B (comodat 0%). MIXT → base_pct
+    (50) mereu (default opt-in). Fallback fără vehicul → base_pct (50 pt auto).
+    None-safe.
     """
     base_pct = category.get_effective_deductibility()
     if not getattr(category, "is_auto_mixt", False):
@@ -135,10 +135,14 @@ def _resolve_auto_deductibility(session, user_id, category) -> int:
 
     vehicul = vehicule_repo.get_default(session, user_id)
     regim = (getattr(vehicul, "regim_utilizare", None) or "MIXT") if vehicul else "MIXT"
-    # TODO (pasul 5, DUPĂ CECCAR): if regim == "EXCLUSIV": return 100
-    #   (deductibilitate integrală pt vehicul folosit exclusiv business, justificat
-    #    prin foaie de parcurs). ACUM: toate rămân pe base_pct → zero schimbare.
-    _ = regim  # citit pt pregătirea structurii; neutilizat încă (intenționat)
+    # Felia 5A: vehicul folosit EXCLUSIV business → deductibilitate integrală 100%
+    # (justificat prin foaie de parcurs, art. 25 alin. (3) lit. l)). Se aplică celor
+    # 4 categorii auto pure (fuel/car_service/car_wash/car_supplies). Categoriile
+    # dependente de tipul de deținere (RCA/CASCO — depinde_tip_detinere) rămân pe
+    # base_pct: se aprind la 5B, cu logică separată pe comodat. MIXT → base_pct (50)
+    # mereu (default opt-in, neatins).
+    if regim == "EXCLUSIV" and not getattr(category, "depinde_tip_detinere", False):
+        return 100
     return base_pct
 
 

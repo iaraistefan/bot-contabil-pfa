@@ -152,6 +152,7 @@ class RidesharingActivity(BaseActivity):
         ExpenseCategory(
             code="car_insurance",
             is_auto_mixt=True,
+            depinde_tip_detinere=True,  # 5A sare peste — RCA/CASCO se aprinde la 5B (comodat 0%)
             label="Asigurări auto (RCA, CASCO)",
             icon="🛡️",
             keywords=[
