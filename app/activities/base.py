@@ -60,6 +60,13 @@ class ExpenseCategory:
     # telefonul, care e 50% din alt motiv). Momentan nimeni nu-l citește (pur
     # aditiv); pregătește regimul auto configurabil MIXT/EXCLUSIV.
     is_auto_mixt: bool = False
+    # Deductibilitatea acestei categorii auto depinde de TIPUL DE DEȚINERE al
+    # vehiculului (proprietate/leasing vs comodat), NU doar de regimul de
+    # utilizare. Marcat pe RCA/CASCO (car_insurance): pe comodat asigurarea e
+    # nedeductibilă (0%), pe proprietate 50-100% — logică separată (felia 5B).
+    # Aprinderea EXCLUSIV→100 din felia 5A SARE peste categoriile cu acest flag
+    # (rămân pe procentul de bază până la 5B).
+    depinde_tip_detinere: bool = False
 
     # TVA
     default_vat_treatment: VATTreatment = VATTreatment.STANDARD_21
