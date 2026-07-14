@@ -24,7 +24,7 @@ from app.integrations.imports.classify import (
 from app.integrations.imports import post_bank
 from app.integrations.imports.post_bank import post_bank_expenses
 from app.activities.ridesharing import RidesharingActivity as ACT
-from app.models import User, SourceFile, Document, Transaction
+from app.models import User, SourceFile, Document, Transaction, Vehicul
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extras_bt_anon.pdf"
 
@@ -198,5 +198,57 @@ def test_sumar_deductibil(tmp_path, monkeypatch):
     )
     s.commit()
     assert res["posted"] == 2
-    assert res["deductibil_sum"] == 200.0       # 200*0.5 + 100*1.0
+    assert res["deductibil_sum"] == 200.0       # 200*0.5 + 100*1.0 (fără vehicul → 50)
+    s.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# Sumar deductibil REGIM-AWARE — oglindește scrierea (5A/5B)
+# Vehicul REAL în DB (nu monkeypatch) → curge prin _resolve_auto_deductibility.
+# ──────────────────────────────────────────────────────────────
+def _add_vehicul(Session, uid, *, regim="MIXT", tip=None):
+    s = Session()
+    s.add(Vehicul(
+        user_id=uid, nr_inmatriculare="B-01-XYZ", activ=True,
+        regim_utilizare=regim, tip_detinere=tip,
+    ))
+    s.commit()
+    s.close()
+
+
+def test_sumar_deductibil_exclusiv_combustibil_100(tmp_path, monkeypatch):
+    # Vehicul EXCLUSIV → combustibilul scris e 100%; sumarul trebuie să reflecte 100
+    # (NU 50 static). 200 * 1.0 = 200.
+    Session, uid, sfid = _setup(tmp_path, monkeypatch)
+    _add_vehicul(Session, uid, regim="EXCLUSIV")
+    clasificate = [_cl(CHELTUIALA_BUSINESS, 200.0, "lukoil motorina")]
+    s = Session()
+    res = post_bank_expenses(
+        s, user_id=uid, source_file_id=sfid,
+        clasificate=clasificate, decisions=["fuel"],
+    )
+    s.commit()
+    assert res["posted"] == 1
+    assert res["deductibil_sum"] == 200.0       # 200 * 100% (regim-aware, nu 50)
+    # sumarul == ce s-a scris efectiv în registru
+    tx = s.query(Transaction).one()
+    assert tx.deductibility_pct == 100
+    s.close()
+
+
+def test_sumar_deductibil_comodat_insurance_0(tmp_path, monkeypatch):
+    # Vehicul comodat → RCA/CASCO scris 0%; sumarul trebuie să reflecte 0 (NU 50).
+    Session, uid, sfid = _setup(tmp_path, monkeypatch)
+    _add_vehicul(Session, uid, tip="COMODAT")
+    clasificate = [_cl(CHELTUIALA_BUSINESS, 300.0, "polita rca asigurare auto")]
+    s = Session()
+    res = post_bank_expenses(
+        s, user_id=uid, source_file_id=sfid,
+        clasificate=clasificate, decisions=["car_insurance"],
+    )
+    s.commit()
+    assert res["posted"] == 1
+    assert res["deductibil_sum"] == 0.0         # 300 * 0% (comodat, nedeductibil)
+    tx = s.query(Transaction).one()
+    assert tx.deductibility_pct == 0
     s.close()
