@@ -206,7 +206,10 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
             await update.callback_query.edit_message_text("⚠️ Nu găsesc mașina asta.")
             return
         nume = v.marca_model or "—"
-        tip = TIP_DETINERE_LABELS.get(v.tip_detinere or "", "—")
+        # tip_detinere vine UPPERCASE din bot (constante) sau lowercase din
+        # wizard-ul web (app.py) — normalizăm la citire.
+        tip_key = (v.tip_detinere or "").upper()
+        tip = TIP_DETINERE_LABELS.get(tip_key, "—")
         km = f"{v.km_curent:,} km".replace(",", ".") if v.km_curent else "—"
         text = (
             f"🚗 *{v.nr_inmatriculare}*\n"
@@ -217,7 +220,7 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
             f"🛣️ Kilometraj curent: *{km}*\n"
         )
         # Avertisment fiscal pentru comodat
-        if v.tip_detinere == TIP_DETINERE_COMODAT:
+        if tip_key == TIP_DETINERE_COMODAT:
             text += (
                 "\n💡 _Mașină în comodat: combustibilul e deductibil "
                 "pe baza foii de parcurs, dar RCA/CASCO nu sunt deductibile._"
