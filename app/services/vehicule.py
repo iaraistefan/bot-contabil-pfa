@@ -46,6 +46,8 @@ from app.models import (
     TIP_DETINERE_LABELS,
     TIP_DETINERE_PROPRIETATE, TIP_DETINERE_COMODAT,
     TIP_DETINERE_LEASING, TIP_DETINERE_INCHIRIERE,
+    REGIM_UTILIZARE_LABELS,
+    REGIM_UTILIZARE_MIXT, REGIM_UTILIZARE_EXCLUSIV,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,12 @@ TIP_ORDER = [
     TIP_DETINERE_PROPRIETATE,
     TIP_DETINERE_LEASING,
     TIP_DETINERE_INCHIRIERE,
+]
+
+# Ordinea regimurilor de utilizare in meniu
+REGIM_ORDER = [
+    REGIM_UTILIZARE_MIXT,
+    REGIM_UTILIZARE_EXCLUSIV,
 ]
 
 
@@ -210,6 +218,8 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
         # wizard-ul web (app.py) — normalizăm la citire.
         tip_key = (v.tip_detinere or "").upper()
         tip = TIP_DETINERE_LABELS.get(tip_key, "—")
+        regim_key = (v.regim_utilizare or REGIM_UTILIZARE_MIXT).upper()
+        regim_label = REGIM_UTILIZARE_LABELS.get(regim_key, "—")
         km = f"{v.km_curent:,} km".replace(",", ".") if v.km_curent else "—"
         text = (
             f"🚗 *{v.nr_inmatriculare}*\n"
@@ -217,8 +227,15 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
             f"🚙 Marca/model: *{nume}*\n"
             f"⛽ Normă consum: *{v.norma_consum:g} L/100km*\n"
             f"📋 Deținere: *{tip}*\n"
+            f"🎯 Utilizare: *{regim_label}*\n"
             f"🛣️ Kilometraj curent: *{km}*\n"
         )
+        # Explicație uz exclusiv (combustibil 100% + obligația foii de parcurs)
+        if regim_key == REGIM_UTILIZARE_EXCLUSIV:
+            text += (
+                "\n💡 _Uz exclusiv: combustibilul se deduce 100%. Ține foaia de "
+                "parcurs la zi — e dovada la control._"
+            )
         # Avertisment fiscal pentru comodat
         if tip_key == TIP_DETINERE_COMODAT:
             text += (
@@ -294,6 +311,7 @@ async def _start_edit_wizard(update, context, user_id, vehicul_id):
         [InlineKeyboardButton("🚙 Marcă / model", callback_data=f"vehicul|ef|{vehicul_id}|marca")],
         [InlineKeyboardButton("⛽ Normă consum", callback_data=f"vehicul|ef|{vehicul_id}|consum")],
         [InlineKeyboardButton("📋 Tip deținere", callback_data=f"vehicul|ef|{vehicul_id}|tip")],
+        [InlineKeyboardButton("🎯 Regim utilizare", callback_data=f"vehicul|ef|{vehicul_id}|regim")],
         [InlineKeyboardButton("⬅️ Înapoi", callback_data=f"vehicul|view|{vehicul_id}")],
     ])
     await update.callback_query.edit_message_text(
@@ -317,6 +335,13 @@ async def _edit_field(update, context, user_id, vehicul_id, field):
             "mode": "edit", "step": "consum", "vehicul_id": vehicul_id, "data": {},
         }
         await _ask_consum(update, context, edit=True)
+        return
+
+    if field == "regim":
+        context.user_data[_WIZARD_KEY] = {
+            "mode": "edit", "step": "regim", "vehicul_id": vehicul_id, "data": {},
+        }
+        await _ask_regim(update, context, edit=True)
         return
 
     # nr / marca -> input text
@@ -386,6 +411,51 @@ async def _ask_tip_detinere(update, context, edit=False):
             chat_id=update.effective_chat.id, text=text,
             parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(rows),
         )
+
+
+async def _ask_regim(update, context, edit=False):
+    """Afiseaza butoanele pentru regimul de utilizare (MIXT/EXCLUSIV)."""
+    rows = [
+        [InlineKeyboardButton(REGIM_UTILIZARE_LABELS[r], callback_data=f"vehicul|regim|{r}")]
+        for r in REGIM_ORDER
+    ]
+    rows.append([InlineKeyboardButton("❌ Anulează", callback_data="vehicul|cancel")])
+    text = (
+        "🎯 *Cum folosești mașina?*\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "Asta decide cât deduci din combustibil și service."
+    )
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(rows)
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id, text=text,
+            parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+async def _show_regim_gardian(update, context):
+    """Confirmare cu avertisment ÎNAINTE de a seta regimul EXCLUSIV (uz exclusiv)."""
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Da, doar pentru curse", callback_data="vehicul|regimok")],
+        [InlineKeyboardButton("🚗 Mai bine mixt",
+                              callback_data=f"vehicul|regim|{REGIM_UTILIZARE_MIXT}")],
+    ])
+    text = (
+        "🎯 *Doar pentru curse — uz exclusiv*\n"
+        "━━━━━━━━━━━━━━━\n\n"
+        "Combustibilul și service-ul se deduc *100%* (în loc de 50%).\n\n"
+        "Dar ANAF cere dovada că mașina nu e folosită deloc personal:\n"
+        "- ai altă mașină pentru nevoile tale? _(primul lucru verificat la control)_\n"
+        "- ții foaie de parcurs pe fiecare cursă?\n\n"
+        "Fără dovadă, ANAF reîncadrează la 50% și adaugă majorări de întârziere.\n\n"
+        "Pentru majoritatea șoferilor, *și personal* (50%) e alegerea sigură."
+    )
+    await update.callback_query.edit_message_text(
+        text, parse_mode="Markdown", reply_markup=markup
+    )
 
 
 # ============================================================
@@ -694,6 +764,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
         elif action == "tip":  # set tip detinere
             await _handle_tip(update, context, parts[2])
 
+        elif action == "regim":  # set regim utilizare (editare)
+            await _handle_regim(update, context, parts[2])
+
+        elif action == "regimok":  # confirmare gardian EXCLUSIV
+            await _handle_regim_confirm(update, context)
+
         elif action == "del":
             await _ask_delete(update, context, user_id, int(parts[2]))
 
@@ -742,3 +818,31 @@ async def _handle_tip(update, context, tip):
         await _finalize_add(update, context, wizard, tip)
     else:  # edit
         await _apply_edit(update, context, wizard, "tip_detinere", tip)
+
+
+async def _handle_regim(update, context, regim):
+    """Buton regim utilizare apasat (doar editare — nu e in wizard-ul de add)."""
+    wizard = context.user_data.get(_WIZARD_KEY)
+    if not wizard:
+        await update.callback_query.edit_message_text("⚠️ A trecut prea mult timp — începe din nou.")
+        return
+
+    if regim not in REGIM_UTILIZARE_LABELS:
+        await update.callback_query.edit_message_text("⚠️ Nu recunosc regimul ăsta.")
+        return
+
+    if regim == REGIM_UTILIZARE_EXCLUSIV:
+        # Uz exclusiv → gardian de confirmare ÎNAINTE de salvare (nu salvăm încă).
+        await _show_regim_gardian(update, context)
+    else:
+        # MIXT = calea sigură → salvăm direct.
+        await _apply_edit(update, context, wizard, "regim_utilizare", regim)
+
+
+async def _handle_regim_confirm(update, context):
+    """Confirmare gardian EXCLUSIV → salvează regimul uz exclusiv."""
+    wizard = context.user_data.get(_WIZARD_KEY)
+    if not wizard:
+        await update.callback_query.edit_message_text("⚠️ A trecut prea mult timp — începe din nou.")
+        return
+    await _apply_edit(update, context, wizard, "regim_utilizare", REGIM_UTILIZARE_EXCLUSIV)
