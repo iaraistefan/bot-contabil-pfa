@@ -460,6 +460,17 @@ TIP_DETINERE_LABELS = {
     TIP_DETINERE_INCHIRIERE: "Inchiriere",
 }
 
+# Regim de utilizare al vehiculului (deductibilitate auto — vezi Vehicul.regim_utilizare
+# + posting._resolve_auto_deductibility). ⚠️ Valorile trebuie EXACT "MIXT"/"EXCLUSIV"
+# (posting.py le compară literal).
+REGIM_UTILIZARE_MIXT = "MIXT"
+REGIM_UTILIZARE_EXCLUSIV = "EXCLUSIV"
+
+REGIM_UTILIZARE_LABELS = {
+    REGIM_UTILIZARE_MIXT: "🚗 Și personal, și pentru curse",
+    REGIM_UTILIZARE_EXCLUSIV: "🎯 Doar pentru curse",
+}
+
 
 class Vehicul(Base):
     """Pas A - Vehicul folosit in activitate."""

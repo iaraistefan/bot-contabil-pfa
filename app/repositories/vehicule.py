@@ -94,7 +94,7 @@ def update(session, vehicul: Vehicul, **fields) -> Vehicul:
     """Actualizeaza campurile permise ale unui vehicul."""
     allowed = {
         "nr_inmatriculare", "marca_model", "norma_consum",
-        "tip_detinere", "km_curent", "activ",
+        "tip_detinere", "regim_utilizare", "km_curent", "activ",
     }
     for key, value in fields.items():
         if key in allowed:

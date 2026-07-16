@@ -47,7 +47,9 @@ def _extract_callbacks():
 # Snapshot ÎNGHEȚAT (109 literali; +tvadecl = buton-poartă ecran TVA & Declarații;
 # +onb|nerezident = captare regim nerezident D100, fiscal #3 sub-pas E;
 # +onb|platforme = gate platforme Bolt/Uber, Uber sub-pas C;
-# +ghid|view / ghid|list / ghid|all = ghid de obligații navigabil + toggle personalizat/toate (Ghid 2+3)).
+# +ghid|view / ghid|list / ghid|all = ghid de obligații navigabil + toggle personalizat/toate (Ghid 2+3);
+# +vehicul|regim|{r} / regim|{REGIM_UTILIZARE_MIXT} / regimok / ef|regim = gardian UI regim utilizare
+#   (MIXT/EXCLUSIV) pe vehicul, editare + gardian confirmare uz exclusiv).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -85,7 +87,9 @@ EXPECTED_CALLBACKS = {
     "vehicul|add", "vehicul|cancel", "vehicul|delok|{vehicul_id}",
     "vehicul|del|{vehicul_id}", "vehicul|edit|{vehicul_id}",
     "vehicul|ef|{vehicul_id}|consum", "vehicul|ef|{vehicul_id}|marca",
-    "vehicul|ef|{vehicul_id}|nr", "vehicul|ef|{vehicul_id}|tip", "vehicul|menu",
+    "vehicul|ef|{vehicul_id}|nr", "vehicul|ef|{vehicul_id}|regim",
+    "vehicul|ef|{vehicul_id}|tip", "vehicul|menu",
+    "vehicul|regim|{r}", "vehicul|regim|{REGIM_UTILIZARE_MIXT}", "vehicul|regimok",
     "vehicul|setc|{c:g}", "vehicul|tip|{t}", "vehicul|view|{v.id}",
     "vehicul|view|{vehicul_id}",
     "{action}|back", "{action}|month|{year}|{month}", "{action}|year|{y}",
