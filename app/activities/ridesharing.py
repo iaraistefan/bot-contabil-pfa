@@ -71,8 +71,8 @@ class RidesharingActivity(BaseActivity):
             ],
             deductibility=DeductibilityRule.HALF,
             deductibility_note=(
-                "50% deductibil (auto mixt, art. 25 alin. (3) lit. l) Cod Fiscal). "
-                "Pentru deductibilitate 100% e nevoie de foaie de parcurs."
+                "50% dacă folosești mașina și personal, 100% dacă e doar pentru "
+                "curse — regimul îl setezi pe mașină."
             ),
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="6022",
