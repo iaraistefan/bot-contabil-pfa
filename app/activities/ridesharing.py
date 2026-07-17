@@ -119,8 +119,9 @@ class RidesharingActivity(BaseActivity):
             ],
             deductibility=DeductibilityRule.HALF,
             deductibility_note=(
-                "50% deductibil (auto mixt, art. 25 alin. (3) lit. l) Cod Fiscal). "
-                "Include: ulei, filtre, anvelope, reparații, ITP, consumabile auto."
+                "50% dacă folosești mașina și personal, 100% dacă e doar pentru "
+                "curse — regimul îl setezi pe mașină. Include: ulei, filtre, "
+                "anvelope, reparații, ITP, consumabile auto."
             ),
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="611",
@@ -166,7 +167,10 @@ class RidesharingActivity(BaseActivity):
                 "omniasig", "euroins",
             ],
             deductibility=DeductibilityRule.HALF,
-            deductibility_note="50% deductibil (auto mixt)",
+            deductibility_note=(
+                "Pe mașină în comodat: nedeductibil. Pe mașină proprie sau în "
+                "leasing: 50% (și personal) sau 100% (doar curse)."
+            ),
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="613",
         ),
@@ -182,7 +186,10 @@ class RidesharingActivity(BaseActivity):
                 "spalatorie", "spalat auto", "auto detail",
             ],
             deductibility=DeductibilityRule.HALF,
-            deductibility_note="50% deductibil (auto mixt)",
+            deductibility_note=(
+                "50% dacă folosești mașina și personal, 100% dacă e doar pentru "
+                "curse — regimul îl setezi pe mașină."
+            ),
             default_vat_treatment=VATTreatment.STANDARD_21,
             accounting_code="611",
         ),
