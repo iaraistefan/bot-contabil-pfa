@@ -15,10 +15,11 @@ pret derivat doar din bonurile CU litri → fals „depășit" când lipsesc lit
 unele bonuri (#5). Pretul se extrage din descrierea bonurilor; fără niciun litru
 -> verdict necunoscut + nudge „scrie litrii".
 
-NOTA fiscală (Cod fiscal art. 68, Norme pct. 7): pentru ridesharing, combustibilul
-aferent km business e 100% deductibil DACA e justificat prin foaie de parcurs
-(km + scop + normă); FĂRĂ foaie de parcurs, doar 50%. Acest modul arată cât mai
-poate încărca user-ul astfel încât totul să fie acoperit de foaia de parcurs.
+NOTA: acest modul face DOAR o verificare de PLAUZIBILITATE — compară litrii de pe
+bonuri cu consumul normat al km-ilor de business (câți litri ar consuma la normă).
+Bonuri cu mult mai mulți litri decât consumul normat = greu de justificat la control.
+NU calculează deductibilitatea: aceea (50% uz mixt / 100% uz exclusiv, după regimul
+setat pe mașină) se aplică pe bonurile reale în posting/_resolve_auto_deductibility.
 
 CHANGELOG:
   - v1 (Pas A+): Versiune initiala
@@ -257,8 +258,8 @@ def format_fuel_section(summary: dict) -> str:
         lines.append("")
         lines.append(
             "⚠️ _Nu ai km business înregistrați. Folosește foaia de "
-            "parcurs (`parcurs start/stop`) ca să poți justifica "
-            "deductibilitatea combustibilului._"
+            "parcurs (`parcurs start/stop`) ca să documentezi km-ii "
+            "pentru care ai făcut plinul._"
         )
         return "\n".join(lines)
 
@@ -273,7 +274,7 @@ def format_fuel_section(summary: dict) -> str:
     lines.append("")
     lines.append(f"🛣️ Km business (foaie): *{_fmt_litri(km)} km*")
     lines.append(
-        f"📊 Plafon deductibil: *{_fmt_litri(plafon_litri)} L* "
+        f"📊 Consum normat pentru ei: *{_fmt_litri(plafon_litri)} L* "
         f"(~{_fmt_lei(plafon_lei)} lei)"
     )
     lines.append(
@@ -286,18 +287,22 @@ def format_fuel_section(summary: dict) -> str:
     if depasit is None:
         # niciun litru pe bonuri → nu putem verifica plafonul (doar lei)
         lines.append(
-            "ℹ️ *Scrie litrii pe bonuri* ca să verificăm plafonul "
+            "ℹ️ *Scrie litrii pe bonuri* ca să putem compara "
             "(deocamdată avem doar suma în lei)."
         )
     elif depasit:
         lines.append(
-            f"⚠️ *Ai depășit plafonul cu ~{_fmt_litri(total_litri - plafon_litri)} L*\n"
-            f"_Litrii peste consumul normat nu sunt acoperiți de foaia de parcurs._"
+            f"⚠️ *Ai depășit consumul normat cu ~{_fmt_litri(total_litri - plafon_litri)} L*\n"
+            f"_Bonurile arată mai mulți litri decât consumă km-ii din foaia ta. "
+            f"La control, diferența e greu de justificat._"
         )
     elif mai_poti_litri >= 0.5:
-        lines.append(f"✅ *Mai poți deduce: ~{_fmt_litri(mai_poti_litri)} L*")
+        lines.append(
+            f"✅ *Bonurile se încadrează* — mai ai "
+            f"~{_fmt_litri(mai_poti_litri)} L până la consumul normat."
+        )
     else:
-        lines.append("🎯 *Ești exact la plafon.*")
+        lines.append("🎯 *Bonurile se potrivesc exact cu consumul normat.*")
 
     # Caveat: bonuri fără litri → verdictul acoperă doar litrii verificați
     if depasit is not None and bonuri_fara_litri > 0:

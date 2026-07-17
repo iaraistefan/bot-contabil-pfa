@@ -1833,7 +1833,7 @@
           <div class="row"><div class="info"><div class="t">${escHtml(v.marca_model||"Vehicul")}</div><div class="m">${escHtml(v.nr_inmatriculare||"—")}</div></div></div>
           <div class="row"><div class="info"><div class="t">Normă consum</div><div class="m">${escHtml(v.norma_consum||"7,5")} L / 100 km</div></div></div>
           <div class="row"><div class="info"><div class="t">Consum teoretic</div><div class="m">${KM(pc.km_business)} km × normă</div></div><div class="amt neu num">${f.plafon_litri?KM(f.plafon_litri)+" L":"—"}</div></div>
-          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${f.depasit===true?'neg':f.depasit===false?'pos':'neu'} num">${f.depasit===true?'peste plafon':f.depasit===false?'în normă':'scrie litrii'}</div></div>`;
+          <div class="row"><div class="info"><div class="t">Combustibil pe bonuri</div><div class="m">${f.nr_bonuri||0} bonuri · ${RON(f.total_bonuri_lei||0)} RON</div></div><div class="amt ${f.depasit===true?'neg':f.depasit===false?'pos':'neu'} num">${f.depasit===true?'peste consumul normat':f.depasit===false?'în normă':'scrie litrii'}</div></div>`;
       }
     }catch(e){console.error(e);}
   }
