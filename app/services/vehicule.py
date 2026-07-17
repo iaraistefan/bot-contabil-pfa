@@ -239,8 +239,9 @@ async def _show_vehicul_detail(update, context, user_id, vehicul_id):
         # Avertisment fiscal pentru comodat
         if tip_key == TIP_DETINERE_COMODAT:
             text += (
-                "\n💡 _Mașină în comodat: combustibilul e deductibil "
-                "pe baza foii de parcurs, dar RCA/CASCO nu sunt deductibile._"
+                "\n💡 _Mașină în comodat: RCA/CASCO nu sunt deductibile. "
+                "Combustibilul se deduce normal — 50% sau 100%, după regimul "
+                "de utilizare._"
             )
     finally:
         session.close()
