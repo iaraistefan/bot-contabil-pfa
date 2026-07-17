@@ -28,10 +28,6 @@ LUNI_LONG = {
     9: "Septembrie", 10: "Octombrie", 11: "Noiembrie", 12: "Decembrie",
 }
 
-# Pret de referinta motorina (RON/litru) - estimativ, se poate ajusta.
-# Folosit doar pentru estimarea valorii; litrii normati sunt valoarea certa.
-PRET_MOTORINA_REFERINTA = 7.5
-
 # --- Stiluri ---
 _FONT_TITLU = Font(name="Calibri", size=15, bold=True, color="1F4E78")
 _FONT_SUBTITLU = Font(name="Calibri", size=11, bold=True, color="404040")
@@ -60,37 +56,30 @@ _RIGHT = Alignment(horizontal="right", vertical="center")
 # ============================================================
 
 def calcul_deductibilitate_combustibil(km_business: float,
-                                       norma_consum: float,
-                                       pret_litru: float = None) -> dict:
+                                       norma_consum: float) -> dict:
     """
-    Calculeaza combustibilul aferent activitatii pe baza foii de parcurs.
+    Calculeaza combustibilul normat aferent km-ilor de business din foaia de
+    parcurs (metoda consumului normat):
 
-    Metoda consumului normat (recunoscuta fiscal):
       litri_normati = km_business x norma_consum / 100
-      valoare       = litri_normati x pret_litru
 
-    Pentru activitatile exceptate de la plafonul de 50% (ridesharing,
-    taxi, curierat), aceasta valoare e integral deductibila.
+    Acesta e DOVADA consumului aferent activitatii (cati litri ar consuma
+    km-ii de business), NU o valoare deductibila. Deductibilitatea (50% uz
+    mixt / 100% uz exclusiv, dupa regimul setat pe masina) se aplica pe
+    bonurile fiscale REALE, nu pe litrii normati.
 
     Args:
         km_business  : km parcursi in interes business (din foaia parcurs)
         norma_consum : L/100km
-        pret_litru   : RON/litru (default: pretul de referinta)
 
     Returns dict cu detaliul calculului.
     """
-    if pret_litru is None:
-        pret_litru = PRET_MOTORINA_REFERINTA
-
     litri_normati = round(km_business * norma_consum / 100.0, 2)
-    valoare = round(litri_normati * pret_litru, 2)
 
     return {
         "km_business": km_business,
         "norma_consum": norma_consum,
         "litri_normati": litri_normati,
-        "pret_litru": pret_litru,
-        "valoare_deductibila": valoare,
     }
 
 
@@ -151,8 +140,7 @@ def _build_rows(trips: list) -> list:
 
 def generate_foaie_parcurs_xlsx(trips: list, year: int, month: int,
                                 vehicul, pfa_name: str = "PFA",
-                                pfa_cui: str = "",
-                                pret_litru: float = None) -> bytes:
+                                pfa_cui: str = "") -> bytes:
     """
     Genereaza foaia de parcurs lunara in format Excel.
 
@@ -162,7 +150,6 @@ def generate_foaie_parcurs_xlsx(trips: list, year: int, month: int,
         vehicul    : obiectul Vehicul (poate fi None)
         pfa_name   : numele PFA/firmei
         pfa_cui    : CUI
-        pret_litru : pret motorina pentru estimarea valorii
 
     Returns: continutul fisierului .xlsx ca bytes.
     """
@@ -301,7 +288,7 @@ def generate_foaie_parcurs_xlsx(trips: list, year: int, month: int,
     r += 1
 
     # --- BLOC CONSUM & DEDUCTIBILITATE ---
-    ded = calcul_deductibilitate_combustibil(total_business, norma, pret_litru)
+    ded = calcul_deductibilitate_combustibil(total_business, norma)
 
     ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=LAST_COL)
     cell = ws.cell(row=r, column=1,
@@ -327,10 +314,6 @@ def generate_foaie_parcurs_xlsx(trips: list, year: int, month: int,
     _consum_row("Norma de consum", f"{norma:g} L / 100 km")
     _consum_row("Combustibil normat (litri aferenti activitatii)",
                 f"{ded['litri_normati']:g} litri", bold=True)
-    _consum_row(f"Pret mediu motorina (estimativ {ded['pret_litru']:g} RON/L)",
-                f"{ded['pret_litru']:g} RON/L")
-    _consum_row("Valoare combustibil aferenta activitatii (estimativ)",
-                f"{ded['valoare_deductibila']:.2f} RON", bold=True)
     r += 1
 
     # --- NOTA ---
@@ -338,12 +321,13 @@ def generate_foaie_parcurs_xlsx(trips: list, year: int, month: int,
     nota = ws.cell(
         row=r, column=1,
         value=(
-            "Nota: Activitatea de transport persoane (ridesharing) este "
-            "exceptata de la plafonul de 50% pentru cheltuielile auto. "
-            "Combustibilul aferent km business documentati prin aceasta "
-            "foaie de parcurs este deductibil. Valoarea in RON este "
-            "estimativa - se confrunta cu bonurile fiscale reale. "
-            "Confirmati aplicarea cu contabilul."
+            "Nota: Aceasta foaie documenteaza kilometrii parcursi in interes "
+            "business si consumul normat aferent lor. Deductibilitatea "
+            "combustibilului se aplica pe bonurile fiscale reale: 50% daca "
+            "folosesti masina si personal, 100% daca o folosesti doar pentru "
+            "curse (regimul setat pe masina). Pentru 100%, ANAF cere dovada ca "
+            "masina nu e folosita deloc personal - aceasta foaie de parcurs "
+            "este acea dovada. Confirmati aplicarea cu contabilul."
         ),
     )
     nota.font = Font(name="Calibri", size=8, italic=True, color="808080")
