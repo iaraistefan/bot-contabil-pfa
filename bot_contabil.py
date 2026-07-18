@@ -409,10 +409,13 @@ def _persist_all_items(session, *, items, user_id, source_file_id,
     return results
 
 
-def _build_confirm_message(results, activity) -> str:
+def _build_confirm_message(results, activity, session=None, user_id=None) -> str:
     """
     Construiește mesajul „✅ Salvat" din (item, doc_id, tx_ids) — DUPĂ commit.
-    Doar formatare (zero I/O): un eșec aici nu poate pierde date deja salvate.
+    Doar formatare (o singură citire read-only a vehiculului default prin
+    _resolve_expense_meta, când `session`+`user_id` sunt date, ca procentul afișat
+    să fie regim-aware = ce s-a scris). Apelantul deschide o sesiune scurtă și
+    prinde eșecul → un eșec aici nu poate pierde date deja salvate.
     """
     msg_confirm = "✅ *Gata, am salvat:*\n"
     for item, doc_id, tx_ids in results:
@@ -438,7 +441,8 @@ def _build_confirm_message(results, activity) -> str:
             )
         elif tip == DocType.CHELTUIALA:
             cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(
-                activity, item.platforma, item.detalii
+                activity, item.platforma, item.detalii,
+                session=session, user_id=user_id,
             )
             ded_amount = round(item.brut * ded_pct / 100.0, 2)
 
@@ -481,8 +485,15 @@ def _tx_count_label(n: int) -> str:
     return "1 tranzacție" if n == 1 else f"{n} tranzacții"
 
 
-def _resolve_expense_meta(activity, platforma, detalii):
-    """Returneaza (icon, label, deductibility_pct, note) pentru o cheltuiala."""
+def _resolve_expense_meta(activity, platforma, detalii, session=None, user_id=None):
+    """Returneaza (icon, label, deductibility_pct, note) pentru o cheltuiala.
+
+    Cu `session` + `user_id` procentul e REGIM-AWARE (afișaj == scriere): trece
+    prin posting._resolve_auto_deductibility (EXCLUSIV→100, comodat insurance→0),
+    IDENTIC cu ce postează _post_cheltuiala. Fără ele → procentul static al
+    categoriei (fallback backward-compat, None-safe). Non-auto → byte-identic în
+    ambele căi.
+    """
     default_icon = "🛒"
     default_label = "Cheltuială"
     default_pct = 100
@@ -495,6 +506,11 @@ def _resolve_expense_meta(activity, platforma, detalii):
     if not text:
         return default_icon, default_label, default_pct, default_note
 
+    def _pct(cat):
+        if session is not None and user_id is not None:
+            return posting._resolve_auto_deductibility(session, user_id, cat)
+        return cat.get_effective_deductibility()
+
     for cat in activity.expense_categories:
         if not cat.keywords:
             continue
@@ -502,7 +518,7 @@ def _resolve_expense_meta(activity, platforma, detalii):
             return (
                 cat.icon or default_icon,
                 cat.label or default_label,
-                cat.get_effective_deductibility(),
+                _pct(cat),
                 cat.deductibility_note or "",
             )
 
@@ -511,7 +527,7 @@ def _resolve_expense_meta(activity, platforma, detalii):
         return (
             other.icon or default_icon,
             other.label or default_label,
-            other.get_effective_deductibility(),
+            _pct(other),
             other.deductibility_note or "",
         )
 
@@ -2477,7 +2493,23 @@ async def execute_confirmed_save(update, context, user_id):
     # === Commit reușit → efecte DOAR acum. Un eșec de MESAJ ≠ pierdere de date
     # (datele sunt deja comise), deci nu raportăm fals „n-am salvat". ===
     confirmare.clear_pending(context)
-    msg = _build_confirm_message(results, activity)
+    # Mesajul afișează procentul deductibil REGIM-AWARE = ce s-a scris efectiv
+    # (EXCLUSIV→100, comodat insurance→0). Sesiunea atomică e deja închisă →
+    # deschidem una scurtă, DOAR-citire, pentru lookup-ul vehiculului. Orice eșec
+    # aici NU pierde date (deja comise) → cădem pe procentul static.
+    msg_session = get_session()
+    try:
+        msg = _build_confirm_message(
+            results, activity, session=msg_session, user_id=user_id
+        )
+    except Exception:
+        logger.exception(
+            "execute_confirmed_save: mesaj regim-aware eșuat → fallback static "
+            "(datele SUNT salvate)"
+        )
+        msg = _build_confirm_message(results, activity)
+    finally:
+        msg_session.close()
     # Delight prima-dată: nota o SINGURĂ dată la sfârșit, doar dacă batch-ul
     # conține efectiv o cheltuială și e prima a userului (coloana 3).
     if is_first_expense and any(
