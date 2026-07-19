@@ -22,6 +22,7 @@ DESIGN:
 """
 
 import logging
+import re
 from datetime import datetime, date
 from typing import Optional, List, Dict
 
@@ -44,7 +45,9 @@ from app.domain.compliance_guardian import (
     format_compliance_status_telegram,
     ValidationVerdict,
 )
-from app.integrations.anaf_iban_db import get_iban_for_obligation
+from app.integrations.anaf_iban_db import (
+    get_iban_for_obligation, get_cont_unic_pf_for_cnp, TipObligatie,
+)
 from app.services import banner_send  # Faza UI - banner Plată (cale-comandă)
 from app.services import tax_engine   # sub-pas D: D100 plan (sursă unică suma/status)
 from app.ro_dates import luna_ro  # Faza UI - luni RO
@@ -423,7 +426,25 @@ def build_payment_detail_message(
         lines.append("")
 
     # IBAN + cod buget
-    if obligatie.iban_cont:
+    # N1: contul unic 5504 (D212) e derivat din CNP-ul fiecărui contribuabil — NU se
+    # poate hardcoda, deci înregistrarea are un template ne-tipăribil
+    # (RO__TREZ____55.04_<CNP>__XXX). Îl detectăm pe TIP (D212_CONT_UNIC_PF) — asta
+    # prinde ȘI ramura non-BN unde iban_cont e None — plus un gardian de FORMAT (orice
+    # IBAN ne-[A-Z0-9], pt viitoare template-uri). În loc de un IBAN fals → îndrumarea
+    # curată spre SPV/ghișeul.ro (get_cont_unic_pf_for_cnp). IBAN-urile reale
+    # (D301/D300/D100 — [A-Z0-9]) se printează NORMAL, ca înainte.
+    iban = obligatie.iban_cont.iban if obligatie.iban_cont else None
+    iban_tiparibil = bool(iban and re.fullmatch(r"[A-Z0-9]+", iban))
+    e_cont_unic = definitie.tip_iban == TipObligatie.D212_CONT_UNIC_PF
+    iban_afisat = False
+
+    if e_cont_unic or (iban and not iban_tiparibil):
+        cod_buget = obligatie.iban_cont.cod_buget if obligatie.iban_cont else "55.04"
+        lines.append(f"🏦 *Cont plată:*")
+        lines.append(get_cont_unic_pf_for_cnp(ctx.get('cnp'), ctx.get('judet')))
+        lines.append(f"  📋 Cod buget: `{cod_buget}`")
+        lines.append("")
+    elif obligatie.iban_cont:
         lines.append(f"🏦 *IBAN PLATĂ:*")
         lines.append(f"`{obligatie.iban_cont.iban}`")
         lines.append(f"  📋 Cod buget: `{obligatie.iban_cont.cod_buget}`")
@@ -439,6 +460,7 @@ def build_payment_detail_message(
             lines.append(f"  🆔 Identificare: *CNP* `{cnp_masked}`")
         if ctx.get('firma_nume'):
             lines.append(f"  👤 Beneficiar: _{ctx['firma_nume']}_")
+        iban_afisat = True
         lines.append("")
     elif obligation_code in ("D207", "D390", "D700"):
         lines.append(f"📝 *NU se plătește* — doar declarație")
@@ -478,7 +500,11 @@ def build_payment_detail_message(
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("📋 _Copiază IBAN-ul în aplicația bancară._")
+    # „Copiază IBAN-ul" DOAR când chiar am afișat un IBAN tipăribil. Pentru contul unic
+    # (mesaj SPV) / obligațiile fără plată nu există ce copia — mesajul SPV poartă deja
+    # îndrumarea spre ghișeul.ro/Trezorerie.
+    if iban_afisat:
+        lines.append("📋 _Copiază IBAN-ul în aplicația bancară._")
     lines.append("_⚠️ Verifică cu contabilul înainte de plată._")
 
     return "\n".join(lines)
