@@ -68,22 +68,25 @@ def test_confirm_fuel_exclusiv_arata_100(tmp_path):
     assert "(50% din" not in msg    # NU procentul static
 
 
-# ── COMODAT + asigurare → linia „Nu se deduce (0%)" (nu 50 static) ───
+# ── COMODAT + „Asigurare" → linia „Nu se deduce (0%)" (regresie N2) ──
 def test_confirm_insurance_comodat_arata_0(tmp_path):
+    # ⚠️ REGRESIE N2: cuvântul „Asigurare" conține substring-ul „rar" (keyword
+    # `registration`, listat înaintea `car_insurance`). Cu matcher-ul substring naiv
+    # afișajul arăta registration 100%; scoring-ul (ca la scriere) alege corect
+    # car_insurance → pe COMODAT „Nu se deduce (0%)".
     Session, uid = _setup(tmp_path)
     _add_vehicul(Session, uid, tip="COMODAT")
     s = Session()
-    # NB: platforma fără "asigurare" — substring-ul „rar" din „asigu-rar-e" ar
-    # match-ui întâi „registration" în _resolve_expense_meta (matcher naiv). „rca"
-    # e keyword car_insurance neambiguu.
     msg = bot._build_confirm_message(
-        _chelt("City", "rca casco polita", brut=300.0),
+        _chelt("Asigurare auto", "RCA", brut=300.0),
         ACT, session=s, user_id=uid,
     )
     s.close()
     assert "Nu se deduce (0%)" in msg
     assert "(50% din" not in msg
     assert "(100%)" not in msg
+    assert "🛡️" in msg                # icon car_insurance (NU 📋 registration)
+    assert "📋" not in msg
 
 
 # ── Fără vehicul + combustibil → linia 50% (neschimbat) ──────────────
@@ -107,3 +110,18 @@ def test_confirm_fara_session_ramane_static(tmp_path):
     msg = bot._build_confirm_message(_chelt("Lukoil", "motorina"), ACT)
     assert "(50% din" in msg
     assert "(100%)" not in msg
+
+
+# ── Coliziune cosmetică N2: „filtru combustibil" → car_service, NU fuel ─
+def test_confirm_filtru_combustibil_e_car_service_nu_fuel(tmp_path):
+    # „filtru combustibil" conține substring-ul „combustibil" (keyword fuel, listat
+    # primul) → matcher-ul naiv arăta fuel ⛽; scoring-ul preferă keyword-ul COMPUS
+    # „filtru combustibil" (car_service) → icon 🔧, ca la scriere.
+    Session, uid = _setup(tmp_path)
+    s = Session()
+    msg = bot._build_confirm_message(
+        _chelt("Auto Service", "filtru combustibil"), ACT, session=s, user_id=uid
+    )
+    s.close()
+    assert "🔧" in msg                 # icon car_service
+    assert "⛽" not in msg             # NU fuel

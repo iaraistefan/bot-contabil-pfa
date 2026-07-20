@@ -488,6 +488,9 @@ def _tx_count_label(n: int) -> str:
 def _resolve_expense_meta(activity, platforma, detalii, session=None, user_id=None):
     """Returneaza (icon, label, deductibility_pct, note) pentru o cheltuiala.
 
+    CATEGORIA e detectată cu ACELAȘI scoring semantic ca scrierea
+    (activity.detect_expense_category) → categoria afișată == categoria scrisă.
+
     Cu `session` + `user_id` procentul e REGIM-AWARE (afișaj == scriere): trece
     prin posting._resolve_auto_deductibility (EXCLUSIV→100, comodat insurance→0),
     IDENTIC cu ce postează _post_cheltuiala. Fără ele → procentul static al
@@ -511,16 +514,19 @@ def _resolve_expense_meta(activity, platforma, detalii, session=None, user_id=No
             return posting._resolve_auto_deductibility(session, user_id, cat)
         return cat.get_effective_deductibility()
 
-    for cat in activity.expense_categories:
-        if not cat.keywords:
-            continue
-        if any(kw.lower() in text for kw in cat.keywords):
-            return (
-                cat.icon or default_icon,
-                cat.label or default_label,
-                _pct(cat),
-                cat.deductibility_note or "",
-            )
+    # N2: detectăm categoria cu ACELAȘI scoring semantic ca SCRIEREA
+    # (posting._detect_expense_category → activity.detect_expense_category) → afișaj ==
+    # registru. Substring-ul naiv first-match de dinainte punea „Asigurare" pe
+    # `registration` (100%) fiindcă „rar" e substring în „asigu-rar-e", deși se scria
+    # `car_insurance` (50%/0%). Scoring-ul preferă keyword-ul întreg/compus → corect.
+    cat, _score = activity.detect_expense_category(platforma, detalii)
+    if cat is not None:
+        return (
+            cat.icon or default_icon,
+            cat.label or default_label,
+            _pct(cat),
+            cat.deductibility_note or "",
+        )
 
     other = activity.get_expense_category("other_expense")
     if other:
