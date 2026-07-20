@@ -278,14 +278,13 @@ def _build_month_picker_plata(
 def _build_payment_detail_buttons(
     obligation_code: str, year: int, month: int
 ) -> InlineKeyboardMarkup:
-    """Butoane pentru mesajul de detaliu plată."""
+    """Butoane pentru mesajul de detaliu plată.
+
+    NB: butonul „✅ Marchează plătit" e ASCUNS până la Pas 12 (SPV Integration) —
+    handlerul nu persista nimic (promisiune falsă). Fundația `ObligationPayment`
+    (model + repo) există și îl va alimenta când se face wire-up-ul real.
+    """
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "✅ Marchează plătit",
-                callback_data=f"plata|paid|{obligation_code}|{year}|{month}"
-            ),
-        ],
         [
             InlineKeyboardButton("⬅️ Înapoi", callback_data="plata|back"),
             InlineKeyboardButton("❌ Închide", callback_data="nav|close"),
@@ -626,7 +625,6 @@ async def handle_callback(
     Formate callback_data:
       plata|obl|<COD>            → user a ales tipul obligației
       plata|period|<COD>|<Y>|<M> → user a ales luna
-      plata|paid|<COD>|<Y>|<M>   → marchează ca plătit
       plata|back                 → înapoi la lista de obligații
       plata|status               → compliance status complet
     """
@@ -747,20 +745,9 @@ async def handle_callback(
             )
             return
 
-        if action == "paid":
-            # Pentru viitor: salvăm în DB statusul "plătit"
-            # Acum doar confirmăm
-            obligation_code = parts[2]
-            year = int(parts[3])
-            month = int(parts[4])
-            await query.edit_message_text(
-                f"✅ *Marcat ca plătit*\n\n"
-                f"{obligation_code} pentru {LUNI_LONG.get(month, month)} {year}.\n\n"
-                f"_Notă: această funcție va fi extinsă în Pas 12 (SPV "
-                f"Integration) pentru verificare automată._",
-                parse_mode="Markdown",
-            )
-            return
+        # NB: acțiunea „paid" (buton „Marchează plătit") a fost ELIMINATĂ până la
+        # Pas 12 (SPV Integration) — nu persista nimic. Fundația `ObligationPayment`
+        # o va alimenta la wire-up-ul real.
 
         if action == "status":
             today = date.today()
