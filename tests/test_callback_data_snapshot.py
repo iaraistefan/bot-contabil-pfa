@@ -77,7 +77,7 @@ EXPECTED_CALLBACKS = {
     "parcurs|jurnal|{year}|{month}", "parcurs|jurnal|{y}|{m}", "parcurs|luni",
     "parcurs|status", "parcurs|wiz_cancel", "parcurs|wiz_start", "parcurs|wiz_stop",
     "plata|back", "plata|obl|{cod}",
-    "plata|paid|{obligation_code}|{year}|{month}",
+    # −plata|paid: buton „Marchează plătit" ascuns până Pas 12 (SPV) — nu persista nimic.
     "plata|period|{obligation_code}|{year}|{month}", "plata|status",
     "registru|type|annual", "registru|type|monthly",
     "reminder|advance", "reminder|hour", "reminder|menu", "reminder|set_advance|{d}",
