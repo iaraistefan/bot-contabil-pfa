@@ -61,14 +61,27 @@
 - ⬜ Verificare: pentru un șofer NEplătitor TVA cu comision Bolt/Uber (achiziție intracom serviciu), ce set exact e obligatoriu? (cod art. 317, D390, D301, D100)
 - **Research necesar:** setul complet + termene, per profil (plătitor/neplătitor TVA)
 
-### 1.2 Depunere automată în SPV ❓ DECIZIE DE BUSINESS
-- **3 modele (din research):**
-  - Model A (împuternicit): certificatul calificat Coniar + procură notarială/client. Depunem în numele lor. E modelul SOLO. Răspundere legală reală + graniță CECCAR/CCF.
-  - Model C (confirmare-user): pregătim tot, userul confirmă cu un click în SPV-ul lui. Zero răspundere, automatizare mai slabă.
-  - Model B (certificat propriu user): userul își conectează certificatul. Fallback power-user.
-- **Recomandare Claude:** A ca flagship + C ca fallback (ce face SOLO).
-- ❓ DECIZIE STEFAN: îți asumi modelul împuternicit (răspundere + "greșim, plătim amenda")?
-- **Research necesar (URMĂTORUL, adânc):** legalitate împuternicit la scară, graniță CECCAR/CCF, cum face SOLO exact, răspundere, ce se automatizează 100% vs per-user
+### 1.2 Depunere automată în SPV — DECIS: traseu D→A (mapat pe tiere)
+
+**CERT (triangulat 4 surse: Claude + Kimi + Gemini + Perplexity, iulie 2026):**
+- ✅ Modelul împuternicit e LEGAL (art. 18 Cod procedură fiscală) și FĂRĂ limită de clienți per certificat (Ordinul ANAF 2213/2025: "titularul unui certificat calificat poate fi împuternicit ... de către mai mulți contribuabili")
+- ✅ NU există API ANAF pentru depunere declarații (doar e-Factura/e-Transport au API)
+- ✅ DAR depunerea se automatizează server-side: DUKIntegrator (validare+semnare) + upload mTLS pe e-guvernare + poll recipisă. SAGA/Nexus/iSpv o fac deja comercial
+- ✅ Răspunderea fiscală rămâne la PFA (art. 18); "plătim amenda" = clauză contractuală de despăgubire, NU transfer de răspundere
+- ✅ Granița CECCAR = riscul principal (art. 348 Cod penal)
+
+**3 DESCOPERIRI cheie:**
+- 🔑 A. Procura notarială NU mai e obligatorie pt ANAF — OPANAF 2213/2025 acceptă înscris sub semnătură privată semnat electronic → onboarding 100% DIGITAL (SOLO ține notarial doar fiindcă face și ONRC)
+- 🔑 B. D212 se depune din SPV-PF cu USER/PAROLĂ, fără certificat calificat → "pregătim tot, tu apeși Upload" = aproape 1-click, ZERO expunere CECCAR, ZERO împuterniciri
+- 🔑 C. Art. 12(1) OG 65/1994: expert contabil ANGAJAT nu poate presta pt clienții angajatorului → nu "angajăm contabil", ci firmă CECCAR PARTENERĂ separată
+
+**DECIZIE — traseu în 2 faze, mapat pe tiere:**
+- FAZA 1 (lansare acum, risc ZERO): generăm tot, userul apasă upload în SPV-ul lui (user/parolă, fără certificat). Zero F150, zero CECCAR, TTM imediat. → tiere 40-80 RON "pregătim, tu depui" (model D/C)
+- FAZA 2 (premium, după venituri): împuternicit full-service + firmă CECCAR parteneră + poliță E&O + avocat. → tier 100-130 RON "depunem noi" (model A)
+
+**⚠️ De validat cu avocat înainte de Faza 2:** granița exactă CECCAR/CCF (2 surse zic parteneriat obligatoriu, 1 zice model SOLO suficient; SOLO NU e la CECCAR, operează CAEN 6210 — interpretare curajoasă, nu blindată). LECȚIE SOLO: consimțământ explicit documentat PER document, nu semnătură aplicată mecanic (SOLO a avut scandal public cu asta).
+
+**Research necesar (la construcție Faza 2):** procedura DUKIntegrator + upload e-guvernare exact; structura firmă CECCAR parteneră.
 
 ### 1.3 e-Factura (ingestie comisioane, nu emitere în masă)
 - Rol pentru șofer: ingerează facturile de comision Bolt/Uber + gestionează TVA intracom (NU emite facturi pasageri — platforma o face, OUG 49/2019)
@@ -149,7 +162,7 @@
 
 ## §4. JURNAL (cronologic — pentru continuitate la repornire)
 
-- **2026-07 (iulie):** Faza fiscală COMPLETĂ (regim auto D212 + audit general 3 treceri + reparații pre-lansare N1 IBAN/N2 categorie/N3 buton, PR #88-104, 818 verde). Stefan a oprit lansarea: Coniar trebuie contabil COMPLET (toate declarațiile + integrări), nu doar D212. Audit intern făcut → diagnostic "creier fără brațe". Research azi (Claude, comprehensive): e-Factura fezabil, SPV via împuternicit (model SOLO), Open Banking via agregator, NO Bolt/Uber API (reframe la import+AI), Stripe+ghișeul.ro plată, D397=armă secretă. Plan v0.1 scris. URMĂTORUL: research avansat multi-AI pe depunere declarații.
+- **2026-07 (iulie):** Faza fiscală COMPLETĂ (regim auto D212 + audit general 3 treceri + reparații pre-lansare N1 IBAN/N2 categorie/N3 buton, PR #88-104, 818 verde). Stefan a oprit lansarea: Coniar trebuie contabil COMPLET (toate declarațiile + integrări), nu doar D212. Audit intern făcut → diagnostic "creier fără brațe". Research azi (Claude, comprehensive): e-Factura fezabil, SPV via împuternicit (model SOLO), Open Banking via agregator, NO Bolt/Uber API (reframe la import+AI), Stripe+ghișeul.ro plată, D397=armă secretă. Plan v0.1 scris. URMĂTORUL: research avansat multi-AI pe depunere declarații. Research #2 (depunere SPV, triangulat 4 surse) COMPLET → DECIS traseu D→A mapat pe tiere. CERT: împuternicit legal fără limită clienți, depunere automatizabilă server-side (fără API, via DUKIntegrator), răspundere rămâne la PFA. Descoperiri: procura notarială nu mai obligatorie (onboarding digital), D212 din SPV-PF cu user/parolă (model C ~1-click zero-CECCAR), art.12(1) OG 65/1994 cere firmă CECCAR parteneră nu angajat. De validat cu avocat: granița CECCAR pt Faza 2.
 
 ---
 
