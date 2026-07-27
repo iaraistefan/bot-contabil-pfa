@@ -47,15 +47,28 @@
 
 ## FAZA 1 — RIDESHARING COMPLET (activitatea-pilot)
 
-### 1.1 Declarații fiscale complete
-- ✅ D212 (Declarația Unică) — complet
-- 🔄 D300 (decont TVA) — generator există, de verificat completitudine
-- 🔄 D301 (achiziții intracomunitare) — parțial
-- 🔄 D390 (recapitulativă VIES) — parțial
-- 🔄 D394 — parțial
-- 🔄 D100 — generator există, de verificat
-- ⬜ Verificare: pentru un șofer NEplătitor TVA cu comision Bolt/Uber (achiziție intracom serviciu), ce set exact e obligatoriu? (cod art. 317, D390, D301, D100)
-- **Research necesar:** setul complet + termene, per profil (plătitor/neplătitor TVA)
+### 1.1 Declarații ridesharing — INVENTAR REAL (audit intern iulie 2026)
+
+**DECIZIE SCOPE (research triangulat + verdict PFA-TVA):** Un PFA ridesharing NU atinge plafonul TVA 395.000 lei (limitat legal la 1 șofer, ~120-216k lei brut/an). Deci:
+- ✅ Profil A (neplătitor TVA, cod art. 317) = TOT ce construim la ridesharing — acoperă 100% șoferi
+- ⏸️ Profil B (plătitor TVA, D300/D394) = AMÂNAT la FAZA 2 (e-commerce/IT, unde plafonul se atinge) — NU la ridesharing
+- Plafonul se calculează pe încasări BRUTE (nu net) — relevant doar teoretic
+
+**Regulă transversală arhitectură:** generatoarele produc XML pt DUKIntegrator (userul rulează local → PDF depozabil) + ghid text. NU produc PDF direct. By-design (Drumul B), nu gaură.
+
+**STARE PER DECLARAȚIE (audit cod, iulie 2026):**
+- ✅ D212 (Declarația Unică) — COMPLET (regim auto, motor CAS/CASS/impozit). Anuală 25 mai. Baza fiscală a tot restului. (detaliat în §0)
+- ✅ D301 (decont special TVA) — COMPLET. XML v1, reverse-charge 21% din sursă unică cota_tva(data), regula luna-zero în 3 straturi. Gaură cosmetică: etichetă factura_bolt pe lună Uber (valoare corectă, doar numărul e Bolt-branded).
+- 🔄 D390 (VIES) — PARȚIAL. XML v3 OPANAF 705/2020, tip "S", luna-zero ok. GAURĂ REALĂ: orchestrarea hardcodează operator Bolt (declaratii_service.py) → șofer Uber primește furnizor GREȘIT (BOLT/EE în loc Uber B.V./NL). Generatorul suportă orice operator; lipsește construcția operatorului Uber. Motorul vat_engine.py știe deja Uber=NL.
+- ✅ D100 (impozit nerezidenți) — COMPLET (dar depinde de helpere Bolt-only ca D390). XML v2, 2% Bolt / 0% Uber din sursă unică COTA_NEREZIDENT, certificat Bolt integrat (fișier descărcabil + reminder), suta mărită 16% fără certificat. Gaură minoră: certificat doar Bolt, nu Uber.
+- ⬜ D207 (informativă anuală nerezidenți) — INEXISTENT (NU era făcut, deși se credea). Doar calendar + text. Zero generator, zero centralizare anuală. AICI cad scutirile Uber (șofer Uber: venit scutit → D207 OBLIGATORIU).
+- ⬜ D700 / cod art. 317 — INEXISTENT ca flux. Doar calendar + ghid condiționat de flag has_cod_special_tva. Zero înregistrare automată. DE DECIS: automatizăm (complex, o singură dată) sau rămâne ghid+flag?
+- ✅ Plafon TVA 395.000 — COMPLET ca alertă. VAT_THRESHOLD_RON=395_000, status OK/APROAPE(≥80%)/DEPĂȘIT, pe venit brut YTD. Monitorizare, nu blocare.
+
+**GĂURI DE BUILD (ordine recomandată):**
+1. 🔧 Repară orchestrarea Uber (D390+D301) — efort MIC (motorul știe Uber=NL; construim operator Uber + etichetă corectă), impact MARE (șofer Uber = declarații corecte). Rezolvă și eticheta cosmetică D301.
+2. 🔧 Construiește D207 (generator + centralizare anuală) — necesar (scutiri Uber obligatorii)
+3. ❓ D700/317 — DE DECIS (automatizare vs ghid+flag pt acțiune o-singură-dată)
 
 ### 1.2 Depunere automată în SPV — DECIS: traseu D→A (mapat pe tiere)
 
