@@ -41,11 +41,7 @@
 - AI-driven: categorizare inteligentă cheltuieli, extracție din extrase/foto
 - Automatizare completă: ingerează → categorizează → calculează → generează → depune → reamintește plata
 
-**Model de business pe etape (validat vs piață — SOLO 121-229 lei/lună):**
-- ❓ ~40 RON/lună (Basic): evidență + calcul + calendar + reminder, intrare date manuală
-- ❓ ~80 RON/lună (Pro): + generare automată declarații + e-Factura + bancă + AI categorizare
-- ❓ ~100-130 RON/lună (Full): + depunere automată SPV + D397 reconciliation + deep-link plată
-- ❓ tier TVA (~150-180 RON): pentru șoferi plătitori de TVA (D300/D301/D390 lunar)
+**Model business pe tiere (triangulat):** Start ~99-149 lei (❓preț intrare de testat A/B: 99 armă agresivă vs 129-149 vinde-ROI) = Bolt+D212+estimare live+bot+rezervă taxe. Pro ~179-199 lei (peste SOLO, sub PFA Ride 299) = + depunere auto D390/D301/D100 + feed bancar AI + reconciliere + asistent + garanție. Max ~289-349 lei (sub Stradex 490) = + plătitori TVA D300/D394 (segment SOLO REFUZĂ) + optimizare predictivă + review uman anual. Poziționare: CATEGORIE NOUĂ "AI care automatizează" vs "digital cu oameni", NU "SOLO mai scump".
 
 ---
 
@@ -121,7 +117,7 @@
 
 > Motorul comun (CAS/CASS/impozit/TVA/declarații) se refolosește. Fiecare activitate = un modul nou (ca ridesharing.py) cu specificul ei: categorii cheltuieli, reguli deductibilitate, coduri CAEN.
 
-- ⬜ 2.1 Ordinea extinderii — ❓ care activitate după ridesharing? (mărime piață PFA RO pe domenii — **research**)
+- ⬜ 2.1 Ordinea extinderii (CERT triangulat): Ridesharing (acum) → CURIERAT/delivery (Glovo/Wolt/Tazz — mecanică fiscală ~identică, extindere aproape gratuită) → IT/freelancing B2B (segment mare cu bani, CAEN 6201/6202 scoase de la normă→sistem real, toleranță premium; bătălia cu SOLO pe merit) → profesii liberale → chirii (produs-lite, volum mare ARPU mic). E-commerce EVITAT până există resurse gestiune/stocuri. Fiecare pas refolosește ≥80% din motor.
 - ⬜ 2.2 IT / software / freelancing digital (piață mare, e-Factura B2B relevant)
 - ⬜ 2.3 E-commerce (OSS, TVA, specificul vânzărilor online)
 - ⬜ 2.4 Consulting / profesii liberale
@@ -130,39 +126,65 @@
 
 ---
 
-## FAZA 3 — TOP WORLD (diferențiatori globali)
+## FAZA 3 — TOP WORLD (diferențiatori — triangulat 4 surse: Claude+Kimi+Gemini+Perplexity, consens puternic)
 
-> Ce ne pune peste ORICINE, nu doar peste SOLO. De definit prin research pe cele mai bune tool-uri din lume.
+### 3.0 Diagnostic competitiv (CERT)
+- Piața RO NU are contabil AI real. 3 categorii: (1) digital-cu-oameni (SOLO, Keez — app-fațadă + procesare umană "cutie neagră"); (2) facturare (SmartBill/FGO/Oblio — nu fac contabilitate PFA); (3) self-service (ContApp/Saga — userul depune singur; ContApp NU implementează D390/D301/D100 = inutilizabil ridesharing cap-coadă).
+- SOLO = liderul de bătut. Slăbiciuni EXPLOATABILE: procesare umană (latență zile), fără feed bancar, fără AI real, fără bot, doar Android; REFUZĂ plătitori TVA + numerar/casă marcat + producători (segmente libere). DOVADĂ durere: erori documentate public — decizie impunere de la 3.000€ corect → 10.000€ greșit (cutie neagră fără validare încrucișată).
+- Ancore preț servicii umane ridesharing: PFA Ride 299 lei/lună, Stradex ~490 lei/lună. Piața plătește 300-500 lei/lună pt liniște.
+- Date piață: 56.000+ șoferi fără formă legală conformă (de convertit); ~44.000 PFA noi 2025 (+63%), transport #1 la înmatriculări; ANAF fraude 35M€ + D397 = presiune conformare → reconcilierea = "te aperi de ANAF".
 
-- ⬜ 3.1 Research: cele mai bune tool-uri fiscale/freelancer din LUME (QuickBooks Self-Employed, FreshBooks, gig-economy US/UK) — ce inovații importăm
-- ⬜ 3.2 Ce lipsește la TOȚI (RO + world) = oportunitatea de aur
-- ⬜ 3.3 AI-native features (dincolo de categorizare): predicție taxe, optimizare fiscală legală, asistent conversațional fiscal
-- ⬜ 3.4 (de completat din research)
+### 3.1 CELE 4 DIFERENȚIATOARE GOL-DE-PIAȚĂ (unic RO, CERT)
+1. Estimare fiscală LIVE la fiecare încasare Bolt (impozit 10% + CAS/CASS pe plafoane + TVA 21% comision) — nimeni în RO
+2. Reconciliere THREE-WAY Bolt↔bancă↔ANAF/SPV — GENUIN NOU, unic mondial în combinație (nici Found nu o face)
+3. Categorizare AI cheltuieli din extras bancar (PSD2) + separare business/personal
+4. Asistent fiscal conversațional Telegram (LLM explică, motor determinist calculează — anti-halucinație)
++ Rezervă taxe (2 niveluri: NOTIFICARE devreme/ușor "pune deoparte X"; BaaS-cu-IBAN-virtual târziu/greu, cere partener bancar) + alertă proactivă plafon TVA 395.000 lei (pe încasări BRUTE)
+
+### 3.2 PRINCIPII DE ÎNCREDERE (CERT — lecții din eșecuri globale)
+- Fiecare cifră din motorul determinist, NU din LLM (anti-halucinație)
+- "Human approves, AI files" — preview + confirmare la fiecare depunere (validat Keeper/FlyFin)
+- AI învață din corecțiile userului per-cont (anti-Kontist: AI care nu învață distruge încrederea)
+- Garanție amendă (SOLO o are; Accountable până la 10.000€) — minim de egalat
+- Billing transparent lunar fără lock-in (antidot plângere #1 Keeper/FlyFin: trial→facturare anuală surpriză)
+- Explainable AI: arată formula din spatele fiecărei categorizări (confort psihologic vs cutia neagră SOLO)
+
+### 3.3 IDEI AVANSATE (notate, nu pt început)
+- Foaie de parcurs auto-generată (GPS + date Bolt) pt justificare deducere 100% — dificil + ❓INCERT legal, validează cu consultant
+- Arhitectură microservicii + retry asincron pt SPV (XML ANAF se schimbă des, SPV instabil)
+- Optimizare fiscală predictivă ("dacă treci normă→real economisești Y"; timing înregistrare TVA; stopaj 2% Bolt cu certificat rezidență Estonia)
+
+### 3.4 DE EVITAT (gimmick/ROI slab)
+- ⛔ Mileage GPS ca feature fiscal (valoare ZERO în RO — sistem real deduce costuri reale 50/100, NU km)
+- Insights demand "unde să conduci" (Gridwise-style — nu ține de contabilitate, date indisponibile Bolt API)
+- Chatbot generic fără acces la datele contului (ChatGPT o face gratis)
+- E-commerce/stocuri + multi-țară înainte de a domina RO
 
 ---
 
 ## §2. ÎNTREBĂRI DESCHISE & DECIZII DE BUSINESS
 
-1. ❓ Model depunere SPV: A (împuternicit, răspundere) vs C (confirmare-user)? → **research următor decide**
+1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
 2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"?
 3. ❓ e-Factura: build în casă vs wrapper?
-4. ❓ Preț exact pe tiere?
-5. ❓ Ordinea extinderii multi-activitate?
+4. ❓ #4 Preț exact pe tiere — REZOLVAT structura (3 tiere 99-149/179-199/289-349, vezi §1); RĂMÂNE de testat A/B pragul de intrare (99 vs 129-149)
+5. ✅ #5 Ordine extindere — REZOLVAT (ridesharing→curierat→IT→profesii→chirii, vezi 2.1)
 6. ❓ Structură legală firmă (SRL + certificat + graniță CECCAR/CCF)?
 
 ---
 
 ## §3. RESEARCH-URI DE FĂCUT (coadă, în ordine)
 
-1. 🔬 **URMĂTORUL — Depunere declarații SPV la sânge** (model împuternicit, legalitate scară, CECCAR, cum face SOLO, răspundere) — multi-AI
-2. 🔬 Ce ne duce peste SOLO + top world (competiție RO + tool-uri globale + inovații) — multi-AI
-3. ⬜ Per pas, la construcție: research adânc pe acel subpas înainte de build
+1. ✅ Research depunere SPV (triangulat 4 surse) — FĂCUT, vezi §1.2
+2. ✅ Research competitiv top-world (triangulat 4 surse) — FĂCUT, vezi FAZA 3
+3. 🔬 **URMĂTORUL — la construcția fiecărui subpas Faza 1: research adânc pe acel subpas ÎNAINTE de build** (ex. e-Factura API, PSD2 agregator, DUKIntegrator upload)
+4. ⬜ Per pas, la construcție: research adânc pe acel subpas înainte de build (regulă permanentă)
 
 ---
 
 ## §4. JURNAL (cronologic — pentru continuitate la repornire)
 
-- **2026-07 (iulie):** Faza fiscală COMPLETĂ (regim auto D212 + audit general 3 treceri + reparații pre-lansare N1 IBAN/N2 categorie/N3 buton, PR #88-104, 818 verde). Stefan a oprit lansarea: Coniar trebuie contabil COMPLET (toate declarațiile + integrări), nu doar D212. Audit intern făcut → diagnostic "creier fără brațe". Research azi (Claude, comprehensive): e-Factura fezabil, SPV via împuternicit (model SOLO), Open Banking via agregator, NO Bolt/Uber API (reframe la import+AI), Stripe+ghișeul.ro plată, D397=armă secretă. Plan v0.1 scris. URMĂTORUL: research avansat multi-AI pe depunere declarații. Research #2 (depunere SPV, triangulat 4 surse) COMPLET → DECIS traseu D→A mapat pe tiere. CERT: împuternicit legal fără limită clienți, depunere automatizabilă server-side (fără API, via DUKIntegrator), răspundere rămâne la PFA. Descoperiri: procura notarială nu mai obligatorie (onboarding digital), D212 din SPV-PF cu user/parolă (model C ~1-click zero-CECCAR), art.12(1) OG 65/1994 cere firmă CECCAR parteneră nu angajat. De validat cu avocat: granița CECCAR pt Faza 2.
+- **2026-07 (iulie):** Faza fiscală COMPLETĂ (regim auto D212 + audit general 3 treceri + reparații pre-lansare N1 IBAN/N2 categorie/N3 buton, PR #88-104, 818 verde). Stefan a oprit lansarea: Coniar trebuie contabil COMPLET (toate declarațiile + integrări), nu doar D212. Audit intern făcut → diagnostic "creier fără brațe". Research azi (Claude, comprehensive): e-Factura fezabil, SPV via împuternicit (model SOLO), Open Banking via agregator, NO Bolt/Uber API (reframe la import+AI), Stripe+ghișeul.ro plată, D397=armă secretă. Plan v0.1 scris. URMĂTORUL: research avansat multi-AI pe depunere declarații. Research #2 (depunere SPV, triangulat 4 surse) COMPLET → DECIS traseu D→A mapat pe tiere. CERT: împuternicit legal fără limită clienți, depunere automatizabilă server-side (fără API, via DUKIntegrator), răspundere rămâne la PFA. Descoperiri: procura notarială nu mai obligatorie (onboarding digital), D212 din SPV-PF cu user/parolă (model C ~1-click zero-CECCAR), art.12(1) OG 65/1994 cere firmă CECCAR parteneră nu angajat. De validat cu avocat: granița CECCAR pt Faza 2. Research #3 (competitiv top-world, triangulat 4 surse Claude+Kimi+Gemini+Perplexity) COMPLET. Consens masiv: SOLO=cutie neagră cu procesare umană (erori documentate 3k→10k€), fără feed bancar/AI/bot. 4 diferențiatoare gol-de-piață (estimare live, reconciliere three-way ANAF unic-mondial, categorizare AI PSD2, asistent conversațional). Principii încredere (motor determinist nu LLM, human-approves-AI-files, învață din corecții). Ordine extindere: ridesharing→curierat→IT→profesii→chirii. Prețuri 3 tiere 99/199/349. Anti-pattern: mileage GPS=zero valoare RO. FAZA 3 busolă completată. Scheletul plan complet informat de research → gata de umplut pas cu pas (fiecare pas: research adânc → build).
 
 ---
 
