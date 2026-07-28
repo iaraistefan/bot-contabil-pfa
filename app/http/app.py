@@ -1403,6 +1403,84 @@ def genereaza_declaratie(tip: str, year: int, month: int):
     })
 
 
+@flask_app.route("/api/v1/declaratie-d207/<int:year>")
+def genereaza_declaratie_d207(year: int):
+    """
+    D207 — declaratie informativa ANUALA nerezidenti (perechea lui D100). FARA luna.
+
+    Query params optionale:
+      - format=ghid (default) -> JSON cu ghid + meta
+      - format=xml            -> descarca fisierul XML
+
+    Baza per brand vine din nerezident_anual_by_brand (Σ 12 luni vat_out/cota), NU
+    dintr-o singura luna. Oglinda endpoint-ului lunar, dar anual (ca D212).
+    """
+    if not (2018 <= year <= 2099):
+        return jsonify({"error": "invalid year"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    fmt = (request.args.get("format") or "ghid").lower()
+
+    from app.integrations.anaf import declaratii_service as decl
+    from app.domain.fiscal_profile import from_user_dict
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        by_brand = tax_engine.nerezident_anual_by_brand(session, user_id=user_id, an=year)
+    except Exception as e:
+        logger.error(f"API D207 profil error {year} user={user_id}: {e}")
+        session.close()
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    try:
+        firma = decl.date_firma_din_profil(profile)
+        rez = decl.genereaza_d207_anual(year, firma, by_brand, from_user_dict(profile))
+    except ValueError as e:
+        # Optiunea b (comision neatribuit) / regim nerezident nesetat → mesaj clar,
+        # NU 500. Userul stie ce sa corecteze (atribuie platforma / seteaza regimul).
+        return jsonify({"error": "d207_indisponibil", "message": str(e)}), 400
+    except Exception as e:
+        logger.error(f"API D207 gen error {year} user={user_id}: {e}")
+        return jsonify({"error": "internal error", "message": str(e)}), 500
+
+    # An fara comisioane nerezidente → generat=False (fara XML gol).
+    if not rez.generat:
+        return jsonify({
+            "error": "negenerat",
+            "motiv": rez.motiv_negenerat,
+            "tip": rez.tip, "year": rez.an,
+            "ghid": rez.ghid_telegram,
+            "ghid_plain": rez.ghid_plain,
+        }), 400
+
+    if fmt == "xml":
+        return Response(
+            rez.xml,
+            mimetype="application/xml; charset=utf-8",
+            headers={"Content-Disposition":
+                     f"attachment; filename={rez.nume_fisier_xml}"},
+        )
+
+    return jsonify({
+        "tip": rez.tip,
+        "year": rez.an,
+        "ghid": rez.ghid_telegram,
+        "ghid_plain": rez.ghid_plain,
+        "are_plata": rez.are_plata,
+        "suma_plata": rez.suma_plata,
+        "namespace_de_confirmat": rez.namespace_de_confirmat,
+        "avertismente": rez.avertismente,
+        "xml_url": f"/api/v1/declaratie-d207/{year}?format=xml",
+        "nume_fisier_xml": rez.nume_fisier_xml,
+    })
+
+
 @flask_app.route("/api/v1/setari", methods=["GET"])
 def setari_get():
     """Citeste setarile editabile de user (date bancare pentru declaratii)."""

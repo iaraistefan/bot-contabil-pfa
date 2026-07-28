@@ -1306,6 +1306,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await execute_fisa_d100(query, context, user_id, year, month)
             return
 
+        # Faza 1: Fisa D207 (informativa ANUALA nerezidenti) — fara luna
+        if namespace == "d207":
+            year = int(parts[1])
+            await execute_fisa_d207(query, context, user_id, year)
+            return
+
         # Buton-poartă: ecran TVA & Declarații (banner + fisele D301/D390/D100)
         if namespace == "tvadecl":
             year = int(parts[1])
@@ -1655,6 +1661,11 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
                 f"\n⚠️ {d100_plan.neatribuit_lei:.2f} lei TVA neatribuit unei platforme "
                 f"— verifică furnizorul (exclus din D100).")
 
+        # D207 — perechea ANUALA (informativa nerezidenti). Mereu relevanta cand
+        # exista comision intracom; foloseste anul curent (fara luna).
+        buttons.append([InlineKeyboardButton(
+            f"📄 Fișă D207 (anual nerezidenți) — {year}", callback_data=f"d207|{year}")])
+
         data = {
             "title": "De depus",
             "subtitle": f"BAZĂ {baza_ro} LEI · TVA {tva_pct}%",
@@ -1798,6 +1809,65 @@ async def execute_fisa_d390(query, context, user_id, year, month):
 async def execute_fisa_d100(query, context, user_id, year, month):
     """Genereaza fisa D100 (impozit nerezident) cu noul serviciu unificat."""
     await _trimite_declaratie_noua(query, context, user_id, year, month, "D100")
+
+
+async def execute_fisa_d207(query, context, user_id, year):
+    """
+    Genereaza fisa D207 (informativa ANUALA nerezidenti) — ghid + XML.
+
+    Perechea anuala a lui D100. Baza per brand din nerezident_anual_by_brand
+    (Σ 12 luni). ANUAL → fara luna. Oglinda _trimite_declaratie_noua, dar anual.
+    """
+    chat_id = query.message.chat_id
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        by_brand = tax_engine.nerezident_anual_by_brand(session, user_id=user_id, an=year)
+    except Exception as e:
+        logger.error(f"execute_fisa_d207 compute error: {e}")
+        await context.bot.send_message(chat_id=chat_id, text="⚠️ N-am putut calcula D207. Încearcă din nou.")
+        return
+    finally:
+        session.close()
+
+    try:
+        from app.domain.fiscal_profile import from_user_dict
+        firma = decl_nou.date_firma_din_profil(profile)
+        rez = decl_nou.genereaza_d207_anual(year, firma, by_brand, from_user_dict(profile))
+    except ValueError as e:
+        # Optiunea b (comision neatribuit) / regim nerezident nesetat → mesaj clar.
+        await context.bot.send_message(chat_id=chat_id, text=f"ℹ️ {e}")
+        return
+    except Exception as e:
+        logger.error(f"execute_fisa_d207 gen error: {e}")
+        await context.bot.send_message(chat_id=chat_id, text="⚠️ N-am putut genera D207. Încearcă din nou.")
+        return
+
+    # 1. Ghidul (mesaj text)
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=rez.ghid_telegram, parse_mode="Markdown")
+    except Exception:
+        await context.bot.send_message(chat_id=chat_id, text=rez.ghid_plain)
+
+    # 2. Avertismente
+    warns = [f"ℹ️ {a}" for a in (rez.avertismente or [])]
+    if warns:
+        await context.bot.send_message(chat_id=chat_id, text="\n\n".join(warns))
+
+    # 3. XML (document) — DOAR daca s-a generat (an fara comisioane → generat=False,
+    # ghidul de la pasul 1 explica de ce).
+    if not rez.generat:
+        return
+    try:
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=_io.BytesIO(rez.xml.encode("utf-8")),
+            filename=rez.nume_fisier_xml,
+            caption=f"📄 *D207 — {year}* (informativă anuală nerezidenți, XML pentru DUKIntegrator)",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"execute_fisa_d207 xml error: {e}")
 
 
 async def execute_registru(query, context, user_id, year, month=None):
