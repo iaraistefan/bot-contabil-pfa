@@ -317,6 +317,34 @@ def vat_out_by_brand(
     return {k: round(v, 2) for k, v in out.items()}
 
 
+def nerezident_anual_by_brand(
+    session: Session, *, user_id: int, an: int
+) -> Dict[Optional[str], float]:
+    """
+    BAZA comisionului nerezident pe AN, per brand (Σ pe 12 luni) — sursa pentru
+    D207 (perechea anuala a lui D100). Cheile: `{'bolt': X, 'uber': Y, None: Z}`.
+
+    DECIZIA A2 (reconciliere cu D100): baza per lună = `vat_out_by_brand(luna)[brand]
+    / cota_tva(luna)` — EXACT baza pe care o back-out și D100/D301/D390 lunar. Prin
+    construcție `nerezident_anual_by_brand[brand] == Σ 12× baza D100 lunar[brand]`
+    (ANAF cross-verifică D207 vs suma D100-urilor). Împărțim cota PE LUNĂ (19%/21%
+    diferă), apoi însumăm. Lunile fără date → 0. Cheia None = comision neatribuit
+    unei platforme (tratat la generare — vezi genereaza_d207_anual, opțiunea b).
+
+    Tiparul buclei: identic cu `_compute_d212_anual_uncached` (loop 12 luni).
+    """
+    out: Dict[Optional[str], float] = defaultdict(float)
+    for m in range(1, 13):
+        by_brand = vat_out_by_brand(session, user_id=user_id, year=an, month=m)
+        if not by_brand:
+            continue
+        cota = cota_tva(date(an, m, 1))
+        for brand, vat in by_brand.items():
+            if vat:
+                out[brand] += vat / cota
+    return {k: round(v, 2) for k, v in out.items()}
+
+
 @dataclass
 class D100Segment:
     """Un segment D100 per brand rideshare cu cotă>0 — pentru defalcarea CU BANI."""
