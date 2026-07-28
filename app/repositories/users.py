@@ -52,6 +52,34 @@ def get_or_create_by_telegram_id(
 #                  PROFIL FIRMA — UPDATE
 # ============================================================
 
+# Valorile enum RegimTVA (stocate ca string pe User.regim_tva). PLATITOR_21 NU se
+# retrogradeaza automat — plątitor complet, art. 317 irelevant.
+_REGIM_NEPLATITOR = "NEPLATITOR"
+_REGIM_SPECIAL_INTRACOM = "SPECIAL_INTRACOM"
+
+
+def _comuta_regim_intracom(user: User) -> None:
+    """
+    Comuta GARDAT regim_tva pe axa codului special TVA (art. 317), dupa prezenta
+    codului. Apelat DOAR cand cod_special_tva a fost inclus in update SI regim_tva
+    NU a fost dat explicit (apelantul nu a decis regimul).
+
+      - NEPLATITOR + cod prezent   → SPECIAL_INTRACOM  (D700 se stinge, D301 apare)
+      - SPECIAL_INTRACOM + cod sters → NEPLATITOR       (simetrie)
+      - PLATITOR_21 (sau orice altceva) → NEATINS       (garda fiscala)
+
+    Fixeaza bug-ul real: userul care introducea codul ramanea NEPLATITOR → D700 il
+    batea la cap permanent si D301 era ascuns. D301/D390 citesc STRING-ul
+    cod_special_tva (ortogonal de regim_tva), deci comutarea NU le afecteaza.
+    """
+    are_cod = bool(user.cod_special_tva)
+    if are_cod and user.regim_tva == _REGIM_NEPLATITOR:
+        user.regim_tva = _REGIM_SPECIAL_INTRACOM
+    elif not are_cod and user.regim_tva == _REGIM_SPECIAL_INTRACOM:
+        user.regim_tva = _REGIM_NEPLATITOR
+    # PLATITOR_21 si orice alt regim: neatins.
+
+
 def update_profile(
     session: Session,
     user: User,
@@ -167,6 +195,12 @@ def update_profile(
         user.bolt_client_secret_enc = bolt_client_secret_enc or None
     if bolt_connected_at is not None:
         user.bolt_connected_at = bolt_connected_at
+
+    # Comutare gardata regim_tva pe axa codului special (art. 317) — DOAR daca
+    # apelantul a atins codul si NU a setat explicit regim_tva (altfel apelantul
+    # decide regimul). Un singur loc → toate caile care seteaza codul trec pe aici.
+    if cod_special_tva is not None and regim_tva is None:
+        _comuta_regim_intracom(user)
 
     session.flush()
     return user
