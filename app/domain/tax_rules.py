@@ -39,6 +39,12 @@ PRAG_TVA_21 = date(2025, 8, 1)
 BOLT_VAT_ID = "EE102090374"                # forma completă (cu prefix țară EE)
 BOLT_VAT_ID_NUMERIC = BOLT_VAT_ID[2:]      # "102090374" — fără prefix (D390 codO)
 
+# Uber B.V. (Olanda) — comisionul rideshare Uber, achiziție intracom de servicii
+# (declarat în D390/D301 la fel ca Bolt). Oglinda constantelor Bolt: sursă unică,
+# ca vat_engine + generatoarele să nu poată diverge pe codul TVA Uber.
+UBER_VAT_ID = "NL852071589B01"             # forma completă (cu prefix țară NL)
+UBER_VAT_ID_NUMERIC = UBER_VAT_ID[2:]      # "852071589B01" — fără prefix (D390 codO)
+
 
 def cota_tva(data: date) -> float:
     """

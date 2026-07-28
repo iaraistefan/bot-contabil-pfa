@@ -202,6 +202,24 @@ def factura_bolt_lei(nr_doc: str, data_doc: date, comision_lei: float) -> Factur
     )
 
 
+def factura_uber_lei(nr_doc: str, data_doc: date, comision_lei: float) -> FacturaIntracom:
+    """
+    Construieste o factura Uber direct din suma in LEI (curs = 1).
+
+    Oglinda lui factura_bolt_lei — FacturaIntracom nu poarta identitatea
+    furnizorului (doar nr_doc/valoare/curs), deci diferenta fata de Bolt e
+    strict eticheta nr_doc (UBER-… vs BOLT-…), pe care o da apelantul. Numeric
+    identic. Exista ca sa citim orchestrarea per-brand simetric (Bolt/Uber).
+    """
+    return FacturaIntracom(
+        nr_doc=nr_doc,
+        data_doc=data_doc,
+        val_valuta=round(comision_lei, 2),
+        tip_valuta="RON",
+        curs_valutar=1.0,
+    )
+
+
 # ============================================================
 #                    GENERATOR XML D301 (Drumul B)
 # ============================================================

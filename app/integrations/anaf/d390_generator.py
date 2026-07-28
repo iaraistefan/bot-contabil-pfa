@@ -33,11 +33,13 @@ import re
 
 try:
     from app.domain.tax_rules import BOLT_VAT_ID_NUMERIC   # cod TVA Bolt — sursă unică
+    from app.domain.vat_engine import intracom_operator_for  # identitate furnizor — sursă unică
 except ImportError:                                        # rulare standalone (__main__)
     import os
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     from app.domain.tax_rules import BOLT_VAT_ID_NUMERIC
+    from app.domain.vat_engine import intracom_operator_for
 
 
 # ============================================================
@@ -266,6 +268,46 @@ def operator_bolt(baza_lei: int) -> OperatorIntracom:
         denumire="BOLT OPERATIONS OU",
         baza=int(round(baza_lei)),
     )
+
+
+def operator_uber(baza_lei: int) -> OperatorIntracom:
+    """
+    Construieste operatorul Uber (NL) pentru D390 (achizitie servicii).
+
+    Oglinda lui operator_bolt: identitatea (tara/cod/denumire) vine din
+    vat_engine.intracom_operator_for („uber") — SURSĂ UNICĂ, ca sa nu poata
+    diverge codul TVA Uber intre motorul de decizie si generator.
+
+    Args:
+        baza_lei: baza impozabila in lei (comisionul Uber, fara TVA, intreg)
+    """
+    tara, cod, denumire = intracom_operator_for("uber")
+    return OperatorIntracom(
+        tip="S",                       # achizitie intracomunitara de servicii
+        tara=tara,                     # Olanda (NL)
+        cod_operator=cod,              # VAT Uber B.V. — sursă unică
+        denumire=denumire,
+        baza=int(round(baza_lei)),
+    )
+
+
+def operator_for_brand(brand: str, baza_lei: int) -> OperatorIntracom:
+    """
+    Alege operatorul D390 corect dupa brand-ul rideshare ('bolt' / 'uber').
+
+    Dispatcher peste operator_bolt / operator_uber. Brand necunoscut → ValueError
+    (NU presupunem un furnizor — un D390 cu furnizor gresit e o subdeclarare).
+
+    Args:
+        brand: 'bolt' / 'uber' (case-insensitiv; orice „uber…" → Uber)
+        baza_lei: baza impozabila in lei (intreg)
+    """
+    key = (brand or "").strip().lower()
+    if key == "bolt":
+        return operator_bolt(baza_lei)
+    if key.startswith("uber"):
+        return operator_uber(baza_lei)
+    raise ValueError(f"Brand intracom necunoscut pentru D390: {brand!r}")
 
 
 # ============================================================

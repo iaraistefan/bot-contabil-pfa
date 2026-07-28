@@ -33,7 +33,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, List
 
-from app.domain.tax_rules import BOLT_VAT_ID   # cod TVA Bolt — sursă unică
+from app.domain.tax_rules import (   # coduri TVA rideshare — sursă unică
+    BOLT_VAT_ID, BOLT_VAT_ID_NUMERIC,
+    UBER_VAT_ID, UBER_VAT_ID_NUMERIC,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +95,9 @@ BRAND_DATABASE = {
     # ─── 🇪🇺 UE — MARKETPLACE-URI & RIDESHARING ─────────────
     "bolt operations": ("EE", BOLT_VAT_ID, "Bolt"),
     "bolt technology": ("EE", BOLT_VAT_ID, "Bolt"),
-    "uber bv": ("NL", "NL852071589B01", "Uber"),
-    "uber b.v": ("NL", "NL852071589B01", "Uber"),
-    "uber eats": ("NL", "NL852071589B01", "Uber Eats"),
+    "uber bv": ("NL", UBER_VAT_ID, "Uber"),
+    "uber b.v": ("NL", UBER_VAT_ID, "Uber"),
+    "uber eats": ("NL", UBER_VAT_ID, "Uber Eats"),
     "etsy ireland": ("IE", "IE9777587C", "Etsy"),
     "amazon eu sarl": ("LU", "LU20260743", "Amazon EU"),
     "amazon eu": ("LU", "LU20260743", "Amazon EU"),
@@ -187,6 +190,40 @@ BRAND_DATABASE = {
     "dpd romania": ("RO", None, "DPD"),
     "gls": ("RO", None, "GLS"),
 }
+
+
+# ============================================================
+#       FURNIZORI INTRACOM RIDESHARE — identitate D390/D301
+# ============================================================
+#
+# Identitatea LEGALĂ (denumire juridică + țară + cod TVA fără prefix) a furnizorilor
+# de comision rideshare, folosită la construirea operatorului D390 / facturii D301.
+# Sursă unică: codurile vin din tax_rules (aceleași ca BRAND_DATABASE), denumirea e
+# cea juridică (nu brandul scurt „Bolt"/„Uber" din BRAND_DATABASE, ci entitatea din
+# XML-ul ANAF). Cheia = brand-ul D100 normalizat ('bolt'/'uber', vezi _d100_brand_key).
+_INTRACOM_OPERATORI = {
+    "bolt": ("EE", BOLT_VAT_ID_NUMERIC, "BOLT OPERATIONS OU"),
+    "uber": ("NL", UBER_VAT_ID_NUMERIC, "UBER B.V."),
+}
+
+
+def intracom_operator_for(brand):
+    """
+    Identitatea intracom (țară, cod TVA numeric fără prefix, denumire legală) pentru
+    un brand rideshare — SURSĂ UNICĂ pentru operatorul D390 / factura D301.
+
+    Args:
+        brand: cheia brand D100 ('bolt' / 'uber' / 'uber eats' / 'Uber' etc.).
+               Normalizat case-insensitiv; orice variantă „uber…" → Uber.
+
+    Returns:
+        (tara, cod_numeric, denumire_legala) sau None dacă brand-ul nu e un
+        furnizor intracom rideshare cunoscut (ex. None / neatribuit).
+    """
+    key = (brand or "").strip().lower()
+    if key.startswith("uber"):
+        key = "uber"
+    return _INTRACOM_OPERATORI.get(key)
 
 
 # ============================================================
