@@ -185,7 +185,9 @@
 3. ❓ e-Factura: build în casă vs wrapper?
 4. ❓ #4 Preț exact pe tiere — REZOLVAT structura (3 tiere 99-149/179-199/289-349, vezi §1); RĂMÂNE de testat A/B pragul de intrare (99 vs 129-149)
 5. ✅ #5 Ordine extindere — REZOLVAT (ridesharing→curierat→IT→profesii→chirii, vezi 2.1)
-6. ❓ Structură legală firmă (SRL + certificat + graniță CECCAR/CCF)?
+6. ✅ #6 Structură juridică CECCAR — REZOLVAT (research triangulat 4 surse: Claude+Perplexity+Gemini+cel intern). VERDICT: minimul CECCAR pentru ridesharing = ZERO. PFA are drept legal să depună singur (Legea 82/1991 art.1(5)+10(4¹)); nicio certificare D212 obligatorie; reprezentarea (împuternicit) NU e rezervată profesiei. Model A (software + user depune din SPV-ul lui) = zero CECCAR, cost zero, inatacabil (art.348) — se mapează pe traseu D. Model B (reprezentare) = tot zero-CECCAR-rezervat. Plătești CECCAR doar dacă vinzi serviciul contabil în sine (premium opțional Faza 2). SOLO confirmă modelul (firmă software CAEN 6210, NU firmă CECCAR, depune ca împuternicit).
+   - CAPCANĂ contabil angajat (art.12 OG 65/1994): expertul angajat pe SRL NU poate presta pentru clienții SRL-ului. Soluție: reziliezi CIM, ea face PFI/cabinet propriu, contract B2B cu Coniar (audit algoritmic general, nu per-client → cost per-user zero). NECESITĂ AVOCAT: T&C exonerare + structura contabilului + statusul art.348 (înăsprire Senat oct 2025 spre 6luni-5ani).
+   - AVERTISMENT (din Gemini): modelul BPO-mascat (platforma preia semnătura clientului, ca SOLO) e riscant — raport Incorpo.ro acuză SOLO de mii de falsuri (semnături generate cu mouse-ul). Dacă mergem spre depunere de către noi, userul trebuie consimțământ REAL informat, nu semnătură auto.
 
 ---
 
@@ -205,6 +207,7 @@
 - **[iulie 2026] BUILD 1.1 pas 2:** D207 generator — construit contra XSD OFICIAL ANAF (descărcat d207_20025020.xsd v1.02, confirmare byte-cu-byte, nu inferență). PAS 0 a corectat o presupunere: sect_II+benef sunt frați în secvență, nu imbricați. Agregare anuală 12 luni cu reconciliere garantată cu Σ D100 (A2). Bolt 04/EE impozabil, Uber 25/NL scutit-dar-obligatoriu-declarat (motivul D207). Opțiunea b (neatribuit oprește). 13 teste noi, 846 verzi. Wire-up UI separat. Rămâne: D700/317, buton D207.
 - **[iulie 2026] BUILD 1.1 pas 3:** D700/art.317. Recon a descoperit un BUG REAL de deconectare: has_cod_special_tva=regim_tva==SPECIAL_INTRACOM, dar niciun flux nu seta SPECIAL_INTRACOM (doar testele) → user cu cod rămânea NEPLATITOR → D700 permanent + D301 ascuns (declarația lunară obligatorie!). Fix _comuta_regim_intracom() gardat în update_profile (punct unic): cod→SPECIAL_INTRACOM, garda PLATITOR_21 (nu retrograda plătitor, art.317 irelevant pt plătitor complet), simetric. + ghid D700 7 pași (nu generator — înregistrare web SPV). 8 teste noi, 854 verzi, D301/D390 neatinse. Rămâne: buton D207. SET DECLARAȚII RIDESHARING COMPLET.
 - **[iulie 2026] BUILD 1.1 pas 4 (ultimul):** wire-up UI D207 — buton în bot (meniu TVA, callback d207|{year}) + dashboard (genD207 JS anual cu XML activ) + rută web + handler. Oglindește D212 (anual, fără month) + D390 (livrare XML). Zero logică fiscală nouă (generatorul face tot). 7 teste noi, 861 verzi, rutele lunare + D212 neatinse. §1.1 COMPLET 100% — set declarații ridesharing Profil A generat ȘI accesibil.
+- **[iulie 2026] RESEARCH #4 (minimul CECCAR, triangulat 4 surse).** Verdict: minim CECCAR ridesharing = ZERO. PFA depune singur legal; Model A software+self-file = cost zero inatacabil; reprezentarea nu e rezervată. Contabil angajat blocat de art.12 → soluție PFI independent + contract B2B audit (cost per-user zero). Necesită avocat: T&C + structură + art.348. Deblochează Faza 2. Structura confirmă traseul D→A din busolă.
 
 ---
 
