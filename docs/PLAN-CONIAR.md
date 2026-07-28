@@ -61,14 +61,15 @@
 - ✅ D301 (decont special TVA) — COMPLET. XML v1, reverse-charge 21% din sursă unică, luna-zero în 3 straturi. Etichetă nr_doc corectă per brand (UBER-/BOLT-).
 - ✅ D390 (VIES) — COMPLET. XML v3 OPANAF 705/2020, tip "S", luna-zero ok. Orchestrare per-brand: operator corect Bolt(EE)/Uber(NL) din sursă unică, split proporțional cu invariant Σ baze==baza. Brand neatribuit → oprește cu mesaj (nu depune incomplet).
 - ✅ D100 (impozit nerezidenți) — COMPLET. XML v2, 2% Bolt / 0% Uber din sursă unică, certificat Bolt integrat, suta mărită 16% fără certificat. (Infra per-brand acum partajată cu D390/D301.) Gaură minoră rămasă: certificat doar Bolt, nu Uber.
-- ⬜ D207 (informativă anuală nerezidenți) — INEXISTENT (NU era făcut, deși se credea). Doar calendar + text. Zero generator, zero centralizare anuală. AICI cad scutirile Uber (șofer Uber: venit scutit → D207 OBLIGATORIU).
+- ✅ D207 (informativă anuală nerezidenți) — COMPLET. XML mfp:anaf:dgti:d207:declaratie:v2 construit contra XSD OFICIAL descărcat (d207_20025020.xsd v1.02, byte-cu-byte). Structura reală: sect_II + benef frați în secvență (nu imbricat), legați prin tip_venit. Agregare anuală 12 luni × vat_out_by_brand cu reconciliere garantată D207_anual==Σ 12× D100 (A2). Bolt cod 04/EE, Uber cod 25/NL scutit (imp1=0, dar OBLIGATORIU declarat). Brand neatribuit → oprește (opțiunea b). Wire-up UI (buton "Generează D207") = follow-up separat. De confirmat la validare: Tscutit vs Tbaza pt cod 25 (structura confirmată, semantica prin DUKIntegrator).
 - ⬜ D700 / cod art. 317 — INEXISTENT ca flux. Doar calendar + ghid condiționat de flag has_cod_special_tva. Zero înregistrare automată. DE DECIS: automatizăm (complex, o singură dată) sau rămâne ghid+flag?
 - ✅ Plafon TVA 395.000 — COMPLET ca alertă. VAT_THRESHOLD_RON=395_000, status OK/APROAPE(≥80%)/DEPĂȘIT, pe venit brut YTD. Monitorizare, nu blocare.
 
 **GĂURI DE BUILD (ordine recomandată):**
 1. ✅ FĂCUT — orchestrare Uber (D390+D301+etichetă) — 15 teste noi, 833 total verzi, branch fix/orchestrare-uber-d390-d301
-2. 🔧 URMĂTOR — D207 (generator + centralizare anuală, scutiri Uber)
-3. ❓ D700/317 — de decis
+2. ✅ FĂCUT — D207 (generator + agregare anuală + XSD oficial) — 13 teste noi, 846 total verzi, branch feat/d207-generator
+3. 🔧 URMĂTOR — D700/317 — de decis (automatizare vs ghid)
+4. ⬜ Wire-up UI D207 (buton/endpoint "Generează D207") — follow-up subțire
 
 ### 1.2 Depunere automată în SPV — DECIS: traseu D→A (mapat pe tiere)
 
@@ -199,6 +200,7 @@
 
 - **2026-07 (iulie):** Faza fiscală COMPLETĂ (regim auto D212 + audit general 3 treceri + reparații pre-lansare N1 IBAN/N2 categorie/N3 buton, PR #88-104, 818 verde). Stefan a oprit lansarea: Coniar trebuie contabil COMPLET (toate declarațiile + integrări), nu doar D212. Audit intern făcut → diagnostic "creier fără brațe". Research azi (Claude, comprehensive): e-Factura fezabil, SPV via împuternicit (model SOLO), Open Banking via agregator, NO Bolt/Uber API (reframe la import+AI), Stripe+ghișeul.ro plată, D397=armă secretă. Plan v0.1 scris. URMĂTORUL: research avansat multi-AI pe depunere declarații. Research #2 (depunere SPV, triangulat 4 surse) COMPLET → DECIS traseu D→A mapat pe tiere. CERT: împuternicit legal fără limită clienți, depunere automatizabilă server-side (fără API, via DUKIntegrator), răspundere rămâne la PFA. Descoperiri: procura notarială nu mai obligatorie (onboarding digital), D212 din SPV-PF cu user/parolă (model C ~1-click zero-CECCAR), art.12(1) OG 65/1994 cere firmă CECCAR parteneră nu angajat. De validat cu avocat: granița CECCAR pt Faza 2. Research #3 (competitiv top-world, triangulat 4 surse Claude+Kimi+Gemini+Perplexity) COMPLET. Consens masiv: SOLO=cutie neagră cu procesare umană (erori documentate 3k→10k€), fără feed bancar/AI/bot. 4 diferențiatoare gol-de-piață (estimare live, reconciliere three-way ANAF unic-mondial, categorizare AI PSD2, asistent conversațional). Principii încredere (motor determinist nu LLM, human-approves-AI-files, învață din corecții). Ordine extindere: ridesharing→curierat→IT→profesii→chirii. Prețuri 3 tiere 99/199/349. Anti-pattern: mileage GPS=zero valoare RO. FAZA 3 busolă completată. Scheletul plan complet informat de research → gata de umplut pas cu pas (fiecare pas: research adânc → build).
 - **[iulie 2026] BUILD 1.1 pas 1:** orchestrare Uber D390/D301 — reparată gaura reală (șofer Uber primea furnizor Bolt/EE greșit în D390). Infra per-brand (deja folosită de D100) extinsă la D390/D301: operator corect per platformă din sursă unică, split proporțional cu invariant Σ==baza, brand neatribuit oprește cu mesaj (opțiunea b, nu depune incomplet). 15 teste noi, 833 total verzi. Rămâne: D207, D700.
+- **[iulie 2026] BUILD 1.1 pas 2:** D207 generator — construit contra XSD OFICIAL ANAF (descărcat d207_20025020.xsd v1.02, confirmare byte-cu-byte, nu inferență). PAS 0 a corectat o presupunere: sect_II+benef sunt frați în secvență, nu imbricați. Agregare anuală 12 luni cu reconciliere garantată cu Σ D100 (A2). Bolt 04/EE impozabil, Uber 25/NL scutit-dar-obligatoriu-declarat (motivul D207). Opțiunea b (neatribuit oprește). 13 teste noi, 846 verzi. Wire-up UI separat. Rămâne: D700/317, buton D207.
 
 ---
 

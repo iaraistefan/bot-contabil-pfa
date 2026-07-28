@@ -30,13 +30,23 @@ try:
     from . import d390_generator as d390
     from . import d301_generator as d301
     from . import d100_generator as d100
+    from . import d207_generator as d207
     from . import d212_calc as d212
 except ImportError:
     # fallback pentru rulare locala / teste (fisiere in acelasi folder)
     import d390_generator as d390
     import d301_generator as d301
     import d100_generator as d100
+    import d207_generator as d207
     import d212_calc as d212
+
+# Identitatea beneficiarului nerezident (D207) — sursa unica, refolosita din PR #105.
+try:
+    from app.domain.vat_engine import intracom_operator_for
+except ImportError:  # rulare standalone / teste in folder
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    from app.domain.vat_engine import intracom_operator_for
 
 
 # ============================================================
@@ -564,6 +574,118 @@ def genereaza(
 
 
 TIPURI_SUPORTATE = ("D390", "D301", "D100")
+
+
+# ============================================================
+#       D207 — informativa ANUALA nerezidenti (perechea lui D100)
+# ============================================================
+#
+# D207 e ANUALA (fara luna) → semnatura separata, NU intra in `genereaza`
+# lunar / `TIPURI_SUPORTATE` (ca sa nu spargem orchestrarea lunara).
+
+_D207_TIP_VENIT = {"bolt": "04", "uber": "25"}  # natura venitului (nomenclator ANAF)
+_D207_ACT_N = "2"  # baza legala: s-a aplicat Conventia de evitare a dublei impuneri
+
+
+def _d207_negenerat(an: int, *, motiv: str, ghid: str) -> RezultatDeclaratie:
+    """D207 NEGENERAT (an fara comisioane nerezidente) — fara XML, doar ghid."""
+    return RezultatDeclaratie(
+        tip="D207", an=an, luna=d207.D207_LUNA,
+        ghid_telegram=ghid, ghid_plain=ghid,
+        xml="", nume_fisier_xml="",
+        are_plata=False, suma_plata=0.0,
+        namespace_de_confirmat=False,
+        generat=False, motiv_negenerat=motiv,
+    )
+
+
+def genereaza_d207_anual(an, firma, by_brand, profile, *, d_rec=0):
+    """
+    Genereaza D207 (informativa anuala nerezidenti) dintr-un dict {brand: baza}.
+
+    PURA (fara DB): `by_brand` vine din tax_engine.nerezident_anual_by_brand (Σ 12
+    luni, DECIZIA A2). `profile.cota_nerezident_for(brand)` da cota (Bolt 2%/16%,
+    Uber 0%). Identitatea beneficiarului (tara/cod/denumire) din sursa unica
+    vat_engine.intracom_operator_for.
+
+    Args:
+        an: anul de raportare
+        firma: DateFirma (CUI PFA — ca D100, NU codul special TVA)
+        by_brand: {'bolt': baza, 'uber': baza, None: neatribuit} (lei, float)
+        profile: FiscalProfile (pt cota_nerezident_for)
+        d_rec: 0 = initiala, 1 = rectificativa
+
+    Returns:
+        RezultatDeclaratie (tip="D207"). `generat=False` daca anul n-are comisioane.
+
+    Raises:
+        ValueError: comision neatribuit unei platforme (optiunea b — nu depune
+                    incomplet), sau brand cu comision dar regim nerezident nesetat.
+    """
+    if firma is None:
+        firma = date_firma_stefan()
+
+    # Optiunea (b) — comision intracom neatribuit unei platforme: OPRESTE.
+    # (ca la PR #105 D390/D301: nu depunem tacut ceva incomplet.)
+    neatribuit = round((by_brand.get(None) or 0.0), 2)
+    if neatribuit > 0:
+        raise ValueError(
+            f"Comision de {neatribuit:.2f} lei fara platforma identificata in {an}. "
+            f"Atribuie furnizorul (Bolt/Uber) inainte de a genera D207 — altfel "
+            f"declaratia ar fi incompleta (beneficiar nerezident lipsa)."
+        )
+
+    beneficiari = []
+    for brand in ("bolt", "uber"):
+        baza = round((by_brand.get(brand) or 0.0), 2)
+        if baza <= 0:
+            continue
+        cota = profile.cota_nerezident_for(brand)
+        if cota is None:
+            raise ValueError(
+                f"Regim nerezident nesetat pentru {brand} — nu putem calcula "
+                f"impozitul D207. Alege regimul (cu/fara certificat) in Setari."
+            )
+        info = intracom_operator_for(brand)  # (tara, cod_numeric, denumire_legala)
+        tara, cod, den = info
+        beneficiari.append(d207.BeneficiarD207(
+            tip_venit=_D207_TIP_VENIT[brand],
+            denumire=den, stat=tara, cif_strain=cod,
+            baza=int(round(baza)),
+            impozit=int(round(baza * cota)),
+            impozit_scutit=0, baza_scutita=0,
+            act_n=_D207_ACT_N,
+        ))
+
+    if not beneficiari:
+        return _d207_negenerat(
+            an, motiv="fara_baza",
+            ghid=(f"ℹ️ *D207 {an}* — nu ai avut comisioane catre platforme "
+                  f"nerezidente in {an}, deci D207 nu se depune pentru acest an."),
+        )
+
+    identitate = d207.IdentitateD207(
+        cui=firma.cui_pfa,  # CUI PFA (ca D100), NU codul special TVA
+        denumire=firma.denumire,
+        adresa=firma.adresa,
+        nume_declarant=firma.nume_declarant,
+        prenume_declarant=firma.prenume_declarant,
+        functie_declarant=firma.functie_declarant,
+        telefon=firma.telefon,
+        email=firma.email,
+    )
+    xml = d207.genereaza_d207(an, identitate, beneficiari, d_rec=d_rec)
+    ghid_tg = d207.genereaza_ghid_d207(an, identitate, beneficiari, plain=False)
+    ghid_pl = d207.genereaza_ghid_d207(an, identitate, beneficiari, plain=True)
+    return RezultatDeclaratie(
+        tip="D207", an=an, luna=d207.D207_LUNA,
+        ghid_telegram=ghid_tg, ghid_plain=ghid_pl,
+        xml=xml, nume_fisier_xml=f"D207_{an}.xml",
+        are_plata=False, suma_plata=0.0,
+        namespace_de_confirmat=False,  # namespace v2 confirmat cu XSD oficial
+        avertismente=["D207 e informativa (fara plata) — centralizeaza ANUAL "
+                      "comisioanele catre nerezidenti, inclusiv partea scutita."],
+    )
 
 
 # ============================================================
