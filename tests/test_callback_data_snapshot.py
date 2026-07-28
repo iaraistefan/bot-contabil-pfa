@@ -63,6 +63,7 @@ EXPECTED_CALLBACKS = {
     "confirm|item|{i}", "confirm|save", "confirm|tip|{idx}|CHELTUIALA",
     "confirm|tip|{idx}|FACTURA_COMISION", "confirm|tip|{idx}|VENIT",
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",
+    "d207|{year}",  # fisa D207 ANUALA (fara luna) — wire-up buton D207
     "tvadecl|{year}|{month}",
     "du|an|{a}", "du|auto|{an}", "du|calc|asig", "du|calc|noasig", "du|manual|{an}",
     "ghid|all", "ghid|list", "ghid|view|{key}",

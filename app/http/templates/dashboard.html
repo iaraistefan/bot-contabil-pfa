@@ -770,6 +770,7 @@
             <button class="btn btn-ghost" onclick="genDecl('D390')">Generează D390 — VIES</button>
             <button class="btn btn-ghost" onclick="genDecl('D100')">Generează D100 — impozit Bolt</button>
             <button class="btn btn-ghost" onclick="genD212()">Generează Declarația Unică</button>
+            <button class="btn btn-ghost" onclick="genD207()">Generează D207 — anual nerezidenți</button>
           </div>
           <div class="reassure"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Coniar pregătește declarația — o depui tu în SPV. Nu trimitem nimic la ANAF în locul tău.</div>
           <div id="decl-rezultat" style="margin-top:var(--sp-4);display:none">
@@ -2075,6 +2076,55 @@
     }
   }
   window.genDecl=genDecl;
+
+  // ---- D207 informativa anuala nerezidenti (anual, DAR are XML) ----
+  async function genD207(){
+    const box=document.getElementById("decl-rezultat");
+    const ghid=document.getElementById("decl-ghid");
+    const titlu=document.getElementById("decl-titlu");
+    const avert=document.getElementById("decl-avert");
+    const xmlBtn=document.getElementById("decl-xml");
+    box.style.display="block";
+    titlu.textContent=`D207 ${Y} — se generează…`;
+    avert.innerHTML=""; ghid.textContent="";
+    try{
+      const r=await authFetch(`/api/v1/declaratie-d207/${Y}`);
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){
+        titlu.textContent=`D207 ${Y}`;
+        ghid.textContent=d.ghid_plain||d.ghid||d.message||("Nu am putut genera D207 pentru "+Y+". Verifică să ai comisioane către platforme nerezidente pe anul ales.");
+        xmlBtn.style.display="none";
+        return;
+      }
+      titlu.innerHTML='<span class="gen-ok">✓</span> '+`D207 ${Y} · informativă anuală`;
+      ghid.textContent=d.ghid_plain||d.ghid||"";
+      xmlBtn.style.display="inline-flex";
+      xmlBtn.onclick=async(ev)=>{
+        ev.preventDefault();
+        try{
+          const rx=await authFetch(d.xml_url);
+          if(!rx.ok){alert("Nu s-a putut descărca XML-ul.");return;}
+          const blob=await rx.blob();
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement("a");
+          a.href=url; a.download=d.nume_fisier_xml||`D207_${Y}.xml`;
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a); URL.revokeObjectURL(url);
+        }catch(e){alert("Nu am putut descărca fișierul. Verifică conexiunea și încearcă din nou.");}
+        return false;
+      };
+      const warns=[];
+      if(d.namespace_de_confirmat) warns.push("XML-ul pentru D207 e gata, dar încă verificăm formatul — până atunci folosește ghidul, e sigur.");
+      (d.avertismente||[]).forEach(a=>warns.push(a));
+      avert.innerHTML = warns.length ? warns.map(w=>`<div class="alert" style="margin-bottom:var(--sp-2)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg><div><div class="d">${w}</div></div></div>`).join("") : "";
+    }catch(e){
+      console.error(e);
+      titlu.textContent="D207 — eroare";
+      ghid.textContent="Conexiune pierdută. Încearcă din nou.";
+      xmlBtn.style.display="none";
+    }
+  }
+  window.genD207=genD207;
 
   // ---- D212 Declaratia Unica (anual) ----
   async function genD212(){
