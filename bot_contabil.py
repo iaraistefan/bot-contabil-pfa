@@ -2930,9 +2930,23 @@ async def handle_coduri_callback(update, context, parts, user_id):
 
     if action == "set_tva":
         context.user_data["coduri_wizard"] = "cod_tva"
+        from app.integrations.anaf import d700_ghid
+        session = get_session()
+        try:
+            profile = users_repo.get_profile_dict(session, user_id) or {}
+        finally:
+            session.close()
+        # N-are inca cod (neplatitor, fara cod special) → ii aratam INTAI cum il obtine
+        # (D700), apoi cum sa-l introduca. Cine are deja cod nu vede ghidul.
+        prefix = ""
+        if d700_ghid.should_show_d700_ghid(
+            profile.get("regim_tva"), profile.get("cod_special_tva")
+        ):
+            prefix = d700_ghid.genereaza_ghid_d700(plain=False) + "\n\n———\n\n"
         await query.edit_message_text(
+            prefix +
             "🇪🇺 *Cod special TVA (art. 317)*\n\n"
-            "Trimite-mi codul ca mesaj — doar cifrele.\n"
+            "Ai deja codul? Trimite-mi-l ca mesaj — doar cifrele.\n"
             "_Exemplu: 53148882_\n\n"
             "Apasa `/coduri_fiscale` ca sa renunti.",
             parse_mode="Markdown",
