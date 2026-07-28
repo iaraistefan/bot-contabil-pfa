@@ -200,6 +200,53 @@ def _d100_negenerat(an: int, luna: int, *, motiv: str, ghid: str) -> RezultatDec
 
 _D100_ETICHETA = {"bolt": "Bolt", "uber": "Uber"}
 
+# Branduri rideshare cu identitate intracom cunoscută (D390 operator / D301 factură).
+# Acelasi set ca _D100_BRANDS din tax_engine — furnizorii pe care Contai stie sa-i
+# declare corect (tara + cod TVA). Eticheta pt numarul de factura D301 (BOLT-/UBER-).
+_INTRACOM_BRANDS = ("bolt", "uber")
+_INTRACOM_ETICHETA_FACTURA = {"bolt": "BOLT", "uber": "UBER"}
+
+
+def _branded_intracom(intracom_by_brand):
+    """
+    Din dict-ul {brand: vat_out} (vezi tax_engine.vat_out_by_brand), intoarce lista
+    ordonata [(brand, vat)] de furnizori rideshare cunoscuti cu vat>0.
+
+    Cheia None (VAT_OUT dintr-o factura intracom neatribuita unei platforme) cu vat>0
+    → OPRESTE (opțiunea b): D390/D301 sunt OBLIGATORII pe orice achizitie intracom;
+    fara furnizor identificat nu putem construi operatorul (tara/cod), deci NU depunem
+    tacut ceva incomplet si NU excludem in tacere randul. Cere atribuirea platformei.
+    (Difera de D100, unde omiterea unui brand e sigura — acolo lipsa doar amana impozitul
+    pe venit; aici lipsa ar produce o declaratie TVA incompleta.)
+    """
+    neatribuit = round((intracom_by_brand.get(None) or 0.0), 2)
+    if neatribuit > 0:
+        raise ValueError(
+            f"Comision intracom de {neatribuit:.2f} lei fara platforma identificata. "
+            f"Atribuie furnizorul (Bolt/Uber) pe facturile respective inainte de a genera "
+            f"D390/D301 — altfel declaratia ar fi incompleta (furnizor lipsa)."
+        )
+    branded = [(b, round(v, 2)) for b, v in intracom_by_brand.items()
+               if b in _INTRACOM_BRANDS and (v or 0) > 0]
+    return sorted(branded)  # ordine stabila: [('bolt', …), ('uber', …)]
+
+
+def _apportion(total, weights, decimals):
+    """
+    Imparte `total` in len(weights) cote proportionale cu `weights`, rotunjite la
+    `decimals` zecimale, cu reziduul de rotunjire adaugat cotei celei mai mari →
+    Σ cote == total EXACT (niciun leu pierdut la split).
+
+    Pe un singur brand (cazul real dominant), cota = total → regresia Bolt-only e
+    identica bit-cu-bit.
+    """
+    wsum = sum(weights)
+    cote = [round(total * w / wsum, decimals) for w in weights]
+    rezidual = round(total - sum(cote), decimals)
+    i_max = max(range(len(weights)), key=lambda k: weights[k])
+    cote[i_max] = round(cote[i_max] + rezidual, decimals)
+    return cote
+
 
 def _genereaza_d100_din_plan(an, luna, firma, plan, *, d_rec=0, suportat_de_bolt=False):
     """
@@ -293,6 +340,7 @@ def genereaza(
     suportat_de_bolt: bool = False,  # DEPRECATED — fara efect (vezi mai jos)
     cota_nerezident: Optional[float] = None,  # D100 legacy (1 brand): cota profil (0.0/0.02/0.16/None)
     d100_plan: Optional[object] = None,  # D100 multi-brand: tax_engine.D100Plan (split per-platforma)
+    intracom_by_brand: Optional[dict] = None,  # D390/D301 multi-brand: {brand: vat_out} (split per-furnizor)
 ) -> RezultatDeclaratie:
     """
     Genereaza o declaratie ANAF pe luna data, pe baza comisionului Bolt.
@@ -312,6 +360,12 @@ def genereaza(
                           0.0 (scutit, ex. Uber cu certificat) → negenerat "scutit" (D207);
                           None (neconfigurat) → negenerat, motiv "neconfigurat".
                           Verifica rez.generat inainte de a trimite XML-ul.
+        intracom_by_brand: (DOAR D390/D301) {brand: vat_out} din vat_out_by_brand.
+                          Cand e furnizat, D390/D301 construiesc cate un operator/factura
+                          PE BRAND (Bolt EE + Uber NL, cu identitatea corecta), impartind
+                          baza proportional (Σ == baza scalara). Neatribuit (cheia None
+                          cu vat>0) → ValueError (cere atribuirea platformei). None
+                          (nefurnizat) → calea Bolt-only pe baza scalara (backward-compat).
 
     Returns:
         RezultatDeclaratie cu ghid + XML + eventuala suma de plata.
@@ -347,7 +401,20 @@ def genereaza(
             telefon=firma.telefon,
             email=firma.email,
         )
-        operatori = [d390.operator_bolt(baza)]
+        if intracom_by_brand is not None:
+            # Multi-brand: un operator PE furnizor (Bolt EE / Uber NL), cu identitatea
+            # corecta. Baza (int lei) impartita proportional cu vat_out per brand →
+            # Σ == baza (niciun leu pierdut). Neatribuit → _branded_intracom ridica.
+            branded = _branded_intracom(intracom_by_brand)
+            if branded:
+                cote = _apportion(baza, [v for _, v in branded], 0)
+                operatori = [d390.operator_for_brand(b, int(round(c)))
+                             for (b, _), c in zip(branded, cote)]
+            else:
+                operatori = [d390.operator_bolt(baza)]  # defensiv (nu se atinge: baza>0 ⇒ brand>0)
+        else:
+            operatori = [d390.operator_bolt(baza)]  # backward-compat: scalar Bolt-only
+        assert sum(o.baza for o in operatori) == baza, "D390: split-ul pe brand pierde lei"
         xml = d390.genereaza_d390(an, luna, identitate, operatori, d_rec=d_rec)
         ghid_tg = d390.genereaza_ghid_d390(an, luna, identitate, operatori,
                                            d_rec=d_rec, plain=False)
@@ -372,7 +439,27 @@ def genereaza(
             prenume_declarant=firma.prenume_declarant,
             functie_declarant=firma.functie_declarant,
         )
-        facturi = [d301.factura_bolt_lei(factura_nr, factura_data, baza)]
+        if intracom_by_brand is not None:
+            # Multi-brand: o factura PE furnizor, cu numarul etichetat corect
+            # (UBER-/BOLT-). Valoarea (RON, 2 zecimale) impartita proportional cu
+            # vat_out per brand → Σ == baza. FacturaIntracom nu poarta furnizorul,
+            # deci diferenta reala e doar eticheta nr_doc (numeric era deja corect).
+            branded = _branded_intracom(intracom_by_brand)  # neatribuit → ridica
+            if branded:
+                total = round(float(baza), 2)
+                cote = _apportion(total, [v for _, v in branded], 2)
+                _factura = {"bolt": d301.factura_bolt_lei, "uber": d301.factura_uber_lei}
+                facturi = [
+                    _factura[b](f"{_INTRACOM_ETICHETA_FACTURA[b]}-{an}-{luna:02d}",
+                                factura_data, c)
+                    for (b, _), c in zip(branded, cote)
+                ]
+            else:
+                facturi = [d301.factura_bolt_lei(factura_nr, factura_data, baza)]  # defensiv
+        else:
+            facturi = [d301.factura_bolt_lei(factura_nr, factura_data, baza)]  # backward-compat
+        assert round(sum(f.val_valuta for f in facturi), 2) == round(float(baza), 2), \
+            "D301: split-ul pe brand pierde lei"
         xml = d301.genereaza_d301(an, luna, identitate, facturi, d_rec=d_rec)
         ghid_tg = d301.genereaza_ghid_d301(an, luna, identitate, facturi,
                                            d_rec=d_rec, plain=False)

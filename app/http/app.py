@@ -1334,11 +1334,11 @@ def genereaza_declaratie(tip: str, year: int, month: int):
         vat_out = float(totals.get("vat_out_total") or 0.0)
         cota = float(totals.get("cota_tva") or cota_tva(date(year, month, 1)))  # cota perioadei (sursă unică)
         baza_intracom = round(vat_out / cota, 2) if vat_out > 0 else 0.0
-        # D100 multi-brand (Uber sub-pas B): planul split per-platformă, calculat în
-        # sesiune (vat_out_by_brand are nevoie de DB). Ignorat pentru D301/D390.
+        # Split per-brand (sursă unică, are nevoie de DB): folosit de D100 (plan
+        # nerezident) ȘI de D390/D301 (operator/factură per furnizor Bolt EE / Uber NL).
+        by_brand = tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month)
         d100_plan = tax_engine.compute_d100_plan(
-            tax_engine.vat_out_by_brand(session, user_id=user_id, year=year, month=month),
-            cota, from_user_dict(profile),
+            by_brand, cota, from_user_dict(profile),
         ) if tip == "D100" else None
     except Exception as e:
         logger.error(f"API declaratie profil error {tip} {year}/{month} user={user_id}: {e}")
@@ -1362,7 +1362,8 @@ def genereaza_declaratie(tip: str, year: int, month: int):
         # Cota nerezident legacy păstrată ca fallback dacă planul lipsește.
         cota_nerez = from_user_dict(profile).cota_nerezident
         rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma,
-                             cota_nerezident=cota_nerez, d100_plan=d100_plan)
+                             cota_nerezident=cota_nerez, d100_plan=d100_plan,
+                             intracom_by_brand=by_brand)
     except Exception as e:
         logger.error(f"API declaratie gen error {tip} {year}/{month} user={user_id}: {e}")
         return jsonify({"error": "internal error", "message": str(e)}), 500
