@@ -102,11 +102,9 @@
 - Build vs buy: în casă (~2-4 luni) vs wrapper (Mandato/Contazen) vs librărie open-source
 - **Research necesar (la pas):** decizia build/buy + clarificare legală ridesharing
 
-### 1.4 Conectare bancară (Open Banking PSD2)
-- Via agregator licențiat (Salt Edge / GoCardless) — Coniar NU are nevoie de licență AISP proprie
-- Citire tranzacții săptămânal → categorizare AI venituri/cheltuieli
-- ❓ GoCardless free-tier posibil în închidere — de verificat
-- **Research necesar (la pas):** care agregator (acoperire bănci RO + preț)
+### 1.4 Conectare bancară (Open Banking PSD2) — ✅ DECIS (research #6)
+- ✅ **DECIS (research #6, agregatori PSD2).** Verdict: GoCardless/Nordigen (opțiunea free clasică) ÎNCHISĂ pt înscrieri noi. Agregator ales: **Salt Edge** (Partner Program fără licență proprie, acoperire RO completă BT/ING/BCR/Raiffeisen/CEC/BRD/Revolut, românesc). Alt: Enable Banking (dar produsul principal cere licență proprie). LICENȚĂ AISP: NU proprie dacă Coniar e "data recipient" (date bancare = INPUT pt fiscalitate/reconciliere, NU ecran "vezi-ți conturile") — EBA Q&A 2018_4098. Capcană: afișarea datelor consolidate sub brand propriu → poate cere înregistrare agent/AISP. NECESITĂ AVOCAT pt fluxul specific. Cost: ~150-500€/lună (doar la cerere). Fricțiune SCA: 180 zile (relaxat de la 90). **DECIZIE BUILD: NU feed automat acum — extinde PDF manual (ING/Revolut, zero cost/risc), pilot Salt Edge paralel, scalează când se justifică. Pas 2 reconciliere (axa bancară) se deblochează cu PDF manual extins, NU necesită agregator.**
+- Citire tranzacții → categorizare AI venituri/cheltuieli (obiectivul feature-ului, indiferent de sursă)
 
 ### 1.5 RECONCILIERE ⭐ ARMA SECRETĂ (inovație, niciun competitor) — pasul 1 FĂCUT
 - ✅ **Pasul 1 FĂCUT (Bolt brut↔declarat).** REFRAME: D397 e INACCESIBIL șoferului (intern ANAF — confirmat research + audit); nici DAC7 nu-i accesibil PFA. Arma secretă reîncadrată: reconciliem sursele pe care șoferul le CONTROLEAZĂ (Bolt API ↔ declarat ↔ bancă), poziționat "previi verificările ANAF" (nu "reconciliere cu D397"). Pas 1 = axa curată Bolt-API-brut ↔ declarat-fiscal (ambele brute+lunare, zero false-alarme), la fiecare /bolt. Pas 2 = axa bancară (net vs brut + fereastră temporală, după PSD2 §1.4). Uber = imposibil azi (fără API, doar OCR). Atașare (a) preview bancar = follow-up.
@@ -179,7 +177,7 @@
 ## §2. ÎNTREBĂRI DESCHISE & DECIZII DE BUSINESS
 
 1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
-2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"? (NB: axa bancară din reconciliere §1.5 pas 2 depinde de decizia PSD2 §1.4.)
+2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"? (NB: axa bancară reconciliere §1.5 pas 2 se poate face cu PDF manual ING/Revolut — NU e blocată de agregator, vezi §1.4.)
 3. ❓ e-Factura: build în casă vs wrapper?
 4. ❓ #4 Preț exact pe tiere — REZOLVAT structura (3 tiere 99-149/179-199/289-349, vezi §1); RĂMÂNE de testat A/B pragul de intrare (99 vs 129-149)
 5. ✅ #5 Ordine extindere — REZOLVAT (ridesharing→curierat→IT→profesii→chirii, vezi 2.1)
@@ -207,6 +205,7 @@
 - **[iulie 2026] BUILD 1.1 pas 4 (ultimul):** wire-up UI D207 — buton în bot (meniu TVA, callback d207|{year}) + dashboard (genD207 JS anual cu XML activ) + rută web + handler. Oglindește D212 (anual, fără month) + D390 (livrare XML). Zero logică fiscală nouă (generatorul face tot). 7 teste noi, 861 verzi, rutele lunare + D212 neatinse. §1.1 COMPLET 100% — set declarații ridesharing Profil A generat ȘI accesibil.
 - **[iulie 2026] RESEARCH #4 (minimul CECCAR, triangulat 4 surse).** Verdict: minim CECCAR ridesharing = ZERO. PFA depune singur legal; Model A software+self-file = cost zero inatacabil; reprezentarea nu e rezervată. Contabil angajat blocat de art.12 → soluție PFI independent + contract B2B audit (cost per-user zero). Necesită avocat: T&C + structură + art.348. Deblochează Faza 2. Structura confirmă traseul D→A din busolă.
 - **[iulie 2026] RESEARCH #5 + BUILD §1.5 (arma secretă, pas 1).** Research: D397 e depus de PLATFORMĂ (OPANAF 382/2025), INACCESIBIL șoferului (intern ANAF — nici SPV, nici dosar fiscal, nici precompletare D212). DAC7 (F7000) e proxy anual dar tot inaccesibil PFA din cod. REFRAME: arma secretă = reconciliem sursele controlate de șofer (Bolt API ↔ declarat ↔ bancă), poziționat "previi verificările ANAF" (durere reală: 56.000 șoferi prinși, 151M lei creanțe, plăți suspendate 100 flote sep 2025). Audit: 80% pre-alimentat (surse Bolt există). BUILD pas 1: bolt_amount_reconcile pe axa curată brut-API↔declarat (ortogonal de prezența existentă, prag max(5 lei,1%), nudge neutru la /bolt). 13 teste noi, 874 verzi, prezența neatinsă. Pas 2 (bancă) + Uber (fără API) + atașare (a) = follow-up corect separate.
+- **[iulie 2026] RESEARCH #6 (agregatori PSD2 bancă).** GoCardless/Nordigen închis înscrieri noi. Ales: Salt Edge (Partner Program fără licență, acoperire RO completă, românesc); alt Enable Banking (cere licență). AISP: nu proprie dacă data recipient (date=input fiscal, nu ecran conturi; EBA Q&A 2018_4098); avocat pt flux. Cost ~150-500€/lună. SCA 180 zile. DECIZIE: extinde PDF manual (ING/Revolut) acum, pilot Salt Edge paralel, scalează la nevoie. Axa bancară reconciliere (pas 2) deblocabilă cu PDF manual.
 
 ---
 
