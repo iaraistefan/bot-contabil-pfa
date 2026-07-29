@@ -438,11 +438,15 @@ def _cache_read_period(session, user_id, year, month):
 #                    AGREGARE LUNARA (cache-first)
 # ============================================================
 
-def get_month_summary(user_id: int, year: int, month: int) -> dict:
+def get_month_summary(user_id: int, year: int, month: int, *, cache_only: bool = False) -> dict:
     """
     Cifrele lunii. Intai din cache (bolt_orders); daca lipseste, din API.
     Asa merge si pentru luni vechi pe care API-ul Bolt nu le mai tine,
     daca jobul zilnic le-a colectat la timp.
+
+    cache_only=True (reconciliere in preview): NU loveste API — daca luna nu e in
+    cache intoarce un sumar zero cu source="cache_miss" (semnal INDISPONIBIL pentru
+    reconciliere). Default False = comportament actual (fallback API), neschimbat.
     """
     # 1) incearca din cache
     session = get_session()
@@ -460,6 +464,15 @@ def get_month_summary(user_id: int, year: int, month: int) -> dict:
         s.update({"year": year, "month": month,
                   "last_day": calendar.monthrange(year, month)[1],
                   "source": "cache"})
+        return s
+
+    if cache_only:
+        # Nicio comanda finished in cache. `cached` gol → luna neadusa (cache_miss,
+        # INDISPONIBIL). `cached` are randuri dar niciunul finished → 0 legitim.
+        s = _aggregate([])
+        s.update({"year": year, "month": month,
+                  "last_day": calendar.monthrange(year, month)[1],
+                  "source": "cache" if cached else "cache_miss"})
         return s
 
     # 2) fallback API
@@ -800,10 +813,26 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             raise ApplicationHandlerStop
         res = post_month(user_id, s)
         repl = "\n♻️ Am inlocuit inregistrarea Bolt anterioara a lunii." if res["replaced"] else ""
+        # Reconciliere pe SUMA (felia 4b): API brut (tocmai folosit) vs declarat in
+        # Registru (income_by_platform, dupa post). Defensiv — o eroare la reconciliere
+        # NU strica confirmarea (BONUS, nu valoarea principala).
+        recon = ""
+        try:
+            from app.integrations.imports import bolt_reconcile
+            sess = get_session()
+            try:
+                brut_declarat = bolt_reconcile.declared_bolt_brut(sess, user_id, year, month)
+            finally:
+                sess.close()
+            line = bolt_reconcile.bolt_amount_confirm_line(s["brut"], brut_declarat)
+            if line:
+                recon = f"\n\n{line}"
+        except Exception as e:
+            logger.error(f"bolt amount reconcile (confirm) failed: {e}")
         await query.edit_message_text(
             f"✅ *Adaugat in Registru — {LUNI_LONG[month]} {year}*\n"
             f"Venit brut: {s['brut']:.2f} lei, Comision: {s['comision']:.2f} lei\n"
-            f"({res['tx_count']} tranzactii, doc #{res['doc_id']}){repl}\n\n"
+            f"({res['tx_count']} tranzactii, doc #{res['doc_id']}){repl}{recon}\n\n"
             f"Verifica din Registru sau Raport.",
             parse_mode="Markdown",
         )

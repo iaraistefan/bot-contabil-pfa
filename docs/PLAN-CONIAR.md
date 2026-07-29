@@ -108,11 +108,9 @@
 - ❓ GoCardless free-tier posibil în închidere — de verificat
 - **Research necesar (la pas):** care agregator (acoperire bănci RO + preț)
 
-### 1.5 D397 RECONCILIATION ⭐ ARMA SECRETĂ (inovație, niciun competitor)
-- Ordinul ANAF 382/2025: platformele raportează lunar la ANAF fiecare cursă/km/CNP/încasare per șofer
-- Coniar reconciliază venitul declarat de șofer vs ce ANAF are deja → transformă datele de CONTROL în BENEFICIU
-- Rezolvă parțial lipsa API-ului de platformă
-- **Research necesar:** cum se accesează D397 (prin SPV al userului?), format, ce date exact
+### 1.5 RECONCILIERE ⭐ ARMA SECRETĂ (inovație, niciun competitor) — pasul 1 FĂCUT
+- ✅ **Pasul 1 FĂCUT (Bolt brut↔declarat).** REFRAME: D397 e INACCESIBIL șoferului (intern ANAF — confirmat research + audit); nici DAC7 nu-i accesibil PFA. Arma secretă reîncadrată: reconciliem sursele pe care șoferul le CONTROLEAZĂ (Bolt API ↔ declarat ↔ bancă), poziționat "previi verificările ANAF" (nu "reconciliere cu D397"). Pas 1 = axa curată Bolt-API-brut ↔ declarat-fiscal (ambele brute+lunare, zero false-alarme), la fiecare /bolt. Pas 2 = axa bancară (net vs brut + fereastră temporală, după PSD2 §1.4). Uber = imposibil azi (fără API, doar OCR). Atașare (a) preview bancar = follow-up.
+- Context (de ce contează): Ordinul ANAF 382/2025 — platformele raportează lunar fiecare cursă/km/CNP/încasare per șofer (D397, dar e al platformei, nu al șoferului) → presiune reală de conformare pe care reconcilierea o transformă în beneficiu.
 
 ### 1.6 Ingestie date platformă (REFRAME: import + AI, NU API live) ❓
 - 🔴 NU există API oficial șofer nici Bolt, nici Uber (Uber "limited access" practic închis; Bolt zero; SDK-uri neoficiale = ToS violation, fragile)
@@ -181,7 +179,7 @@
 ## §2. ÎNTREBĂRI DESCHISE & DECIZII DE BUSINESS
 
 1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
-2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"?
+2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"? (NB: axa bancară din reconciliere §1.5 pas 2 depinde de decizia PSD2 §1.4.)
 3. ❓ e-Factura: build în casă vs wrapper?
 4. ❓ #4 Preț exact pe tiere — REZOLVAT structura (3 tiere 99-149/179-199/289-349, vezi §1); RĂMÂNE de testat A/B pragul de intrare (99 vs 129-149)
 5. ✅ #5 Ordine extindere — REZOLVAT (ridesharing→curierat→IT→profesii→chirii, vezi 2.1)
@@ -208,6 +206,7 @@
 - **[iulie 2026] BUILD 1.1 pas 3:** D700/art.317. Recon a descoperit un BUG REAL de deconectare: has_cod_special_tva=regim_tva==SPECIAL_INTRACOM, dar niciun flux nu seta SPECIAL_INTRACOM (doar testele) → user cu cod rămânea NEPLATITOR → D700 permanent + D301 ascuns (declarația lunară obligatorie!). Fix _comuta_regim_intracom() gardat în update_profile (punct unic): cod→SPECIAL_INTRACOM, garda PLATITOR_21 (nu retrograda plătitor, art.317 irelevant pt plătitor complet), simetric. + ghid D700 7 pași (nu generator — înregistrare web SPV). 8 teste noi, 854 verzi, D301/D390 neatinse. Rămâne: buton D207. SET DECLARAȚII RIDESHARING COMPLET.
 - **[iulie 2026] BUILD 1.1 pas 4 (ultimul):** wire-up UI D207 — buton în bot (meniu TVA, callback d207|{year}) + dashboard (genD207 JS anual cu XML activ) + rută web + handler. Oglindește D212 (anual, fără month) + D390 (livrare XML). Zero logică fiscală nouă (generatorul face tot). 7 teste noi, 861 verzi, rutele lunare + D212 neatinse. §1.1 COMPLET 100% — set declarații ridesharing Profil A generat ȘI accesibil.
 - **[iulie 2026] RESEARCH #4 (minimul CECCAR, triangulat 4 surse).** Verdict: minim CECCAR ridesharing = ZERO. PFA depune singur legal; Model A software+self-file = cost zero inatacabil; reprezentarea nu e rezervată. Contabil angajat blocat de art.12 → soluție PFI independent + contract B2B audit (cost per-user zero). Necesită avocat: T&C + structură + art.348. Deblochează Faza 2. Structura confirmă traseul D→A din busolă.
+- **[iulie 2026] RESEARCH #5 + BUILD §1.5 (arma secretă, pas 1).** Research: D397 e depus de PLATFORMĂ (OPANAF 382/2025), INACCESIBIL șoferului (intern ANAF — nici SPV, nici dosar fiscal, nici precompletare D212). DAC7 (F7000) e proxy anual dar tot inaccesibil PFA din cod. REFRAME: arma secretă = reconciliem sursele controlate de șofer (Bolt API ↔ declarat ↔ bancă), poziționat "previi verificările ANAF" (durere reală: 56.000 șoferi prinși, 151M lei creanțe, plăți suspendate 100 flote sep 2025). Audit: 80% pre-alimentat (surse Bolt există). BUILD pas 1: bolt_amount_reconcile pe axa curată brut-API↔declarat (ortogonal de prezența existentă, prag max(5 lei,1%), nudge neutru la /bolt). 13 teste noi, 874 verzi, prezența neatinsă. Pas 2 (bancă) + Uber (fără API) + atașare (a) = follow-up corect separate.
 
 ---
 
