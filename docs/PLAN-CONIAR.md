@@ -124,6 +124,18 @@
 ### 1.8 Model abonament pe etape → vezi §1 (integrare tehnică: Stripe subscriptions + gating funcționalități pe tier)
 - Fundația de gating (is_subscribed/user_tier/has_tier_at_least) construită în Felia 1 §1.7; aplicarea pe features = Felia 4.
 
+**✅ MODEL DE INTRARE — DECIS (research #9, freemium/trial).** REVERSE TRIAL: 30 zile PRO complet la înscriere (FĂRĂ card) → cade pe FREE "Radar" permanent. Durată 30 zile (sau până la următorul termen declarație — să prindă un ciclu fiscal complet + un "aha moment"; arma secretă are nevoie de date acumulate). Precedent: Toggl (reverse trial 30 zile → dublat venitul premium). Concurenți: SOLO = card obligatoriu, fără trial/free; cei mai buni din nișă (Indy 400k, Norman, Accountable) = tracking gratis + DEPUNERE/automatizare plătită ("gratis să urmărești, plătești să depui"). Facturarea = gratis peste tot în RO → NU monetiza vizualizarea, monetizează automatizare+reconciliere+depunere.
+
+**MAPARE FREE→PLĂTIT:**
+- FREE "Radar" (permanent post-trial): vizualizare read-only (Bolt/bancă/declarat) + ALERTE termene cu sume + TEASER discrepanță ("există nepotrivire X lei" — arată CĂ, blochează detaliile+rezolvarea) + provocări ("sync Bolt", "importă BT") + estimare aproximativă (detalii blocate).
+- START (99-149): Bolt sync + D212 + estimare live + bot + rezervă taxe.
+- PRO (179-199, FLAGSHIP "recomandat"): + auto-depunere D390/D301/D100 + feed bancar AI + ARMA SECRETĂ COMPLETĂ (aici se rezolvă teaser-ul) + asistent + garanție.
+- MAX (289-349): + plătitori TVA D300/D394 + optimizare + review uman.
+
+**CÂRLIGUL DE AUR:** arma secretă = TEASER BLOCAT (nu black-box, nu gratis) — anunță discrepanța (frica ANAF + loss aversion 2.25x), blochează rezolvarea în PRO. Copy LINIȘTITOR ("te ajutăm s-o rezolvi în PRO") ca să nu creeze anxietate.
+**CONVERSIE:** țintă 5-10% (peste norma freemium 2-5%, datorită reverse trial + urgență termene + frica ANAF). CHEIA = activare (% care conectează Bolt+bancă în săpt. 1). Împinge ANUAL (retenție 92% vs 68% lunar), discount 15-20% la termen fiscal. FĂRĂ card la înscriere (challenger → volum+încredere; SOLO cere card dar noi optimizăm volum întâi).
+**NOTĂ:** 5-10% e proiecție, nu măsurătoare (fără benchmark gig RO); teaser discrepanță fără precedent → testează A/B.
+
 ---
 
 ## FAZA 2 — EXTINDERE MULTI-ACTIVITATE
@@ -211,6 +223,7 @@
 - **[iulie 2026] RESEARCH #7 (plată Stripe vs Netopia).** Ales Stripe+Billing lansare (RON-nativ pt SRL RO — mitul FX fals; motor abonamente complet, DX Python). Netopia mai ieftin comision dar construiești tu motorul. Twispay/xMoney = alt local cu motor gestionat. Prag migrare ~1000 abonați. Descoperire: niciun procesator nu emite factura → webhook→SmartBill/Oblio→e-Factura (B2C obligatoriu 2025); §1.7 se leagă de §1.3. TVA 21% pe abonament dacă înregistrat (prag 395.000 lei, OG 22/2025).
 - **[iulie 2026] RESEARCH #8 (e-Factura, ULTIMA piesă research Faza 1).** Descoperire legală: șoferul NU emite factură/bon pasagerului (OUG 49/2019 — platforma o face), fără casă de marcat → flux pasager dispare, produs mai simplu. Build vs wrapper: Oblio (SDK Python, 29€/an e-Factura inclusă) vs build ANAF direct (2-4 luni + risc) → wrapper. Comision Bolt/Uber = portal-first (CSV/PDF; SPV secundar pt autofacturi RO emergente nov 2025). Abonament Coniar: Stripe webhook→Oblio→SPV, neplătitor TVA sub 395k. Rezolvă #3. FAZA 1 RESEARCH COMPLET — toate deciziile luate.
 - **[iulie 2026] BUILD §1.7 Felia 1 (fundația abonament)** — PRIMUL build din faza de construcție post-research. Greenfield dar oglindește șabloane mature (triada Bolt→triada Stripe, migrarea 019→023, HMAC Telegram→verificare Stripe pt Felia 2). 4 câmpuri User + migrarea 023 idempotentă + config stripe_* Optional + subscription.py (tiere FREE/START/PRO/MAX decizia #4, gating primitiv NEaplicat). Inert prin construcție (userii existenți FREE, zero schimbare comportament). Doar DATE — zero Stripe API, zero chei. 10 teste noi, 900 verzi. Felii rămase: 2 webhook (chei), 3 Oblio (DATE CONIAR lipsesc), 4 gating.
+- **[iulie 2026] RESEARCH #9 (model freemium/trial — golul din decizia #4).** DECIS: REVERSE TRIAL 30 zile PRO → FREE "Radar" permanent (vizualizare+alerte+teaser discrepanță+provocări). Instinctul lui Stefan (probă la tot → vizualizare+alerte) = reverse trial, validat. 30 zile ca să prindă ciclu fiscal (arma secretă cere date acumulate). Arma secretă = teaser blocat (frica ANAF + loss aversion). Concurenți: gratis să urmărești, plătești să depui (Indy/Norman/Accountable). Fără card la înscriere. Țintă conversie 5-10% (activare = cheia). Împinge anual. Umple golul FREE din busolă → deblochează Felia 4 gating cu mapare completă.
 
 ---
 
