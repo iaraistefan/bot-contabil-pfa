@@ -117,10 +117,10 @@
 - ❓ DECIZIE STEFAN: accepți "săptămânal + inteligent" în loc de "timp real"?
 - **Research necesar:** cele mai bune metode de extracție AI din documente financiare
 
-### 1.7 Plată
-- Abonament SaaS: Stripe (best pt recurent, EUR real) sau Netopia mobilPay (local, RON)
-- Plată taxe la ANAF: DOAR deep-link către ghișeul.ro/SPV (NU există API terți) → calculăm suma exactă + un tap
-- **Research necesar (la pas):** Stripe vs Netopia pentru cazul RO
+### 1.7 Plată — ✅ DECIS (research #7)
+- ✅ **DECIS (research #7, Stripe vs Netopia).** Ales: **STRIPE + Stripe Billing** pentru lansare. CORECTURĂ MIT: Stripe e RON-nativ pt SRL RO (încasezi RON, payout RON la IBAN românesc, ZERO FX — mitul "Stripe=EUR scump" e doar pt entități US/Atlas). Comision 1.5%+1 RON +0.7% Billing. Stripe Billing = motor abonamente COMPLET (scheduler, retry, dunning, SCA/MIT, portal) → build minim. Netopia mai ieftin pe comision (1.24%+0.3 RON+TVA) DAR doar token, construiești TU tot motorul (săptămâni cod fragil) → nu merită la început. Alt local: Twispay/xMoney (motor gestionat RON-nativ, dar pivot crypto — verifică). La sume mici comisionul fix domină: Stripe+Billing ~5.5% vs Netopia ~2.7% la 30 RON. Diferență ~85 RON/lună la 100 abonați (mică), ~850 RON la 1000. PRAG MIGRARE: ~1000+ abonați. DECIZIE: Stripe+Billing lansare; reevaluezi la 1000 abonați.
+- 🔗 **LEGĂTURĂ §1.7↔§1.3:** niciun procesator NU emite factura fiscală. După încasare → webhook → generezi factură (SmartBill/Oblio/FGO API) → trimiți la ANAF e-Factura. e-Factura B2C OBLIGATORIE din 1 ian 2025. Deci pipeline-ul de plată are nevoie de e-Factura ca pas următor — §1.7 și §1.3 se leagă.
+- Plată taxe la ANAF (feature separat): DOAR deep-link către ghișeul.ro/SPV (NU există API terți) → calculăm suma exactă + un tap
 
 ### 1.8 Model abonament pe etape → vezi §1 (integrare tehnică: Stripe subscriptions + gating funcționalități pe tier)
 
@@ -208,6 +208,7 @@
 - **[iulie 2026] RESEARCH #5 + BUILD §1.5 (arma secretă, pas 1).** Research: D397 e depus de PLATFORMĂ (OPANAF 382/2025), INACCESIBIL șoferului (intern ANAF — nici SPV, nici dosar fiscal, nici precompletare D212). DAC7 (F7000) e proxy anual dar tot inaccesibil PFA din cod. REFRAME: arma secretă = reconciliem sursele controlate de șofer (Bolt API ↔ declarat ↔ bancă), poziționat "previi verificările ANAF" (durere reală: 56.000 șoferi prinși, 151M lei creanțe, plăți suspendate 100 flote sep 2025). Audit: 80% pre-alimentat (surse Bolt există). BUILD pas 1: bolt_amount_reconcile pe axa curată brut-API↔declarat (ortogonal de prezența existentă, prag max(5 lei,1%), nudge neutru la /bolt). 13 teste noi, 874 verzi, prezența neatinsă. Pas 2 (bancă) + Uber (fără API) + atașare (a) = follow-up corect separate.
 - **[iulie 2026] RESEARCH #6 (agregatori PSD2 bancă).** GoCardless/Nordigen închis înscrieri noi. Ales: Salt Edge (Partner Program fără licență, acoperire RO completă, românesc); alt Enable Banking (cere licență). AISP: nu proprie dacă data recipient (date=input fiscal, nu ecran conturi; EBA Q&A 2018_4098); avocat pt flux. Cost ~150-500€/lună. SCA 180 zile. DECIZIE: extinde PDF manual (ING/Revolut) acum, pilot Salt Edge paralel, scalează la nevoie. Axa bancară reconciliere (pas 2) deblocabilă cu PDF manual.
 - **[iulie 2026] BUILD §1.5 pas 2 (arma secretă COMPLETĂ).** Axa bancară cumulativă net↔net. Recon a prins 2 capcane în cod: #1 cash (Bolt depune doar card în bancă; summary["net"] include cash → false-alarmă la fiecare șofer cu cash) → rezolvat prin net_bancabil (payment_method != cash din bolt_orders); #2 timing (payout săptămânal traversează luni, nicio mapare cursă→payout) → rezolvat prin verdict cumulativ YTD (timingul se spală). bolt_bank_reconcile_cumulative ortogonal (nu atinge pas 1 nici prezența; summary["net"] neatins, pas 1 folosește ["brut"]). Prag larg max(50 lei, 2%). Nudge neutru "pe {an} banca ≈ Bolt net card". 16 teste noi (test cash crucial explicit), 890 verzi. Arma secretă = 3 axe complete. Uber (fără API) + ING/Revolut (fixture-uri) = follow-up.
+- **[iulie 2026] RESEARCH #7 (plată Stripe vs Netopia).** Ales Stripe+Billing lansare (RON-nativ pt SRL RO — mitul FX fals; motor abonamente complet, DX Python). Netopia mai ieftin comision dar construiești tu motorul. Twispay/xMoney = alt local cu motor gestionat. Prag migrare ~1000 abonați. Descoperire: niciun procesator nu emite factura → webhook→SmartBill/Oblio→e-Factura (B2C obligatoriu 2025); §1.7 se leagă de §1.3. TVA 21% pe abonament dacă înregistrat (prag 395.000 lei, OG 22/2025).
 
 ---
 
