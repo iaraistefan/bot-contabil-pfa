@@ -95,12 +95,10 @@
 
 **Research necesar (la construcție Faza 2):** procedura DUKIntegrator + upload e-guvernare exact; structura firmă CECCAR parteneră.
 
-### 1.3 e-Factura (ingestie comisioane, nu emitere în masă)
-- Rol pentru șofer: ingerează facturile de comision Bolt/Uber + gestionează TVA intracom (NU emite facturi pasageri — platforma o face, OUG 49/2019)
-- ❓ Neclar legal: trebuie șoferul să emită/transmită și el factura către pasager? → opinie ANAF scrisă
-- API ANAF documentat: OAuth2 + UBL 2.1 CIUS-RO + sandbox real
-- Build vs buy: în casă (~2-4 luni) vs wrapper (Mandato/Contazen) vs librărie open-source
-- **Research necesar (la pas):** decizia build/buy + clarificare legală ridesharing
+### 1.3 e-Factura — ✅ DECIS (research #8, ultima piesă research Faza 1)
+- ✅ **DECIS (research #8).** TREI FLUXURI clarificate: (1) Coniar→șofer abonament = ÎL construiești (Stripe webhook→wrapper→SPV); (2) platformă→șofer comision = ingestie PORTAL-FIRST (CSV/PDF autoritativ, SPV secundar pt autofacturi RO Bolt emergente nov 2025, cu deduplicare); (3) șofer→pasager = NU EXISTĂ, platforma emite (OUG 49/2019 art.7 lit.l), zero muncă Coniar, fără casă de marcat.
+- **BUILD vs WRAPPER: WRAPPER Oblio** (SDK Python oficial, 29€/an e-Factura inclusă gratuit, fără taxă/factură) — NU build ANAF direct (2-4 luni + risc conformitate). Alt: SmartBill (scump, tier), FGO. e-Factura ARE API real (OAuth2, UBL 2.1 CIUS-RO) dar wrapper insulează.
+- TVA: Coniar neplătitor sub 395k (fără linie TVA); peste → 21%. Șoferii nu deduc → rămâi neplătitor la început. Obligație șofer: PRIMIRE e-Factura (Coniar arhivează 10 ani); emitere N/A (nu facturează pasager). Atenție 15 ian 2026: CNP-identificați se înregistrează (formular 082). Termen depunere 5 zile lucrătoare (OUG 89/2025).
 
 ### 1.4 Conectare bancară (Open Banking PSD2) — ✅ DECIS (research #6)
 - ✅ **DECIS (research #6, agregatori PSD2).** Verdict: GoCardless/Nordigen (opțiunea free clasică) ÎNCHISĂ pt înscrieri noi. Agregator ales: **Salt Edge** (Partner Program fără licență proprie, acoperire RO completă BT/ING/BCR/Raiffeisen/CEC/BRD/Revolut, românesc). Alt: Enable Banking (dar produsul principal cere licență proprie). LICENȚĂ AISP: NU proprie dacă Coniar e "data recipient" (date bancare = INPUT pt fiscalitate/reconciliere, NU ecran "vezi-ți conturile") — EBA Q&A 2018_4098. Capcană: afișarea datelor consolidate sub brand propriu → poate cere înregistrare agent/AISP. NECESITĂ AVOCAT pt fluxul specific. Cost: ~150-500€/lună (doar la cerere). Fricțiune SCA: 180 zile (relaxat de la 90). **DECIZIE BUILD: NU feed automat acum — extinde PDF manual (ING/Revolut, zero cost/risc), pilot Salt Edge paralel, scalează când se justifică. Pas 2 reconciliere (axa bancară) se deblochează cu PDF manual extins, NU necesită agregator.**
@@ -179,7 +177,7 @@
 
 1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
 2. ❓ Accepți reframe date "săptămânal + AI" în loc de "timp real API"? (NB: axa bancară reconciliere §1.5 pas 2 se poate face cu PDF manual ING/Revolut — NU e blocată de agregator, vezi §1.4.)
-3. ❓ e-Factura: build în casă vs wrapper?
+3. ✅ #3 e-Factura build vs wrapper — REZOLVAT: WRAPPER Oblio (SDK Python, 29€/an, e-Factura inclusă). Build ANAF direct = 2-4 luni, evitat.
 4. ❓ #4 Preț exact pe tiere — REZOLVAT structura (3 tiere 99-149/179-199/289-349, vezi §1); RĂMÂNE de testat A/B pragul de intrare (99 vs 129-149)
 5. ✅ #5 Ordine extindere — REZOLVAT (ridesharing→curierat→IT→profesii→chirii, vezi 2.1)
 6. ✅ #6 Structură juridică CECCAR — REZOLVAT (research triangulat 4 surse: Claude+Perplexity+Gemini+cel intern). VERDICT: minimul CECCAR pentru ridesharing = ZERO. PFA are drept legal să depună singur (Legea 82/1991 art.1(5)+10(4¹)); nicio certificare D212 obligatorie; reprezentarea (împuternicit) NU e rezervată profesiei. Model A (software + user depune din SPV-ul lui) = zero CECCAR, cost zero, inatacabil (art.348) — se mapează pe traseu D. Model B (reprezentare) = tot zero-CECCAR-rezervat. Plătești CECCAR doar dacă vinzi serviciul contabil în sine (premium opțional Faza 2). SOLO confirmă modelul (firmă software CAEN 6210, NU firmă CECCAR, depune ca împuternicit).
@@ -209,6 +207,7 @@
 - **[iulie 2026] RESEARCH #6 (agregatori PSD2 bancă).** GoCardless/Nordigen închis înscrieri noi. Ales: Salt Edge (Partner Program fără licență, acoperire RO completă, românesc); alt Enable Banking (cere licență). AISP: nu proprie dacă data recipient (date=input fiscal, nu ecran conturi; EBA Q&A 2018_4098); avocat pt flux. Cost ~150-500€/lună. SCA 180 zile. DECIZIE: extinde PDF manual (ING/Revolut) acum, pilot Salt Edge paralel, scalează la nevoie. Axa bancară reconciliere (pas 2) deblocabilă cu PDF manual.
 - **[iulie 2026] BUILD §1.5 pas 2 (arma secretă COMPLETĂ).** Axa bancară cumulativă net↔net. Recon a prins 2 capcane în cod: #1 cash (Bolt depune doar card în bancă; summary["net"] include cash → false-alarmă la fiecare șofer cu cash) → rezolvat prin net_bancabil (payment_method != cash din bolt_orders); #2 timing (payout săptămânal traversează luni, nicio mapare cursă→payout) → rezolvat prin verdict cumulativ YTD (timingul se spală). bolt_bank_reconcile_cumulative ortogonal (nu atinge pas 1 nici prezența; summary["net"] neatins, pas 1 folosește ["brut"]). Prag larg max(50 lei, 2%). Nudge neutru "pe {an} banca ≈ Bolt net card". 16 teste noi (test cash crucial explicit), 890 verzi. Arma secretă = 3 axe complete. Uber (fără API) + ING/Revolut (fixture-uri) = follow-up.
 - **[iulie 2026] RESEARCH #7 (plată Stripe vs Netopia).** Ales Stripe+Billing lansare (RON-nativ pt SRL RO — mitul FX fals; motor abonamente complet, DX Python). Netopia mai ieftin comision dar construiești tu motorul. Twispay/xMoney = alt local cu motor gestionat. Prag migrare ~1000 abonați. Descoperire: niciun procesator nu emite factura → webhook→SmartBill/Oblio→e-Factura (B2C obligatoriu 2025); §1.7 se leagă de §1.3. TVA 21% pe abonament dacă înregistrat (prag 395.000 lei, OG 22/2025).
+- **[iulie 2026] RESEARCH #8 (e-Factura, ULTIMA piesă research Faza 1).** Descoperire legală: șoferul NU emite factură/bon pasagerului (OUG 49/2019 — platforma o face), fără casă de marcat → flux pasager dispare, produs mai simplu. Build vs wrapper: Oblio (SDK Python, 29€/an e-Factura inclusă) vs build ANAF direct (2-4 luni + risc) → wrapper. Comision Bolt/Uber = portal-first (CSV/PDF; SPV secundar pt autofacturi RO emergente nov 2025). Abonament Coniar: Stripe webhook→Oblio→SPV, neplătitor TVA sub 395k. Rezolvă #3. FAZA 1 RESEARCH COMPLET — toate deciziile luate.
 
 ---
 
