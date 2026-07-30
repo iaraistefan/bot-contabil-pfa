@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     contai_enc_key: Optional[str] = None
 
+    # --- Stripe (abonament SaaS §1.7) — declarate acum, FOLOSITE din Felia 2 ---
+    # Lipsă → plata indisponibilă, restul aplicației neafectat (degradare grațioasă,
+    # ca Bolt/Google). Cheile publice/secrete Stripe pt contul Coniar.
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+    stripe_publishable_key: Optional[str] = None
+
 
 # Singleton. Import THIS everywhere instead of calling os.getenv.
 settings = Settings()
