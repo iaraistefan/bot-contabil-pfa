@@ -324,6 +324,16 @@ _DELETE_PERIOD_SQL = text("""
 
 _LAST_SYNC_SQL = text("SELECT MAX(updated_at) FROM bolt_orders WHERE user_id = :uid")
 
+# Net BANCABIL pe an: net_earnings al comenzilor NON-cash finished (ce depune Bolt
+# efectiv in cont — cursele cash le incaseaza soferul in mana, nu intra in banca).
+# Reconciliere cumulativa (axa bancara, felia 4c). payment_method IS NULL tratat ca
+# non-cash (card/app) — conservator, e cazul dominant al platilor prin platforma.
+_SELECT_NET_BANCABIL_AN_SQL = text("""
+    SELECT payment_method, net_earnings
+    FROM bolt_orders
+    WHERE user_id = :uid AND period_year = :py AND order_status = 'finished'
+""")
+
 _SELECT_DAY_SQL = text("""
     SELECT order_status, payment_method, ride_price, commission,
            net_earnings, tip, cash_discount, ride_distance
@@ -417,6 +427,33 @@ def _cache_upsert(session, user_id, flat):
         "fts": flat.get("finished_ts") or None,
         "py": py, "pmonth": pmonth,
     })
+
+
+def net_bancabil_an(user_id: int, an: int):
+    """
+    Net BANCABIL pe an (felia 4c, axa bancara): Σ net_earnings al comenzilor
+    NON-cash finished din cache. = ce depune Bolt in cont (cursele cash NU intra
+    in banca → excluse, capcana #1). DOAR din cache (nu loveste API).
+
+    Returns:
+        float (poate 0.0 daca toate cursele-s cash) SAU None daca anul nu e deloc
+        in cache (semnal INDISPONIBIL — nu inventam 0). NU atinge summary["net"].
+    """
+    session = get_session()
+    try:
+        rows = list(session.execute(_SELECT_NET_BANCABIL_AN_SQL, {"uid": user_id, "py": an}))
+    except Exception as e:
+        logger.error(f"net_bancabil_an error user {user_id} an {an}: {e}")
+        return None
+    finally:
+        session.close()
+    if not rows:
+        return None  # an neadus in cache → INDISPONIBIL (nu 0)
+    total = 0.0
+    for pm, net in rows:
+        if pm != "cash":  # NULL (card/app) sau card → bancabil; cash → exclus
+            total += _num(net)
+    return _R(total)
 
 
 def _cache_read_period(session, user_id, year, month):

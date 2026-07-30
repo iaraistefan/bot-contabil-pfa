@@ -2826,15 +2826,23 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
         postable, bool(reale_tax), len(reale_tax)
     )
 
-    # Felia 4: reconciliere de prezență Bolt — BONUS, adăugat la preview defensiv
-    # (o eroare la reconciliere NU strică preview-ul: append_nudge prinde și întoarce
-    # textul neschimbat). `_format_bank_preview` rămâne NEATINS.
+    # Felia 4: reconciliere Bolt — BONUS, adăugat la preview defensiv (o eroare NU
+    # strică preview-ul: wrapperele prind și întorc textul neschimbat).
+    # `_format_bank_preview` rămâne NEATINS. Două axe ortogonale:
+    #   4a) prezență (append_nudge) — lună cu Bolt în extras dar nesincronizată;
+    #   4c) bancar cumulativ (append_bank_nudge) — Σ încasat/an vs net bancabil/an.
     preview_text = _format_bank_preview(clasificate)
     session = get_session()
     try:
         preview_text = bolt_reconcile.append_nudge(
             preview_text, session, user_id, clasificate
         )
+        # Axa bancară cumulativă: per an distinct cu VENIT_BOLT în extras.
+        ani_bolt = {y for (y, _m) in bolt_reconcile.bolt_months_in_statement(clasificate)}
+        for an in sorted(ani_bolt):
+            preview_text = bolt_reconcile.append_bank_nudge(
+                preview_text, session, user_id, clasificate, an
+            )
     finally:
         session.close()
 
