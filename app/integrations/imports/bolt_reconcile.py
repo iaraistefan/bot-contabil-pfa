@@ -151,3 +151,111 @@ def bolt_amount_confirm_line(brut_api, brut_declarat):
         "_Cauze normale: un sync mai vechi (rulează /bolt din nou) sau venituri "
         "Bolt adăugate manual peste sincronizare._"
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# Axa BANCARĂ CUMULATIVĂ (felia 4c) — Bolt încasat-în-bancă vs net bancabil.
+#
+# A TREIA axă, ORTOGONALĂ de prezență (has_bolt_income) și de pas 1 (brut↔declarat).
+# NU atinge nicio funcție de mai sus.
+#
+# De ce CUMULATIV (YTD), nu lunar: payout-ul Bolt e săptămânal, nu respectă luna
+# calendaristică — un verdict lunar ar minți cu precizie falsă (payout de la cumpăna
+# lunii cade în luna „greșită"). Cumulativ pe an, timingul se spală.
+#
+# De ce NET vs NET (nu brut): banca arată ce DEPUNE Bolt = NET (după comision).
+# Capcana #1: Bolt depune DOAR partea card/app; cursele cash le încasezi în mână →
+# net bancabil EXCLUDE cash (bolt_sync.net_bancabil_an). Fără excludere, un șofer cu
+# cash ar primi discrepanță falsă sistematică.
+#
+# Diferențe legitime (sub toleranță, NU erori): timing (spălat cumulativ), reziduuri
+# 2%/TVA/ajustări, rotunjiri. Prag LARG (cumulativ acumulează reziduuri).
+# ══════════════════════════════════════════════════════════════
+
+BANK_RECON_TOL_ABS = 50.0    # lei (cumulativ pe an → prag absolut mai mare)
+BANK_RECON_TOL_PCT = 0.02    # 2% (reziduuri 2%/TVA/ajustări se adună pe an)
+
+
+def bank_bolt_net_in_year(clasificate, an):
+    """
+    Σ încasărilor VENIT_BOLT (net, din bancă) cu data în anul `an`. Oglinda lui
+    bolt_months_in_statement, dar SUMEAZĂ suma (nu doar citește datele). Pură.
+    """
+    from app.integrations.imports.classify import VENIT_BOLT
+    total = 0.0
+    for r in clasificate:
+        if r.bucket == VENIT_BOLT and r.txn.data and r.txn.data.year == an:
+            total += r.txn.suma
+    return round(total, 2)
+
+
+def bolt_bank_reconcile_cumulative(bank_net, net_bancabil):
+    """
+    Reconciliere BANCARĂ cumulativă: încasat-în-bancă (net) vs net bancabil Bolt.
+
+    Args:
+        bank_net: Σ VENIT_BOLT bancar pe an (net, doar card — cash nu intră în cont).
+        net_bancabil: net_bancabil_an din Bolt (None → cache indisponibil).
+
+    Returns:
+        (bank_net, net_bancabil, diferenta, status), diferenta = bank − bancabil,
+        status ∈ {OK, DISCREPANTA, INDISPONIBIL}. Prag LARG max(50 lei, 2%).
+    """
+    bank = round(bank_net or 0.0, 2)
+    if net_bancabil is None:
+        return (bank, None, None, "INDISPONIBIL")
+    bancabil = round(net_bancabil, 2)
+    dif = round(bank - bancabil, 2)
+    prag = max(BANK_RECON_TOL_ABS, BANK_RECON_TOL_PCT * abs(bancabil))
+    status = "OK" if abs(dif) <= prag else "DISCREPANTA"
+    return (bank, bancabil, dif, status)
+
+
+def bank_reconcile_nudge(session, user_id: int, clasificate, an):
+    """
+    Nudge NEUTRU pt axa bancară cumulativă, de adăugat la preview-ul extrasului.
+
+    Compară Σ VENIT_BOLT bancar/an (net) vs net bancabil Bolt/an (non-cash). ✅ pe
+    OK (întărire), ⚠️ pe discrepanță cu cifre + cauze, None pe INDISPONIBIL/fără Bolt
+    în extras (tăcere — nu inventăm). Nu atinge prezența/pas 1.
+    """
+    bank_net = bank_bolt_net_in_year(clasificate, an)
+    if bank_net <= 0:
+        return None  # niciun VENIT_BOLT în extras pe anul ăsta → tăcere
+    from app.integrations.bolt_sync import net_bancabil_an
+    bancabil = net_bancabil_an(user_id, an)
+    bank, bancabil, dif, status = bolt_bank_reconcile_cumulative(bank_net, bancabil)
+    if status == "INDISPONIBIL":
+        return None
+    if status == "OK":
+        return (
+            f"───────────────\n"
+            f"🔎 *Reconciliere bancară {an}*: ai încasat {bank:.2f} lei de la Bolt · "
+            f"Bolt confirmă ≈{bancabil:.2f} lei net (card) ✅\n"
+            "_Cashul nu intră în bancă (îl încasezi în mână), deci nu se compară aici._"
+        )
+    return (
+        f"───────────────\n"
+        f"⚠️ *Reconciliere bancară {an}*: ai încasat {bank:.2f} lei de la Bolt în cont, "
+        f"dar Bolt confirmă ≈{bancabil:.2f} lei net card (diferență {dif:+.2f}).\n"
+        "_Cauze normale: sync incomplet (rulează /bolt pe lunile lipsă), payout-uri la "
+        "cumpăna anului sau ajustări. Cashul nu intră aici. Dacă diferența e mare, "
+        "verifică dacă toate lunile-s sincronizate._"
+    )
+
+
+def safe_bank_reconcile_nudge(session, user_id: int, clasificate, an):
+    """Wrapper DEFENSIV (ca safe_reconcile_nudge): eroare → None, preview neatins."""
+    try:
+        return bank_reconcile_nudge(session, user_id, clasificate, an)
+    except Exception as e:
+        logger.error(f"bank_reconcile_nudge failed (preview neafectat): {e}")
+        return None
+
+
+def append_bank_nudge(preview_text: str, session, user_id: int, clasificate, an) -> str:
+    """Aditiv: preview + nudge bancar cumulativ (sau NESCHIMBAT dacă None/eroare)."""
+    nudge = safe_bank_reconcile_nudge(session, user_id, clasificate, an)
+    if nudge:
+        return f"{preview_text}\n\n{nudge}"
+    return preview_text
