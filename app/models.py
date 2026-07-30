@@ -111,6 +111,14 @@ class User(Base):
     bolt_client_secret_enc = Column(String(500), nullable=True)
     bolt_connected_at = Column(DateTime, nullable=True)
 
+    # Abonament SaaS Stripe (Felia 1 — fundatia de DATE, fara Stripe API real inca).
+    # ID-uri Stripe publice pt cont (NU secrete → fara _enc, spre deosebire de Bolt).
+    # NULL = neabonat (comportament neschimbat; nimeni nu le citeste inca — gating = Felia 4).
+    stripe_customer_id = Column(String(255), nullable=True)
+    stripe_subscription_id = Column(String(255), nullable=True)
+    stripe_status = Column(String(50), nullable=True)   # active / canceled / past_due / None
+    stripe_tier = Column(String(50), nullable=True)     # START / PRO / MAX; None = neabonat
+
     # === Relations ===
     documents = relationship("Document", back_populates="user")
     source_files = relationship("SourceFile", back_populates="user")

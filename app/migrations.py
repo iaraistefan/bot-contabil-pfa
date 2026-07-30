@@ -467,6 +467,23 @@ MIGRATIONS = [
             "ALTER TABLE vehicule ADD COLUMN IF NOT EXISTS regim_utilizare VARCHAR(20) NOT NULL DEFAULT 'MIXT'",
         ],
     },
+    {
+        "id": "023_subscription_fields",
+        "description": (
+            "Abonament SaaS Stripe (Felia 1, §1.7): fundatia de DATE per user. "
+            "stripe_customer_id / stripe_subscription_id = ID-uri Stripe publice (NU "
+            "secrete → fara criptare, spre deosebire de bolt_client_secret_enc). "
+            "stripe_status (active/canceled/past_due), stripe_tier (START/PRO/MAX). "
+            "Nullable: userii existenti NULL = neabonati (neschimbat). Inert — nimeni "
+            "nu le citeste inca (gating = Felia 4). Idempotent (IF NOT EXISTS)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_status VARCHAR(50)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_tier VARCHAR(50)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
