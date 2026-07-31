@@ -484,6 +484,18 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_tier VARCHAR(50)",
         ],
     },
+    {
+        "id": "024_trial_ends_at",
+        "description": (
+            "Reverse trial (§1.8, Felia 4a): trial_ends_at pe user. 30 zile PRO "
+            "complet la onboarding (fara card) → apoi FREE 'Radar'. Nullable: "
+            "NULL = fara trial (neschimbat). Inert la nivel de features — gating-ul "
+            "efectiv (blocarea) = Felia 4b. Idempotent (IF NOT EXISTS)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

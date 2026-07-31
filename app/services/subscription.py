@@ -1,17 +1,24 @@
 """
 Abonament SaaS (§1.7) — logica de tier + gating primitiv.
 
-FELIA 1: doar fundația de citire peste câmpurile Stripe de pe User (models.py).
-ZERO Stripe API real aici — doar interpretează starea deja stocată. Funcțiile de
-gating EXISTĂ dar NU sunt aplicate nicăieri încă (Felia 4 le va folosi ca să
-condiționeze features). Până atunci: inert, comportament neschimbat pt toți userii.
+FELIA 1: fundația de citire peste câmpurile Stripe de pe User (models.py).
+FELIA 4a: user_tier() e acum TRIAL-AWARE (reverse trial §1.8). ZERO Stripe API real
+aici — doar interpretează starea stocată. Gating-ul efectiv (blocarea features) =
+Felia 4b; până atunci: inert, comportament neschimbat pt toți userii.
 
 Tier-uri (aliniate decizia #4 din PLAN-CONIAR.md §1, jurnal research):
-  FREE  — neabonat (stripe_tier NULL). Tot ce e azi disponibil rămâne disponibil.
+  FREE  — neabonat, fără trial activ (stripe_tier NULL + trial expirat/absent)
   START — ~99-149 lei (Bolt + D212 + estimare live + bot + rezervă taxe)
   PRO   — ~179-199 lei (+ depunere auto + feed bancar AI + reconciliere + garanție)
   MAX   — ~289-349 lei (+ plătitori TVA + optimizare predictivă + review uman)
+
+Reverse trial (§1.8): la onboarding, userul nou primește 30 zile PRO complet (fără
+card, trial_ends_at = now+30). Cât timp trial_ends_at > acum ȘI nu e abonat activ →
+tratat ca PRO. După expirare → FREE „Radar". Un user care PLĂTEȘTE în trial (ex. MAX)
+e respectat la tier-ul plătit — NU downgradăm la PRO.
 """
+
+from datetime import datetime
 
 # Tier-uri (string, ca stripe_tier pe User). FREE = sentinela pt neabonat.
 FREE = "FREE"
@@ -38,16 +45,47 @@ def is_subscribed(user) -> bool:
     return getattr(user, "stripe_status", None) == _ACTIVE_STATUS
 
 
-def user_tier(user) -> str:
+def is_in_trial(user, now=None) -> bool:
     """
-    Tier-ul EFECTIV al userului: stripe_tier dacă abonat activ, altfel FREE.
-    Un tier setat dar cu status ne-activ (ex. canceled) → FREE (nu mai are acces).
-    Un tier necunoscut → FREE conservator (nu presupunem acces).
+    True dacă userul e în reverse trial ACTIV: trial_ends_at > acum ȘI NU e abonat
+    activ (un abonat plătitor nu mai e „în trial", e client). `now` injectabil pt teste.
     """
-    if not is_subscribed(user):
-        return FREE
-    tier = getattr(user, "stripe_tier", None)
-    return tier if tier in _TIER_RANK else FREE
+    if is_subscribed(user):
+        return False
+    ends = getattr(user, "trial_ends_at", None)
+    if ends is None:
+        return False
+    return ends > (now or datetime.utcnow())
+
+
+def trial_days_left(user, now=None) -> int:
+    """
+    Câte zile ÎNTREGI au rămas din trial (rotunjit în sus la ziua curentă), sau 0
+    dacă nu e în trial. Pt mesaje „îți mai rămân X zile" (Felia 4b). `now` injectabil.
+    """
+    if not is_in_trial(user, now=now):
+        return 0
+    ends = getattr(user, "trial_ends_at", None)
+    delta = ends - (now or datetime.utcnow())
+    # secunde → zile, rotunjit în sus (o fracție de zi = încă „o zi rămasă").
+    return max(0, -(-delta.total_seconds() // 86400).__int__())
+
+
+def user_tier(user, now=None) -> str:
+    """
+    Tier-ul EFECTIV al userului. Ordine de prioritate (TRIAL-AWARE, Felia 4a):
+      1. abonat activ (stripe_status=active) → stripe_tier (respectă plata; dacă a luat
+         MAX în trial, rămâne MAX — NU downgradăm). Tier necunoscut → FREE conservator.
+      2. altfel, în trial (trial_ends_at > acum) → PRO (reverse trial §1.8).
+      3. altfel → FREE.
+    `now` injectabil pt teste (default: datetime.utcnow()).
+    """
+    if is_subscribed(user):
+        tier = getattr(user, "stripe_tier", None)
+        return tier if tier in _TIER_RANK else FREE
+    if is_in_trial(user, now=now):
+        return PRO
+    return FREE
 
 
 def has_tier_at_least(user, minim: str) -> bool:
