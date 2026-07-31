@@ -5,7 +5,7 @@ Conventie: orice functie care atinge DB accepta o SQLAlchemy Session ca prim arg
 Asta tine tranzactiile sub controlul apelantului.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any
 
 from sqlalchemy.orm import Session
@@ -251,6 +251,21 @@ def get_onboarding_step(session: Session, user_id: int) -> int:
     return user.onboarding_step or 0
 
 
+# Reverse trial (§1.8, Felia 4a): 30 zile PRO complet la finalul onboarding-ului.
+TRIAL_DAYS = 30
+
+
+def _ensure_trial_started(user: User) -> None:
+    """
+    Pornește reverse trial-ul (trial_ends_at = acum + 30 zile) la completarea
+    onboarding-ului, DOAR dacă userul nu are deja unul. IDEMPOTENT: re-onboarding /
+    a doua completare NU resetează trial-ul (nu-l poți reînnoi trecând iar prin flow).
+    Pur intern — fără Stripe, fără card (§1.8 reverse trial). Gating = Felia 4b.
+    """
+    if getattr(user, "trial_ends_at", None) is None:
+        user.trial_ends_at = datetime.utcnow() + timedelta(days=TRIAL_DAYS)
+
+
 def set_onboarding_step(
     session: Session,
     user: User,
@@ -259,6 +274,7 @@ def set_onboarding_step(
     user.onboarding_step = step
     if step == ONBOARDING_STEPS["COMPLETED"]:
         user.onboarding_completed = True
+        _ensure_trial_started(user)
     session.flush()
     return user
 
@@ -280,6 +296,7 @@ def advance_onboarding_step(
 def complete_onboarding(session: Session, user: User) -> User:
     user.onboarding_completed = True
     user.onboarding_step = ONBOARDING_STEPS["COMPLETED"]
+    _ensure_trial_started(user)   # reverse trial 30 zile (idempotent)
     session.flush()
     return user
 

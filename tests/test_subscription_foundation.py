@@ -63,11 +63,12 @@ def test_migrarea_023_structura():
         assert c in coloane
 
 
-def test_migrarea_023_e_ultima():
-    # Regula: adaugă mereu la sfârșit. 023 = ultima, imediat după 022.
+def test_migrarea_023_dupa_022():
+    # Regula: adaugă mereu la sfârșit. 023 vine imediat după 022 (poziția „ultima"
+    # s-a mutat pe 024 în Felia 4a — verificăm relația de ordonare, care rămâne).
     ids = [m["id"] for m in migrations.MIGRATIONS]
-    assert ids[-1] == "023_subscription_fields"
-    assert ids[-2] == "022_vehicule_regim_utilizare"
+    i23 = ids.index("023_subscription_fields")
+    assert ids[i23 - 1] == "022_vehicule_regim_utilizare"
 
 
 def test_migrarea_023_idempotenta_prin_mecanism(tmp_path, monkeypatch):

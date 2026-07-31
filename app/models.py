@@ -118,6 +118,9 @@ class User(Base):
     stripe_subscription_id = Column(String(255), nullable=True)
     stripe_status = Column(String(50), nullable=True)   # active / canceled / past_due / None
     stripe_tier = Column(String(50), nullable=True)     # START / PRO / MAX; None = neabonat
+    # Reverse trial (§1.8): 30 zile PRO complet la onboarding, fara card → apoi FREE.
+    # NULL = fara trial (userii vechi / neonboardati). trial_ends_at > acum = in trial.
+    trial_ends_at = Column(DateTime, nullable=True)
 
     # === Relations ===
     documents = relationship("Document", back_populates="user")
