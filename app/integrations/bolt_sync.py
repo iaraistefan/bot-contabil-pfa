@@ -48,6 +48,8 @@ from app.models import Document
 from app.repositories import users as users_repo
 from app.repositories import transactions as tx_repo
 from app.services import posting
+from app.services import gating  # Felia 4b - gating abonament (sync Bolt = START)
+from app.services import subscription as _sub  # Felia 1/4a - tier-uri
 from app.services import banner_send  # Faza UI - banner Venituri Bolt (cale-comandă)
 from app.ro_dates import luna_ro  # Faza UI - luni RO
 
@@ -766,6 +768,15 @@ async def handle_bolt_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not user_id:
         await update.message.reply_text("Foloseste mai intai /start.")
         return
+    # Felia 4b: sincronizarea automată Bolt e din planul START. Gardat ÎNAINTE de
+    # orice apel API (nu consumăm cote Bolt pentru un user care n-are feature-ul).
+    ok, text, markup = gating.require_tier_bot(
+        user_id, gating.feature_tier("bolt_sync"), feature="bolt_sync"
+    )
+    if not ok:
+        await update.message.reply_text(text, parse_mode="Markdown",
+                                        reply_markup=markup)
+        return
     raw_args = context.args or []
     resync = any(a.lower() == "resync" for a in raw_args)
     clean_args = [a for a in raw_args if a.lower() != "resync"]
@@ -841,6 +852,15 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("Foloseste mai intai /start.")
         raise ApplicationHandlerStop
 
+    # Felia 4b: butonul de confirmare scrie în Registru = tot sincronizare Bolt (START).
+    # Gardat și aici pentru butoanele RĂMASE în istoric de dinainte de expirarea trialului.
+    ok, text, markup = gating.require_tier_bot(
+        user_id, gating.feature_tier("bolt_sync"), feature="bolt_sync"
+    )
+    if not ok:
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=markup)
+        raise ApplicationHandlerStop
+
     try:
         s = get_month_summary(user_id, year, month)
         if s["n"] == 0:
@@ -859,9 +879,14 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             sess = get_session()
             try:
                 brut_declarat = bolt_reconcile.declared_bolt_brut(sess, user_id, year, month)
+                # Felia 4b: verdictul COMPLET (cauze + pași) e „arma secretă" = PRO.
+                # FREE vede doar mărimea nepotrivirii (teaser). Trial activ = PRO.
+                detailed = gating.has_feature(sess, user_id, _sub.PRO)
             finally:
                 sess.close()
-            line = bolt_reconcile.bolt_amount_confirm_line(s["brut"], brut_declarat)
+            line = bolt_reconcile.bolt_amount_confirm_line(
+                s["brut"], brut_declarat, detailed=detailed
+            )
             if line:
                 recon = f"\n\n{line}"
         except Exception as e:
@@ -921,6 +946,11 @@ def _daily_sync_one(bot_token, user):
     Confirm-first: sync în cache + ping informativ + buton OPȚIONAL (post_month luna curentă,
     atomic, prin callback-ul existent). NU auto-postează.
     """
+    # Felia 4b: sync-ul automat E feature-ul din START — aceeași ușă, alt drum decât
+    # /bolt. Fără gardianul ăsta, un user căzut pe FREE după trial ar continua să
+    # primească sync zilnic, iar poarta de pe comandă ar fi doar cosmetică.
+    if not _sub.has_tier_at_least(user, gating.feature_tier("bolt_sync")):
+        return                                   # tăcere, nu reclamă nocturnă
     session = get_session()
     try:
         client = bolt_client_for_user(session, user.id)

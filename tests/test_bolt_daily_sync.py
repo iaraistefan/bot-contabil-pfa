@@ -23,7 +23,11 @@ def _db(tmp_path, users):
     User.metadata.create_all(eng)
     S = sessionmaker(bind=eng); s = S()
     for kw in users:
-        s.add(User(**kw))
+        # Abonat START: din Felia 4b sincronizarea automată Bolt e feature START.
+        # Aici testăm MECANICA sync-ului (iterare, izolare erori, confirm-first),
+        # nu poarta — userii trebuie să aibă dreptul. Blocarea FREE e testată în
+        # test_gating_application.py (test_free_nu_primeste_sync_zilnic_automat).
+        s.add(User(**{"stripe_status": "active", "stripe_tier": "START", **kw}))
     s.commit(); s.close()
     return S
 

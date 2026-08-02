@@ -28,16 +28,25 @@ def bolt_months_in_statement(clasificate: List) -> Set[Tuple[int, int]]:
     return out
 
 
-def bolt_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[str]:
+def bolt_reconcile_nudge(session, user_id: int, clasificate: List,
+                         detailed: bool = True) -> Optional[str]:
     """Nudge dacă există luni cu Bolt în extras dar fără venit sincronizat.
 
     Întoarce textul de adăugat la preview, sau None dacă totul e sincronizat
     (tăcere — nu deranjăm). Formulare NEUTRĂ (verificare, nu acuzație de eroare).
+
+    `detailed` (Felia 4b): False → teaser (câte luni, fără enumerare și fără comanda
+    de sync — sincronizarea e din START). Default True = comportamentul dinainte,
+    bit-identic. Detectarea în sine NU se schimbă, doar cât arătăm din ea.
     """
     months = sorted(bolt_months_in_statement(clasificate))
     lipsa = [(y, m) for (y, m) in months if not has_bolt_income(session, user_id, y, m)]
     if not lipsa:
         return None
+
+    if not detailed:
+        from app.services.gating import teaser_prezenta
+        return teaser_prezenta(len(lipsa))
 
     lines = [
         "───────────────",
@@ -55,7 +64,8 @@ def bolt_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[s
     return "\n".join(lines)
 
 
-def safe_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[str]:
+def safe_reconcile_nudge(session, user_id: int, clasificate: List,
+                         detailed: bool = True) -> Optional[str]:
     """Wrapper DEFENSIV peste `bolt_reconcile_nudge`.
 
     Reconcilierea e BONUS, nu valoarea principală (preview-ul). O eroare la
@@ -63,19 +73,21 @@ def safe_reconcile_nudge(session, user_id: int, clasificate: List) -> Optional[s
     o prindem și întoarcem None (preview normal).
     """
     try:
-        return bolt_reconcile_nudge(session, user_id, clasificate)
+        return bolt_reconcile_nudge(session, user_id, clasificate, detailed=detailed)
     except Exception as e:
         logger.error(f"bolt_reconcile_nudge failed (preview neafectat): {e}")
         return None
 
 
-def append_nudge(preview_text: str, session, user_id: int, clasificate: List) -> str:
+def append_nudge(preview_text: str, session, user_id: int, clasificate: List,
+                 detailed: bool = True) -> str:
     """Întoarce preview-ul cu nudge-ul reconcilierii adăugat ca secțiune separată.
 
     Aditiv: dacă nu e nimic de raportat (tot sincronizat) SAU reconcilierea crapă
-    → preview-ul rămâne NESCHIMBAT (bit-identic).
+    → preview-ul rămâne NESCHIMBAT (bit-identic). `detailed` = felia 4b (vezi
+    `bolt_reconcile_nudge`); default True păstrează comportamentul dinainte.
     """
-    nudge = safe_reconcile_nudge(session, user_id, clasificate)
+    nudge = safe_reconcile_nudge(session, user_id, clasificate, detailed=detailed)
     if nudge:
         return f"{preview_text}\n\n{nudge}"
     return preview_text
@@ -134,17 +146,24 @@ def declared_bolt_brut(session, user_id: int, year: int, month: int):
     return 0.0  # nicio felie Bolt → 0 declarat
 
 
-def bolt_amount_confirm_line(brut_api, brut_declarat):
+def bolt_amount_confirm_line(brut_api, brut_declarat, detailed: bool = True):
     """
     Linia de reconciliere pt confirmarea `/bolt` (felia 4b). NEUTRĂ (verificare,
     nu acuzație), ca prezența. ✅ pe OK (întărire de încredere), ⚠️ pe discrepanță
     cu cifrele + cauze normale, None pe INDISPONIBIL (tăcere — nu inventăm).
+
+    `detailed=False` (FREE, felia 4b): pe DISCREPANȚĂ arată DOAR mărimea diferenței
+    (teaser — cauzele și pașii sunt în PRO). Confirmarea ✅ rămâne pentru toată lumea:
+    e liniștire, nu „armă secretă". `bolt_amount_reconcile` rămâne NEATINSĂ.
     """
     api, dec, dif, status = bolt_amount_reconcile(brut_api, brut_declarat)
     if status == "INDISPONIBIL":
         return None
     if status == "OK":
         return f"🔎 Reconciliere: API-ul Bolt confirmă {api:.2f} lei ✅"
+    if not detailed:
+        from app.services.gating import teaser_reconciliere
+        return teaser_reconciliere(dif)
     return (
         f"⚠️ *Verificare sumă Bolt*: ai declarat {dec:.2f} lei, dar API-ul Bolt "
         f"arată {api:.2f} lei (diferență {dif:+.2f}).\n"
@@ -211,13 +230,17 @@ def bolt_bank_reconcile_cumulative(bank_net, net_bancabil):
     return (bank, bancabil, dif, status)
 
 
-def bank_reconcile_nudge(session, user_id: int, clasificate, an):
+def bank_reconcile_nudge(session, user_id: int, clasificate, an,
+                         detailed: bool = True):
     """
     Nudge NEUTRU pt axa bancară cumulativă, de adăugat la preview-ul extrasului.
 
     Compară Σ VENIT_BOLT bancar/an (net) vs net bancabil Bolt/an (non-cash). ✅ pe
     OK (întărire), ⚠️ pe discrepanță cu cifre + cauze, None pe INDISPONIBIL/fără Bolt
     în extras (tăcere — nu inventăm). Nu atinge prezența/pas 1.
+
+    `detailed=False` (FREE, felia 4b): pe discrepanță doar mărimea diferenței (teaser).
+    `bolt_bank_reconcile_cumulative` rămâne NEATINSĂ — ramifică doar afișajul.
     """
     bank_net = bank_bolt_net_in_year(clasificate, an)
     if bank_net <= 0:
@@ -234,6 +257,9 @@ def bank_reconcile_nudge(session, user_id: int, clasificate, an):
             f"Bolt confirmă ≈{bancabil:.2f} lei net (card) ✅\n"
             "_Cashul nu intră în bancă (îl încasezi în mână), deci nu se compară aici._"
         )
+    if not detailed:
+        from app.services.gating import teaser_reconciliere
+        return f"───────────────\n{teaser_reconciliere(dif)}"
     return (
         f"───────────────\n"
         f"⚠️ *Reconciliere bancară {an}*: ai încasat {bank:.2f} lei de la Bolt în cont, "
@@ -244,18 +270,20 @@ def bank_reconcile_nudge(session, user_id: int, clasificate, an):
     )
 
 
-def safe_bank_reconcile_nudge(session, user_id: int, clasificate, an):
+def safe_bank_reconcile_nudge(session, user_id: int, clasificate, an,
+                              detailed: bool = True):
     """Wrapper DEFENSIV (ca safe_reconcile_nudge): eroare → None, preview neatins."""
     try:
-        return bank_reconcile_nudge(session, user_id, clasificate, an)
+        return bank_reconcile_nudge(session, user_id, clasificate, an, detailed=detailed)
     except Exception as e:
         logger.error(f"bank_reconcile_nudge failed (preview neafectat): {e}")
         return None
 
 
-def append_bank_nudge(preview_text: str, session, user_id: int, clasificate, an) -> str:
+def append_bank_nudge(preview_text: str, session, user_id: int, clasificate, an,
+                      detailed: bool = True) -> str:
     """Aditiv: preview + nudge bancar cumulativ (sau NESCHIMBAT dacă None/eroare)."""
-    nudge = safe_bank_reconcile_nudge(session, user_id, clasificate, an)
+    nudge = safe_bank_reconcile_nudge(session, user_id, clasificate, an, detailed=detailed)
     if nudge:
         return f"{preview_text}\n\n{nudge}"
     return preview_text

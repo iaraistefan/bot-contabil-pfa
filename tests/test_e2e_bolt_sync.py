@@ -32,11 +32,16 @@ async def test_e2e_conectare_sync_ping_tap_post(monkeypatch, tmp_path):
     eng = create_engine(f"sqlite:///{(tmp_path / 'e2e.db').as_posix()}")
     User.metadata.create_all(eng)
     S = sessionmaker(bind=eng)
-    s = S(); u = User(telegram_id=900); s.add(u); s.commit(); uid = u.id; s.close()
+    # Abonat START — din Felia 4b sincronizarea Bolt e feature START. E2E-ul verifică
+    # LANȚUL (conectare→sync→ping→tap→post), nu poarta; blocarea FREE e testată separat.
+    s = S(); u = User(telegram_id=900, stripe_status="active", stripe_tier="START")
+    s.add(u); s.commit(); uid = u.id; s.close()
 
-    # toate căile (web + bolt_sync) pe aceeași DB
+    # toate căile (web + bolt_sync + gardianul de tier) pe aceeași DB
+    from app.services import gating
     monkeypatch.setattr(webapp, "get_session", lambda: S())
     monkeypatch.setattr(bolt_sync, "get_session", lambda: S())
+    monkeypatch.setattr(gating, "get_session", lambda: S())
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.delenv("BOLT_OWNER_TELEGRAM_ID", raising=False)
 
