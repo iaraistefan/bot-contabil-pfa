@@ -29,6 +29,7 @@ from config import settings
 from db import get_session
 from app.repositories import transactions as tx_repo
 from app.repositories import users as users_repo
+from app.services import subscription as _sub  # Felia 1/4a — tier-uri (gating 4b)
 from app.services import tax_engine
 from app.domain import labels_ro
 from app import storage
@@ -240,6 +241,46 @@ def _require_user():
             ),
         }), 401)
     return user_id, None
+
+
+def _require_tier(user_id: int, min_tier: str, feature: str = None):
+    """
+    Gardian de ABONAMENT (Felia 4b §1.8) — se cheamă DUPĂ `_require_user`, care
+    răspunde de identitate. Aici răspundem doar de drepturi.
+
+    Întoarce error_response sau None:
+        user_id, err = _require_user()
+        if err: return err
+        err = _require_tier(user_id, sub.PRO, feature="declaratii")
+        if err: return err
+
+    403 `upgrade_required` (nu 401 — userul E autentificat, doar n-are planul), cu
+    tier-ul cerut/curent și mesajul gata formatat, ca frontend-ul să poată afișa
+    invitația fără să-și scrie propriul copy.
+    """
+    from app.services import gating
+    from app.services import subscription as sub
+
+    session = get_session()
+    try:
+        if gating.has_feature(session, user_id, min_tier):
+            return None
+        # Totul se citește CÂT sesiunea e deschisă (obiectul User detașat n-ar mai
+        # putea fi interogat după close).
+        user = users_repo.get_by_id(session, user_id)
+        tier_curent = sub.user_tier(user) if user else sub.FREE
+        zile_trial = sub.trial_days_left(user) if user else 0
+        mesaj = gating.upgrade_text(feature, user=user)
+    finally:
+        session.close()
+
+    return jsonify({
+        "error": "upgrade_required",
+        "tier_necesar": min_tier,
+        "tier_curent": tier_curent,
+        "trial_zile_ramase": zile_trial,
+        "message": mesaj,
+    }), 403
 
 
 # ============================================================
@@ -1318,6 +1359,10 @@ def genereaza_declaratie(tip: str, year: int, month: int):
     user_id, err = _require_user()
     if err:
         return err
+    # Felia 4b: depunerea (ghid + XML gata de urcat în SPV) e din planul PRO.
+    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
+    if err:
+        return err
 
     fmt = (request.args.get("format") or "ghid").lower()
 
@@ -1419,6 +1464,10 @@ def genereaza_declaratie_d207(year: int):
         return jsonify({"error": "invalid year"}), 400
 
     user_id, err = _require_user()
+    if err:
+        return err
+    # Felia 4b: D207 = tot depunere → PRO (perechea anuală a lui D100).
+    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
     if err:
         return err
 

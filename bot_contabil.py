@@ -28,6 +28,8 @@ from app.ro_dates import luna_ro  # Faza UI - luni RO pentru bannere (caption Ra
 from app.services import declaratie_unica_ui as du_ui  # Faza 1: Declaratia Unica
 from app.services import ghid_ui  # sub-pas Ghid 2: ghid de obligații (Telegram)
 from app.services import certificat  # Certificat rezidență Bolt (PDF comun + ghid)
+from app.services import gating  # Felia 4b: aplicarea gating-ului pe features (§1.8)
+from app.services import subscription  # Felia 1/4a: tier-uri (FREE/START/PRO/MAX)
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.imports.classify import (
@@ -68,7 +70,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DASHBOARD_URL = "https://bot-contabil-pfa.onrender.com/dashboard"
+# Felia 4b: URL-ul stă în gating.py (sursă unică — poarta de upgrade duce tot acolo).
+DASHBOARD_URL = gating.DASHBOARD_URL
 
 # === BUTOANE MENIU PRINCIPAL ===
 BTN_RAPORT = "📊 Raport"
@@ -1092,6 +1095,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await bank_tax_ui.handle_callback(update, context)
         return
 
+    # === GATING ABONAMENT (Felia 4b §1.8) ===
+    # Interceptat AICI, înainte de `try` (precedentul onboarding): dacă userul n-are
+    # tier-ul, handler-ul feature-ului NU se mai execută deloc — răspundem cu invitația
+    # de upgrade și ne oprim. Namespace-urile care nu-s în hartă trec neatinse
+    # (alertele de termene, registrul, rapoartele, ghidul, extrasul = FREE „Radar").
+    feature = gating.NAMESPACE_FEATURE.get(namespace)
+    if feature:
+        ok, text, markup = gating.require_tier_bot(
+            user_id, gating.feature_tier(feature), feature=feature
+        )
+        if not ok:
+            await query.edit_message_text(
+                text, parse_mode="Markdown", reply_markup=markup
+            )
+            return
+
     try:
         if namespace == "nav":
             if parts[1] == "close":
@@ -1714,6 +1733,15 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
     Trimite ghidul de completare ca mesaj + fisierul XML ca document atasat.
     """
     chat_id = query.message.chat_id
+    # Felia 4b: gardian ȘI aici, nu doar în router — asta e strangularea reală a
+    # „depunerii" (dacă apare vreodată alt drum spre generator, rămâne închis).
+    ok, text, markup = gating.require_tier_bot(
+        user_id, gating.feature_tier("declaratii"), feature="declaratii"
+    )
+    if not ok:
+        await context.bot.send_message(chat_id=chat_id, text=text,
+                                       parse_mode="Markdown", reply_markup=markup)
+        return
     session = get_session()
     try:
         totals = tax_engine.compute_period(
@@ -1819,6 +1847,14 @@ async def execute_fisa_d207(query, context, user_id, year):
     (Σ 12 luni). ANUAL → fara luna. Oglinda _trimite_declaratie_noua, dar anual.
     """
     chat_id = query.message.chat_id
+    # Felia 4b: același gardian ca la generatorul lunar (D207 = tot depunere → PRO).
+    ok, text, markup = gating.require_tier_bot(
+        user_id, gating.feature_tier("declaratii"), feature="declaratii"
+    )
+    if not ok:
+        await context.bot.send_message(chat_id=chat_id, text=text,
+                                       parse_mode="Markdown", reply_markup=markup)
+        return
     session = get_session()
     try:
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -2834,14 +2870,18 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     preview_text = _format_bank_preview(clasificate)
     session = get_session()
     try:
+        # Felia 4b: reconcilierea COMPLETĂ (ce anume nu se potrivește + cum se rezolvă)
+        # e „arma secretă" = PRO. FREE primește teaser-ul (vede CĂ e o nepotrivire și
+        # cât de mare, nu și rezolvarea). Trial activ = PRO → verdict complet.
+        detailed = gating.has_feature(session, user_id, subscription.PRO)
         preview_text = bolt_reconcile.append_nudge(
-            preview_text, session, user_id, clasificate
+            preview_text, session, user_id, clasificate, detailed=detailed
         )
         # Axa bancară cumulativă: per an distinct cu VENIT_BOLT în extras.
         ani_bolt = {y for (y, _m) in bolt_reconcile.bolt_months_in_statement(clasificate)}
         for an in sorted(ani_bolt):
             preview_text = bolt_reconcile.append_bank_nudge(
-                preview_text, session, user_id, clasificate, an
+                preview_text, session, user_id, clasificate, an, detailed=detailed
             )
     finally:
         session.close()

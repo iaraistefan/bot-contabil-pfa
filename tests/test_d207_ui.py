@@ -25,7 +25,11 @@ def _db(tmp_path, *, regim=True):
     User.metadata.create_all(eng)
     S = sessionmaker(bind=eng)
     s = S()
-    u = User(telegram_id=42, activity_code="ridesharing")
+    # Abonat PRO: din Felia 4b depunerea (inclusiv D207) e feature PRO. Aici testăm
+    # LIVRAREA declarației, nu gating-ul — userul trebuie să aibă dreptul, altfel am
+    # verifica poarta în loc de generator. Blocarea pt FREE e în test_gating_application.
+    u = User(telegram_id=42, activity_code="ridesharing",
+             stripe_status="active", stripe_tier="PRO")
     s.add(u); s.commit(); uid = u.id
     users_repo.update_profile(s, u, firma_cui="53067338",
                               firma_nume="TEST PFA")
@@ -64,6 +68,8 @@ def test_ruta_d207_xml(tmp_path, monkeypatch):
     _seed_comisioane(S, uid)
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.setattr(webapp, "get_session", lambda: S())
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     r = webapp.flask_app.test_client().get(f"/api/v1/declaratie-d207/{AN}?format=xml")
     assert r.status_code == 200
@@ -80,6 +86,8 @@ def test_ruta_d207_json_default(tmp_path, monkeypatch):
     _seed_comisioane(S, uid)
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.setattr(webapp, "get_session", lambda: S())
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     d = webapp.flask_app.test_client().get(f"/api/v1/declaratie-d207/{AN}").get_json()
     assert d["tip"] == "D207" and d["year"] == AN
@@ -97,6 +105,8 @@ def test_ruta_d207_regim_nesetat_400(tmp_path, monkeypatch):
     _seed_comisioane(S, uid)
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.setattr(webapp, "get_session", lambda: S())
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     r = webapp.flask_app.test_client().get(f"/api/v1/declaratie-d207/{AN}")
     assert r.status_code == 400                            # gestionat, nu 500
@@ -108,6 +118,8 @@ def test_ruta_d207_an_gol_negenerat(tmp_path, monkeypatch):
     S, uid = _db(tmp_path)                 # fara comisioane deloc
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.setattr(webapp, "get_session", lambda: S())
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     r = webapp.flask_app.test_client().get(f"/api/v1/declaratie-d207/{AN}")
     assert r.status_code == 400
@@ -133,6 +145,9 @@ async def test_callback_d207_livreaza_xml(tmp_path, monkeypatch):
     S, uid = _db(tmp_path)
     _seed_comisioane(S, uid)
     monkeypatch.setattr(bot_contabil, "get_session", lambda: S())
+    # gardianul de tier își deschide propria sesiune (Felia 4b) → o legăm la aceeași DB
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     bot = _FakeBot()
     query = SimpleNamespace(message=SimpleNamespace(chat_id=999))
@@ -153,6 +168,9 @@ async def test_callback_d207_regim_nesetat_mesaj(tmp_path, monkeypatch):
     S, uid = _db(tmp_path, regim=False)
     _seed_comisioane(S, uid)
     monkeypatch.setattr(bot_contabil, "get_session", lambda: S())
+    # gardianul de tier își deschide propria sesiune (Felia 4b) → o legăm la aceeași DB
+    from app.services import gating
+    monkeypatch.setattr(gating, "get_session", lambda: S())
 
     bot = _FakeBot()
     query = SimpleNamespace(message=SimpleNamespace(chat_id=999))
