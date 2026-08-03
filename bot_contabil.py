@@ -30,6 +30,7 @@ from app.services import ghid_ui  # sub-pas Ghid 2: ghid de obligații (Telegram
 from app.services import certificat  # Certificat rezidență Bolt (PDF comun + ghid)
 from app.services import gating  # Felia 4b: aplicarea gating-ului pe features (§1.8)
 from app.services import subscription  # Felia 1/4a: tier-uri (FREE/START/PRO/MAX)
+from app.services import stripe_checkout  # Brick 2b: sesiunea de plată Stripe (§1.7)
 from app.ai.schemas import ExtractionItem
 from app.activities import get_activity_for_user
 from app.integrations.imports.classify import (
@@ -1112,6 +1113,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     try:
+        # === UPGRADE → checkout Stripe (Brick 2b §1.7) ===
+        # Butonul din mesajul de gating. NU e gated el însuși (evident: e drumul de
+        # ieșire din gating) și nu apare în NAMESPACE_FEATURE.
+        if namespace == "upgrade":
+            await execute_upgrade_checkout(
+                query, user_id, parts[1] if len(parts) > 1 else None
+            )
+            return
+
         if namespace == "nav":
             if parts[1] == "close":
                 await query.edit_message_text("✅ Meniu închis.")
@@ -1366,6 +1376,51 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 # ============================================================
 #                    EXECUTORS
 # ============================================================
+
+async def execute_upgrade_checkout(query, user_id, tier):
+    """
+    Brick 2b: userul a apăsat „Activează {tier}" în mesajul de gating → creăm sesiunea
+    Stripe Checkout și îi dăm link-ul de plată ca buton URL.
+
+    De ce buton URL și nu WebApp: plata (3-D Secure, redirect-uri bancare, Apple/Google
+    Pay) vrea browserul adevărat, nu containerul WebApp. Un buton URL simplu e și calea
+    pe care Stripe o recomandă pentru Checkout găzduit.
+
+    NU scriem nimic în DB aici — abonamentul se activează din webhook-ul semnat (2c).
+    Apelul la Stripe se face cât sesiunea de DB e deschisă (convenția din restul
+    botului: I/O direct în handler); e o singură acțiune de user, nu o buclă.
+    """
+    if not tier:
+        await query.edit_message_text(
+            "⚠️ N-am înțeles ce plan vrei. Încearcă din nou din meniu."
+        )
+        return
+
+    session = get_session()
+    try:
+        user = users_repo.get_by_id(session, user_id)
+        url = stripe_checkout.create_checkout_session(user, tier) if user else None
+    finally:
+        session.close()
+
+    if not url:
+        await query.edit_message_text(
+            "⚠️ Nu pot deschide plata chiar acum. Mai încearcă peste câteva minute — "
+            "dacă ține, scrie-mi și mă ocup eu."
+        )
+        return
+
+    await query.edit_message_text(
+        f"💳 *Activare {tier}*\n\n"
+        "Apasă butonul de mai jos și finalizezi plata pe Stripe, în siguranță — "
+        "datele cardului nu trec prin Coniar.\n\n"
+        "După plată revii aici; abonamentul se activează singur în câteva secunde.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"🔒 Plătește {tier}", url=url)
+        ]]),
+    )
+
 
 async def execute_show_profil(query, context, user_id):
     session = get_session()
