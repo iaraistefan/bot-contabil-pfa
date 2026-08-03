@@ -251,6 +251,68 @@ def get_onboarding_step(session: Session, user_id: int) -> int:
     return user.onboarding_step or 0
 
 
+# ============================================================
+#            ABONAMENT STRIPE (§1.7 Felia 2 — Brick 2a)
+# ============================================================
+# DE CE SETTER DEDICAT, nu `update_profile`: allowlist-ul lui `update_profile` e o
+# listă EXPLICITĂ de kwargs, iar câmpurile Stripe NU sunt în ea — un apel
+# `update_profile(..., stripe_status="active")` ar fi înghițit tăcut de `**kwargs`-ul
+# inexistent (de fapt ar da TypeError) sau, dacă cineva l-ar adăuga doar în semnătură
+# fără corpul aferent, ar fi SILENT NO-OP. Exact capcana prinsă la
+# `vehicule_repo.update` (regim_utilizare lipsă din allowlist → editare fără efect).
+# Scriem DIRECT pe obiect, în stilul lui `_ensure_trial_started`, ca să nu existe
+# nicio cale prin care „am setat abonamentul" să însemne de fapt „n-am setat nimic".
+#
+# Aici NU se cheamă Stripe API — datele vin gata validate de la apelant (checkout 2b /
+# webhook 2c). Repository = scriere, nu integrare.
+
+def set_subscription(
+    session: Session,
+    user: User,
+    *,
+    customer_id: Optional[str] = None,
+    subscription_id: Optional[str] = None,
+    status: Optional[str] = None,
+    tier: Optional[str] = None,
+) -> User:
+    """
+    Scrie starea de abonament Stripe pe user. Doar valorile non-None se aplică
+    (None = lasă neschimbat), ca la `update_profile` — dar prin scriere DIRECTĂ.
+
+    `status` = stripe_status ('active' / 'canceled' / 'past_due'); 'active' e singurul
+    pe care `subscription.is_subscribed` îl consideră abonament valid.
+    `tier` = START / PRO / MAX (FREE nu se cumpără, deci nu se scrie aici).
+
+    Commit la apelant (convenția repository-ului); `flush` ca modificările să fie
+    vizibile în aceeași sesiune înainte de commit.
+    """
+    if customer_id is not None:
+        user.stripe_customer_id = customer_id
+    if subscription_id is not None:
+        user.stripe_subscription_id = subscription_id
+    if status is not None:
+        user.stripe_status = status
+    if tier is not None:
+        user.stripe_tier = tier
+    session.flush()
+    return user
+
+
+def clear_subscription(session: Session, user: User) -> User:
+    """
+    Marchează abonamentul ca ÎNCHEIAT (status='canceled') → `is_subscribed` devine
+    False → `user_tier` cade pe FREE (sau pe PRO, dacă userul mai are trial valabil —
+    prioritatea din Felia 4a decide, nu noi aici).
+
+    NU ștergem `stripe_customer_id` (istoric + reabonare fără client Stripe duplicat)
+    și nici `stripe_tier` (ce a avut rămâne informație utilă); doar statusul comută.
+    `stripe_subscription_id` rămâne pt trasabilitate în dashboardul Stripe.
+    """
+    user.stripe_status = "canceled"
+    session.flush()
+    return user
+
+
 # Reverse trial (§1.8, Felia 4a): 30 zile PRO complet la finalul onboarding-ului.
 TRIAL_DAYS = 30
 

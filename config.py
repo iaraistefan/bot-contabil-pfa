@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     stripe_webhook_secret: Optional[str] = None
     stripe_publishable_key: Optional[str] = None
 
+    # Price ID-urile Stripe Billing pt fiecare tier plătit (Brick 2a, §1.7 Felia 2).
+    # Se creează în dashboardul Stripe (Products + Prices) și se lipesc aici prin env —
+    # NU sunt secrete (apar în checkout), dar sunt specifice contului/modului test-live.
+    # Lipsă → tier-ul respectiv nu se poate cumpăra (checkout indisponibil pt el), restul
+    # aplicației neafectată. FREE n-are price (nu se cumpără).
+    stripe_price_start: Optional[str] = None
+    stripe_price_pro: Optional[str] = None
+    stripe_price_max: Optional[str] = None
+
 
 # Singleton. Import THIS everywhere instead of calling os.getenv.
 settings = Settings()
