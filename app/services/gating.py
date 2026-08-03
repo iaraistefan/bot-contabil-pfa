@@ -143,24 +143,63 @@ def trial_line(user, now=None):
     )
 
 
-def upgrade_text(feature: str, user=None, now=None) -> str:
+# Etichetele celor două CTA-uri posibile. Sursă unică: și textul, și butonul le
+# citesc de aici, ca mesajul să numească EXACT butonul de dedesubt (Brick 2b).
+CTA_DASHBOARD = "🖥️ Deschide Dashboard"
+
+
+def checkout_disponibil(tier: str) -> bool:
+    """
+    Putem duce userul direct la plată pentru `tier`? (Brick 2b: chei Stripe + price
+    configurat pt tier-ul ăsta.) Fals → CTA-ul cade pe dashboard, ca înainte —
+    degradare grațioasă, nu buton mort.
+    """
+    from app.services import stripe_config
+    return bool(stripe_config.is_payment_configured()
+                and stripe_config.price_id_for_tier(tier))
+
+
+def cta_label(tier: str) -> str:
+    """Eticheta butonului de upgrade pt `tier` — checkout dacă se poate, altfel dashboard."""
+    return f"💳 Activează {tier}" if checkout_disponibil(tier) else CTA_DASHBOARD
+
+
+def _tier_de_activat(feature: str, min_tier: str = None) -> str:
+    """
+    Tier-ul pe care userul trebuie să-l ia. Din FEATURES dacă feature-ul e cunoscut;
+    altfel `min_tier` (cel cerut de gardian), altfel PRO. Sursă unică pt text ȘI buton
+    — altfel mesajul ar putea spune PRO și butonul ar duce la START.
+    """
+    f = FEATURES.get(feature)
+    if f:
+        return f["tier"]
+    return min_tier or sub.PRO
+
+
+def upgrade_text(feature: str, user=None, now=None, min_tier: str = None) -> str:
     """
     Mesajul de upgrade pentru un feature blocat. Explică CE e blocat, CE câștigi și
     UNDE se activează. Fără alarmă, fără reproș — invitație, nu perete.
     """
     f = FEATURES.get(feature)
+    tier = _tier_de_activat(feature, min_tier)
     if not f:
-        tier = sub.PRO
         label, beneficiu = "Funcția asta", "îți automatizează partea de contabilitate"
     else:
-        tier, label, beneficiu = f["tier"], f["label"], f["beneficiu"]
+        label, beneficiu = f["label"], f["beneficiu"]
+
+    eticheta = cta_label(tier)
+    if checkout_disponibil(tier):
+        cta = f"Apasă *{eticheta}* — te duc direct la plata securizată, pe Stripe."
+    else:
+        cta = f"Apasă *{eticheta}* pentru a activa {tier}."
 
     linii = [
         f"💡 *{label}* face parte din planul {tier}.",
         "",
         f"În {tier}, Coniar {beneficiu}.",
         "",
-        f"Apasă *Deschide Dashboard* pentru a activa {tier}.",
+        cta,
     ]
     t = trial_line(user, now=now)
     if t:
@@ -168,14 +207,27 @@ def upgrade_text(feature: str, user=None, now=None) -> str:
     return "\n".join(linii)
 
 
-def upgrade_markup(dashboard_url: str = None):
+def upgrade_markup(tier: str = None, dashboard_url: str = None):
     """
-    Butonul „Deschide Dashboard" (oglindește CTA-ul din /bolt_conectare). Import
-    telegram LAZY — gating.py rămâne importabil și din contextul web (Flask).
+    Butonul de sub mesajul de upgrade.
+
+    Brick 2b: dacă plata e configurată pentru `tier`, butonul declanșează checkout-ul
+    pentru ACEL tier (callback `upgrade|TIER` → botul creează sesiunea Stripe și
+    răspunde cu link-ul de plată). Nu punem URL-ul de plată direct aici: sesiunea
+    Stripe expiră și ar însemna un apel de rețea la fiecare mesaj de gating, inclusiv
+    pentru userii care nu apasă niciodată.
+
+    Fără chei/price (sau fără tier) → butonul vechi „Deschide Dashboard", neschimbat.
+
+    Import telegram LAZY — gating.py rămâne importabil și din contextul web (Flask).
     """
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+    if tier and checkout_disponibil(tier):
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton(cta_label(tier), callback_data=f"upgrade|{tier}")
+        ]])
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🖥️ Deschide Dashboard",
+        InlineKeyboardButton(CTA_DASHBOARD,
                              web_app=WebAppInfo(url=dashboard_url or DASHBOARD_URL))
     ]])
 
@@ -200,7 +252,12 @@ def require_tier_bot(user_id: int, min_tier: str, feature: str = None):
     """
     if user_has_feature(user_id, min_tier):
         return True, None, None
-    return False, upgrade_text(feature, user=_load_user(user_id)), upgrade_markup()
+    # Același tier pentru text ȘI buton (2b): mesajul numește planul, butonul duce
+    # exact la checkout-ul lui — nu pot diverge.
+    tier = _tier_de_activat(feature, min_tier)
+    return (False,
+            upgrade_text(feature, user=_load_user(user_id), min_tier=min_tier),
+            upgrade_markup(tier))
 
 
 # ══════════════════════════════════════════════════════════════

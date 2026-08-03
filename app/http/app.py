@@ -1864,6 +1864,56 @@ def export_registru(year: int):
 
 
 # ============================================================
+#                    Stripe — întoarcerea din Checkout (Brick 2b)
+# ============================================================
+# Pagini PUR COSMETICE. Deliberat: fără `_require_user` (redirectul de la Stripe e o
+# navigare de browser obișnuită, fără initData Telegram — n-avem cum autentifica), și
+# fără citire/scriere în DB. Cine ajunge aici NU primește nimic: abonamentul se
+# activează exclusiv din webhook-ul semnat (2c). Altfel planul PRO s-ar lua
+# deschizând un link.
+
+_STRIPE_PAGE = """<!doctype html>
+<html lang="ro"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coniar — {titlu}</title>
+<style>
+  body {{ margin:0; min-height:100vh; display:flex; align-items:center;
+         justify-content:center; background:#0f1115; color:#e8eaed;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }}
+  .card {{ max-width:32rem; padding:2.5rem 2rem; text-align:center; }}
+  .emoji {{ font-size:3rem; line-height:1; margin-bottom:1rem; }}
+  h1 {{ font-size:1.35rem; margin:0 0 .75rem; font-weight:600; }}
+  p {{ margin:0; line-height:1.6; color:#a8adb8; }}
+</style></head>
+<body><div class="card">
+  <div class="emoji">{emoji}</div><h1>{titlu}</h1><p>{mesaj}</p>
+</div></body></html>
+"""
+
+
+@flask_app.route("/stripe/success")
+def stripe_success():
+    """Întoarcerea după o plată reușită. Informativ — activarea vine din webhook (2c)."""
+    return Response(_STRIPE_PAGE.format(
+        emoji="✨",
+        titlu="Mulțumim!",
+        mesaj=("Plata se procesează. Revino în bot — abonamentul tău se activează "
+               "singur în câteva secunde."),
+    ), mimetype="text/html")
+
+
+@flask_app.route("/stripe/cancel")
+def stripe_cancel():
+    """Întoarcerea după o plată abandonată. Fără reproș — invitație deschisă."""
+    return Response(_STRIPE_PAGE.format(
+        emoji="👋",
+        titlu="Plată anulată",
+        mesaj=("Nu s-a întâmplat nimic și nu ți s-a reținut nimic. "
+               "Poți reveni oricând, din bot."),
+    ), mimetype="text/html")
+
+
+# ============================================================
 #                    Runner
 # ============================================================
 
