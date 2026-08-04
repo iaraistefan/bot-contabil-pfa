@@ -30,6 +30,7 @@ from db import get_session
 from app.repositories import transactions as tx_repo
 from app.repositories import users as users_repo
 from app.services import subscription as _sub  # Felia 1/4a — tier-uri (gating 4b)
+from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura scriere abonament
 from app.services import tax_engine
 from app.domain import labels_ro
 from app import storage
@@ -1911,6 +1912,51 @@ def stripe_cancel():
         mesaj=("Nu s-a întâmplat nimic și nu ți s-a reținut nimic. "
                "Poți reveni oricând, din bot."),
     ), mimetype="text/html")
+
+
+# ============================================================
+#                    Stripe — webhook (Brick 2c)
+# ============================================================
+
+@flask_app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    """
+    SINGURA scriere de abonament din tot pipeline-ul (§1.7 Felia 2).
+
+    Prima rută fără `_require_user`, și e corect: requestul vine de la Stripe, nu din
+    Telegram. Autentificarea ESTE semnătura de pe corpul brut — nu o parolă în plus,
+    ci singura. De-aia citim `request.get_data()` (octeți bruți) și NU `get_json`:
+    Stripe semnează byte-cu-byte, iar orice re-serializare ar invalida semnătura.
+
+    CODURILE DE RĂSPUNS (Stripe reîncearcă ~3 zile pe orice non-2xx):
+      400 — semnătură lipsă/invalidă. E apărarea; retry-ul n-are ce repara.
+      200 — procesat CU SUCCES sau ignorat INTENȚIONAT (invoice.paid, event netratat,
+            user inexistent, price străin). Toate sunt stări permanente: un 500 aici
+            ar produce retry la infinit pentru ceva ce n-o să meargă niciodată.
+      500 — DOAR eroare tranzitorie neașteptată (ex. DB picat), unde retry-ul chiar
+            ajută. Singurul caz în care vrem ca Stripe să revină.
+    """
+    payload = request.get_data()                                # BRUT, nu get_json
+    sig_header = request.headers.get("Stripe-Signature")
+
+    event = _stripe_wh.verifica_semnatura(payload, sig_header)
+    if event is None:
+        return jsonify({"error": "invalid_signature"}), 400
+
+    session = get_session()
+    try:
+        rezultat = _stripe_wh.proceseaza(session, event)
+        if rezultat == _stripe_wh.PROCESAT:
+            # Repository-ul face doar `flush` (convenția „commit la apelant") — fără
+            # asta, scrierea s-ar pierde la `close()`.
+            session.commit()
+        return jsonify({"received": True, "rezultat": rezultat}), 200
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Webhook Stripe — eroare la procesare: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
 
 
 # ============================================================
