@@ -343,10 +343,17 @@ def test_2b_nu_scrie_in_db():
 
 
 def test_paginile_de_intoarcere_nu_ating_db_ul():
-    """Nici rutele cosmetice nu acordă abonamente (success_url e ocolibil)."""
+    """
+    Nici rutele cosmetice nu acordă abonamente (success_url e ocolibil).
+
+    Felia se oprește la webhook (2c) — ACELA scrie, legitim, fiindcă e semnat.
+    Aici verificăm doar cele două pagini de întoarcere.
+    """
     src = _sursa("app/http/app.py")
     start = src.index("def stripe_success")
-    bloc = src[start:src.index("def run_flask")]
+    sfarsit = src.index("def stripe_webhook") if "def stripe_webhook" in src \
+        else src.index("def run_flask")
+    bloc = src[start:sfarsit]
     for interzis in ("get_session", "set_subscription", "_require_user", "users_repo"):
         assert interzis not in bloc, f"pagina de întoarcere atinge {interzis!r}"
 
