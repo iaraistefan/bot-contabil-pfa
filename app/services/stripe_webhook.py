@@ -158,6 +158,32 @@ def _tier_din_abonament(obiect, context: str):
 # 3. Tratarea evenimentelor
 # ══════════════════════════════════════════════════════════════
 
+def _salveaza_adresa_facturare(user, obiect) -> None:
+    """
+    Completează adresa de facturare din datele colectate de Stripe la checkout
+    (Felia 3: factura cere stradă + nr, onboarding-ul dă doar județ/localitate).
+
+    NU SUPRASCRIE nimic completat: ce a scris userul despre sine are prioritate față
+    de ce a tastat în formularul de plată. Umplem doar golurile.
+
+    Best-effort: o adresă lipsă NU trebuie să blocheze activarea abonamentului (omul
+    a plătit). Fără adresă, 3b va ști că factura n-are toate datele.
+    """
+    adresa = _camp(obiect, "customer_details", "address")
+    if not adresa:
+        return
+
+    linie = " ".join(p for p in (_camp(adresa, "line1"), _camp(adresa, "line2")) if p)
+    for camp, valoare in (
+        ("adresa_strada", linie or None),
+        ("cod_postal", _camp(adresa, "postal_code")),
+        ("localitate", _camp(adresa, "city")),
+        ("judet", _camp(adresa, "state")),
+    ):
+        if valoare and not getattr(user, camp, None):
+            setattr(user, camp, valoare)
+
+
 def _checkout_finalizat(session, obiect) -> str:
     """Prima plată: activăm abonamentul și legăm userul de clientul Stripe."""
     ctx = "checkout.session.completed"
@@ -183,6 +209,9 @@ def _checkout_finalizat(session, obiect) -> str:
         status="active",
         tier=tier,
     )
+    # Felia 3: adresa de facturare, dacă Stripe a colectat-o. Separat de abonament —
+    # o adresă lipsă nu are voie să împiedice activarea.
+    _salveaza_adresa_facturare(user, obiect)
     logger.info(f"{ctx}: user={user.id} → {tier} ACTIV.")
     return PROCESAT
 

@@ -263,11 +263,15 @@ def test_subscription_4a_neatinsa(tmp_path):
 
 
 def test_migrarile_neatinse():
-    """Câmpurile Stripe există din 023/024 — 2a NU adaugă migrări."""
+    """
+    Câmpurile Stripe există din 023/024 — 2a NU adaugă migrări.
+
+    Gardianul e pe ORDINE (024 imediat după 023), nu pe „ultima": feliile ulterioare
+    adaugă legitim migrări noi (025 facturare), fără ca asta să spună ceva despre 2a.
+    """
     from app import migrations
     ids = [m["id"] for m in migrations.MIGRATIONS]
-    assert ids[-1] == "024_trial_ends_at"
-    assert ids[-2] == "023_subscription_fields"
+    assert ids.index("024_trial_ends_at") == ids.index("023_subscription_fields") + 1
 
 
 def test_zero_stripe_api_in_2a():
