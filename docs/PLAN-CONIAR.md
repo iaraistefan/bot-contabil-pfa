@@ -5,6 +5,8 @@
 > **Metodă de lucru (regulă permanentă):** pentru FIECARE pas → research avansat adânc (inclusiv multi-AI: Claude + Kimi + Gemini + Perplexity, triangulat) → ABIA APOI construim. Nu construim nimic fără research pe acel pas. Acest fișier e busola + memoria: se actualizează continuu; la repornirea conversației se citește întâi.
 >
 > **Status legend:** ⬜ neînceput · 🔬 în research · 🔄 în construcție · ✅ complet · ⏸️ amânat conștient · ❓ decizie de business deschisă
+>
+> 📋 **Fișierul ăsta spune CE AM DECIS. Pentru CE FACE produsul azi → [`INVENTAR-CONIAR.md`](INVENTAR-CONIAR.md)** (citit din cod: comenzi, butoane, rute, gating). Sunt întrebări diferite — nu le amesteca. Busola acoperă deciziile mari și feliile fiscale, dar NU e o listă completă a funcțiilor livrate.
 
 ---
 
@@ -184,7 +186,8 @@
 - Explainable AI: arată formula din spatele fiecărei categorizări (confort psihologic vs cutia neagră SOLO)
 
 ### 3.3 IDEI AVANSATE (notate, nu pt început)
-- Foaie de parcurs auto-generată (GPS + date Bolt) pt justificare deducere 100% — dificil + ❓INCERT legal, validează cu consultant
+- ✅ **Foaia de parcurs MANUALĂ e CONSTRUITĂ și livrată** (buton „🛣️ Foaie parcurs" + `/sterge_tura` + export Excel): ture, km, litri — DOVADĂ la control, nu calcul (comutatorul deductibilității e regimul vehiculului, vezi 5A/5B). Ce rămâne idee amânată e doar versiunea AUTO-GENERATĂ de mai jos.
+- ⏳ [idee amânată] Foaie de parcurs auto-generată (GPS + date Bolt) — dificil + ❓INCERT legal, validează cu consultant
 - Arhitectură microservicii + retry asincron pt SPV (XML ANAF se schimbă des, SPV instabil)
 - Optimizare fiscală predictivă ("dacă treci normă→real economisești Y"; timing înregistrare TVA; stopaj 2% Bolt cu certificat rezidență Estonia)
 
