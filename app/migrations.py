@@ -496,6 +496,42 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP",
         ],
     },
+    {
+        "id": "025_factura_abonament",
+        "description": (
+            "Facturare abonament (Felia 3, §1.7): fundatia de DATE. "
+            "Tabelul factura_abonament tine traducerea plata Stripe → document "
+            "fiscal (niciun procesator nu emite factura; §1.7↔§1.3, e-Factura B2C "
+            "obligatorie din 2025). stripe_invoice_id UNIQUE = anti-dublura la nivel "
+            "de BAZA: webhook-urile se pot livra repetat, iar o plata NU are voie sa "
+            "produca doua facturi la ANAF. status pending/emisa/eroare. "
+            "Plus adresa_strada + cod_postal pe users: factura cere strada+nr, aveam "
+            "doar judet/localitate. Nullable → userii existenti neschimbati. "
+            "INERT: nimeni nu scrie inca (emiterea = 3b). Idempotent."
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS factura_abonament (
+                id                SERIAL PRIMARY KEY,
+                created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                stripe_invoice_id VARCHAR(255) NOT NULL UNIQUE,
+                oblio_serie       VARCHAR(20),
+                oblio_numar       VARCHAR(20),
+                oblio_invoice_id  VARCHAR(100),
+                status            VARCHAR(20) NOT NULL DEFAULT 'pending',
+                eroare_text       TEXT,
+                emisa_at          TIMESTAMP
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_factura_abonament_user_status
+                ON factura_abonament (user_id, status)
+            """,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS adresa_strada VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS cod_postal VARCHAR(20)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

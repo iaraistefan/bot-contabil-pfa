@@ -93,6 +93,10 @@ def create_checkout_session(user, tier: str, base_url: str = None) -> Optional[s
         "subscription_data": {"metadata": {"user_id": str(user_id), "tier": tier}},
         "success_url": f"{baza}{SUCCESS_PATH}",
         "cancel_url": f"{baza}{CANCEL_PATH}",
+        # Felia 3: factura fiscală cere adresa clientului (stradă + nr), pe care
+        # onboarding-ul n-o colectează (avem doar județ/localitate). O cerem aici,
+        # unde userul oricum completează datele de plată, și o salvăm la webhook.
+        "billing_address_collection": "required",
     }
 
     # Reabonare: refolosim clientul Stripe existent, ca să nu-i facem userului al

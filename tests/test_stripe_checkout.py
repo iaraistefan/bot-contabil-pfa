@@ -370,12 +370,14 @@ def test_set_subscription_neatins_de_2b():
 
 
 def test_subscription_si_migrarile_neatinse():
-    """user_tier (4a) și migrările rămân cum erau — 2b n-are treabă cu ele."""
+    """
+    user_tier (4a) și migrările rămân cum erau — 2b n-are treabă cu ele.
+    Gardian pe ORDINE, nu pe „ultima": feliile de după adaugă legitim migrări.
+    """
     from app import migrations
 
     ids = [m["id"] for m in migrations.MIGRATIONS]
-    assert ids[-1] == "024_trial_ends_at"
-    assert ids[-2] == "023_subscription_fields"
+    assert ids.index("024_trial_ends_at") == ids.index("023_subscription_fields") + 1
 
     u = SimpleNamespace(stripe_status="active", stripe_tier="MAX", trial_ends_at=None)
     assert sub.user_tier(u) == "MAX"

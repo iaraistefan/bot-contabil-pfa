@@ -59,6 +59,11 @@ class User(Base):
     # === Locatie ===
     judet = Column(String(50), nullable=True)
     localitate = Column(String(100), nullable=True)
+    # Adresa de facturare (§1.7 Felia 3): factura fiscala cere strada + nr, nu doar
+    # judet/localitate. Se completeaza din datele de facturare colectate de Stripe la
+    # checkout, DOAR daca lipsesc (ce a scris userul in onboarding are prioritate).
+    adresa_strada = Column(String(255), nullable=True)
+    cod_postal = Column(String(20), nullable=True)
     # Norma anuala de venit (lei) pentru PFA pe NORMA_VENIT — valoarea din decizia
     # AJFP a judetului (OMF 1960/2025), dupa judet + tip localitate. NULL = necompletat
     # (impozitul pe norma nu se poate calcula -> prompt, NU presupunem o cifra).
@@ -568,4 +573,71 @@ class TripLog(Base):
         return (
             f"<TripLog user={self.user_id} {self.trip_date} "
             f"km={self.km} status={self.status} purpose={self.purpose!r}>"
+        )
+
+
+# ══════════════════════════════════════════════════════════════
+# Facturare abonament (§1.7 Felia 3, Brick 3a)
+# ══════════════════════════════════════════════════════════════
+
+FACTURA_PENDING = "pending"
+FACTURA_EMISA = "emisa"
+FACTURA_EROARE = "eroare"
+
+
+class FacturaAbonament(Base):
+    """
+    Factura fiscala pentru o plata de abonament Stripe (Felia 3).
+
+    DE CE EXISTA: niciun procesator de plati nu emite factura fiscala (§1.7↔§1.3).
+    Dupa incasare generam factura la Oblio, care o trimite in SPV (e-Factura B2C
+    obligatorie din 1 ian 2025). Tabelul tine EVIDENTA acestei traduceri
+    plata Stripe → document fiscal.
+
+    ANTI-DUBLURA: stripe_invoice_id e UNIQUE. Webhook-urile Stripe se pot livra de
+    mai multe ori (retry, duplicate) — fara constrangerea asta, o singura plata ar
+    putea produce doua facturi fiscale, ceea ce e o problema REALA la ANAF, nu doar
+    o inconsecventa de date. Baza refuza dublura; codul nu trebuie sa fie perfect.
+
+    STATUS: pending (de emis) → emisa (avem serie+numar de la Oblio) sau eroare
+    (cu eroare_text pentru diagnostic + reluare). Un rand `pending` ramas in urma =
+    o factura de reluat, nu o plata pierduta: activarea abonamentului (2c) NU depinde
+    de emiterea facturii.
+
+    Brick 3a = doar tabelul (fundatia). Scrierea randurilor + apelul Oblio = 3b.
+    """
+    __tablename__ = "factura_abonament"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # RESTRICT, nu CASCADE (spre deosebire de restul tabelelor per-user): factura
+    # emisa e DOCUMENT FISCAL, cu arhivare obligatorie 10 ani. Nu are voie sa dispara
+    # odata cu userul. Stergerea unui user cu facturi ESUEAZA — deliberat: cine sterge
+    # trebuie sa se ocupe intai de documente, nu sa le piarda tacut.
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False,
+    )
+
+    # Id-ul facturii DIN STRIPE — cheia idempotentei (o plata = o factura fiscala).
+    stripe_invoice_id = Column(String(255), nullable=False, unique=True)
+
+    # Ce ne intoarce Oblio dupa emitere. NULL cat timp status='pending'.
+    oblio_serie = Column(String(20), nullable=True)
+    oblio_numar = Column(String(20), nullable=True)     # string: Oblio poate da "0001"
+    oblio_invoice_id = Column(String(100), nullable=True)
+
+    status = Column(String(20), nullable=False, default=FACTURA_PENDING)
+    eroare_text = Column(Text, nullable=True)           # doar pt diagnostic/reluare
+    emisa_at = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_factura_abonament_user_status", "user_id", "status"),
+    )
+
+    def __repr__(self):
+        return (
+            f"<FacturaAbonament user={self.user_id} {self.status} "
+            f"stripe={self.stripe_invoice_id} oblio={self.oblio_serie}{self.oblio_numar}>"
         )

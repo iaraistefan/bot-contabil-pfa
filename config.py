@@ -63,6 +63,24 @@ class Settings(BaseSettings):
     stripe_price_pro: Optional[str] = None
     stripe_price_max: Optional[str] = None
 
+    # --- Oblio (facturare + e-Factura, §1.7 Felia 3) — declarate acum, FOLOSITE din 3b ---
+    # Niciun procesator de plăți nu emite factura fiscală (§1.7↔§1.3): după încasare
+    # generăm factura la Oblio, care o trimite mai departe în SPV (e-Factura B2C e
+    # obligatorie din 1 ian 2025).
+    # Lipsă → facturarea indisponibilă, restul aplicației neafectat: plata Stripe
+    # merge, abonamentul se activează, doar factura nu se emite (degradare grațioasă,
+    # ca Bolt/Google/Stripe). NU blocăm încasarea pe emiterea facturii.
+    #   oblio_email  = contul din Oblio (user API)
+    #   oblio_secret = token-ul API (SECRET — nu se loghează, nu se întoarce niciodată)
+    #   oblio_cif    = CIF-ul CONIAR ca FURNIZOR (nu al clientului); identifică firma
+    #                  emitentă în contul Oblio
+    #   oblio_serie_factura = seria documentelor (ex. „CNR"), configurată în Oblio;
+    #                  greșită/lipsă → Oblio refuză emiterea
+    oblio_email: Optional[str] = None
+    oblio_secret: Optional[str] = None
+    oblio_cif: Optional[str] = None
+    oblio_serie_factura: Optional[str] = None
+
 
 # Singleton. Import THIS everywhere instead of calling os.getenv.
 settings = Settings()

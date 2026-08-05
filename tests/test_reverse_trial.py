@@ -40,10 +40,13 @@ def test_migrarea_024_structura():
     assert "users" in m["sql"][0]
 
 
-def test_migrarea_024_e_ultima():
+def test_migrarea_024_vine_dupa_023():
+    """
+    4a adaugă 024 imediat după 023. NU mai cerem să fie ULTIMA — feliile de după
+    (025 facturare) adaugă legitim migrări; gardianul rămâne pe ORDINE, nu pe coadă.
+    """
     ids = [m["id"] for m in migrations.MIGRATIONS]
-    assert ids[-1] == "024_trial_ends_at"
-    assert ids[-2] == "023_subscription_fields"
+    assert ids.index("024_trial_ends_at") == ids.index("023_subscription_fields") + 1
 
 
 def test_camp_trial_nullable_default_none(tmp_path):

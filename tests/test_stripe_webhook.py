@@ -477,10 +477,10 @@ def test_checkout_2b_neatins():
 
 
 def test_subscription_si_migrarile_neatinse():
+    """Gardian pe ORDINE (024 imediat după 023), nu pe „ultima" — vezi 3a/025."""
     from app import migrations
     ids = [m["id"] for m in migrations.MIGRATIONS]
-    assert ids[-1] == "024_trial_ends_at"
-    assert ids[-2] == "023_subscription_fields"
+    assert ids.index("024_trial_ends_at") == ids.index("023_subscription_fields") + 1
 
 
 def test_rutele_existente_folosesc_in_continuare_get_json():
