@@ -108,13 +108,14 @@
 
 ### 1.5 RECONCILIERE ⭐ ARMA SECRETĂ (inovație, niciun competitor) — COMPLETĂ (3 axe)
 - ✅ **pas 1 + pas 2 FĂCUTE (arma secretă COMPLETĂ, 3 axe).** Reconciliere three-way pe sursele controlate de șofer (Bolt API ↔ declarat ↔ bancă): (4a) prezență, (4b) sumă brut↔declarat pas 1, (4c) bancar cumulativ net↔net pas 2. Pas 2: axa bancară CUMULATIVĂ (YTD, nu lunară — payout săptămânal nu respectă luna; cumulativ timingul se spală). Capcana cash rezolvată (net_bancabil exclude curse cash — Bolt depune doar card în bancă). Toate 3 axe ortogonale (constante distincte RECON_TOL_ABS=5 vs BANK_RECON_TOL_ABS=50). Poziționat "previi verificările ANAF". Uber = imposibil azi (fără API). Extindere ING/Revolut (parser PDF) = follow-up când există fixture-uri reale.
+- 📌 **NOTĂ (corectură la „Uber = imposibil azi"):** axa **4c (bancă↔platformă) funcționează ȘI FĂRĂ API**, fiindcă banca e o sursă INDEPENDENTĂ — nu ai nevoie de API-ul platformei ca să compari ce a intrat în cont cu ce a declarat șoferul. Doar 4a și 4b cer API. Blocantul real pentru Uber nu e lipsa API-ului, ci **clasificatorul: `classify.py:157` caută literal `"bolt"` în descrierea tranzacției** → încasările Uber nu nimeresc niciun bucket de venit. Un bucket de venit parametrizabil per platformă deblochează 4c pentru Uber, fără nicio integrare.
 - Context istoric: REFRAME (D397 INACCESIBIL șoferului — intern ANAF; nici DAC7 nu-i accesibil PFA) → reconciliem ce controlează șoferul.
 - Context (de ce contează): Ordinul ANAF 382/2025 — platformele raportează lunar fiecare cursă/km/CNP/încasare per șofer (D397, dar e al platformei, nu al șoferului) → presiune reală de conformare pe care reconcilierea o transformă în beneficiu.
 
-### 1.6 Ingestie date platformă (REFRAME: import + AI, NU API live) ❓
+### 1.6 Ingestie date platformă (REFRAME: import + AI, NU API live) — ✅ DECIS
 - 🔴 NU există API oficial șofer nici Bolt, nici Uber (Uber "limited access" practic închis; Bolt zero; SDK-uri neoficiale = ToS violation, fragile)
 - Strategie realistă (layered): D397 (1.5) + parsare extrase/CSV săptămânal + ingestie e-Factura comision + foto extras cu AI extraction (fallback universal)
-- ❓ DECIZIE STEFAN: accepți "săptămânal + inteligent" în loc de "timp real"?
+- ✅ **DECIS — ÎNTREBAREA DESCHISĂ SE ÎNCHIDE. RITMUL PRODUSULUI = RITMUL PAYOUT-ULUI:** săptămânal + alerte inteligente. Timpul real NU EXISTĂ TEHNIC la nicio platformă (nu e o limitare a noastră, e o limitare a pieței) — deci nu-l promitem și nu construim după el. Ce contează pentru șofer nu e latența datelor, ci să nu rateze un termen și să nu aibă surprize; alea se rezolvă cu alerte, nu cu streaming.
 - **Research necesar:** cele mai bune metode de extracție AI din documente financiare
 
 ### 1.7 Plată — ✅ DECIS (Stripe+Billing) · 🎉 Feliile 1 + 2 (2a+2b+2c) + 4a + 4b FĂCUTE — LANȚUL DE PLATĂ COMPLET (rămâne doar Felia 3 Oblio)
@@ -218,6 +219,76 @@
 2. ✅ Research competitiv top-world (triangulat 4 surse) — FĂCUT, vezi FAZA 3
 3. 🔬 **URMĂTORUL — la construcția fiecărui subpas Faza 1: research adânc pe acel subpas ÎNAINTE de build** (ex. e-Factura API, PSD2 agregator, DUKIntegrator upload)
 4. ⬜ Per pas, la construcție: research adânc pe acel subpas înainte de build (regulă permanentă)
+
+---
+
+## §5. PÂNĂ LA LANSARE
+
+> **Dacă întrebi „ce mai e până la lansare?", răspunsul e AICI. Nu în §1.x, nu în jurnal, nu în capul modulelor de cod.**
+
+### SCARA DE TIERE — principiul
+
+Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă îi luăm de pe umeri**:
+
+- **START** — *înregistrează și vede.* Bonuri, facturi, venituri prin poză; afișare vizuală. **NU** generează registrul, **NU** generează declarațiile — doar le vede.
+- **PRO** — *generează registrul și declarațiile, le depune SINGUR, cu îndrumarea noastră* (DUK Integrator + Java, pas cu pas).
+- **MAX** — *depunem noi în SPV.* Toată treaba.
+
+Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul 11).
+
+### BLOCANTE — CORECTITUDINE FISCALĂ
+
+> **Principiu:** orice calcul fiscal incomplet e blocant. Un impozit greșit distruge încrederea o singură dată și definitiv.
+> Fiecare punct de mai jos se **verifică întâi dacă mai e deschis** — unele s-ar putea să fi fost închise deja în feliile 5A/5B.
+
+1. **RCA/CASCO pe comodat** — azi deduce 50%, ar trebui 0% nedeductibil.
+2. **CASS** — liniar vs. tranșe fixe pentru PFA. *Verificare în cod.*
+3. **TVA** — declanșarea „la data depășirii", nu „10 zile".
+4. **Amortizare** — logica de plafon.
+5. **Casă de marcat** — verifică dacă sfatul dat azi de bot e corect pentru transport alternativ.
+
+### BLOCANTE — PRODUS
+
+6. **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
+7. **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
+8. **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
+9. **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
+10. **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
+11. **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
+
+### BLOCANTE — COMERCIAL
+
+12. **PREȚUL FINAL pe fiecare treaptă** — azi sunt intervale. *Fără cifre nu se pot crea Products/Prices în live.*
+13. **Juridic** — termeni și condiții, politică de confidențialitate, temei de prelucrare, retenție. *Stocăm CNP, CUI, venituri.*
+14. **Suport** — cine răspunde, în cât timp, pe ce canal.
+15. **Brand** — OSIM clasele 9/35/36/42 + domeniile coniar.ro/.com. **Înainte de orice reclamă.**
+
+### BLOCANTE — LANSARE
+
+16. **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
+17. **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
+18. **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
+19. **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
+20. **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+
+### BLOCANT DOAR PENTRU TREAPTA MAX
+
+21. **§1.2 depunere automată în SPV** — rațiunea de a exista a lui MAX. *Necesită înainte:* research pe împuternicirea ANAF (cum depui legal în numele altuia, la scară) + cine răspunde dacă o depunere eșuează sau întârzie.
+    **DECIZIE DE LUAT:** lansăm cu 3 trepte și MAX „în curând" (listă de așteptare), sau cu toate 4?
+
+### AMÂNATE DELIBERAT (după lansare)
+
+§1.4 Salt Edge (axa bancară merge cu PDF importat manual) · §3.3 idei avansate · momentele PRIMA-DATĂ · cei 2 diferențiatori neconstruiți din §3.1 · cod mort intern · pereții 🟡 din T2 · felia B web (regim pe dashboard).
+
+### P10/P11 — ce este și unde se încadrează
+
+**Nu e în busolă deloc** — vine din auditul T2 (trecerea 2, flux cap-coadă), notat doar în memoria de lucru. Pe scurt: **motorul D212 din CHAT e regim-orb** (`app/domain/declaratie_unica.py` — zero mențiuni de regim/normă, calculează mereu sistem real), pe când cifra corectă, regim-aware, e pe dashboard + alerte (`tax_engine.compute_d212_anual`). Reparația: fie unifici estimarea din chat pe `compute_d212_anual`, fie pui un avertisment „ești pe normă → vezi dashboard" + setter de normă în chat (azi setterul e doar web).
+
+**⚠️ Verdictul s-a SCHIMBAT față de audit — fereastra e DESCHISĂ ACUM.** La T2, concluzia a fost „latent, impact ≈0", pe motiv că norma pentru CAEN 4933 e permisă **doar de la venitul 2026** (OMF 1960/2025 Art. III, gardian în `norma_venit.py`), iar pentru 2025 ridesharing era sistem real OBLIGATORIU pentru toți. Dar suntem ÎN 2026: un șofer care alege acum norma pentru venitul 2026 și cere o estimare în chat primește un calcul de sistem real. Divergența nu e mică (exemplu din audit: ~28.000 vs. ~8.000 lei, de 3,5×).
+
+**Atenuări reale:** estimarea din chat e etichetată „estimare orientativă", nu declarație depozabilă · norma e opt-in și se alege doar din web · dashboard-ul și alertele dau cifra corectă.
+
+**Încadrare — de decis de Stefan.** Nu e o eroare de calcul (motorul de sistem real e corect), e un motor care nu întreabă în ce regim ești. Dar, după principiul de la capul secțiunii („orice calcul fiscal incomplet e blocant"), un număr de 3,5× mai mare arătat unui om pe normă e exact genul de lucru care distruge încrederea o singură dată. **Recomandarea mea: blocant minimal** — nu unificarea motoarelor (muncă mare), ci varianta ieftină: avertismentul în estimarea din chat. Mută problema din „cifră greșită" în „te trimit unde e cifra ta".
 
 ---
 
