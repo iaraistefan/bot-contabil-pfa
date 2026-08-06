@@ -1237,9 +1237,12 @@ def declaratie_unica_d212(year: int):
             "utilized_pct": vat_st.get("utilized_pct"),
             "remaining_ron": (max(0.0, round(_thr - r.venit_brut, 2)) if _thr else None),
             "status": vat_st.get("status"),
-            "message": vat_st.get("message"),
-            # Textul benzii de praguri vine tot din SURSA UNICĂ, prin payload —
-            # dashboard-ul NU-și mai compune propriul text de plafon TVA în JS.
+            # `message` (varianta LUNGĂ) NU se expune aici: e scrisă în markdown
+            # de Telegram (*bold*), care nu se randează în web — cine ar fi
+            # afișat-o vedea asteriscuri literale. Web-ul primește DOAR varianta
+            # scurtă, fără markdown. Nu adăuga un `lung_plain`: un al doilea text
+            # de întreținut diverge de primul, exact problema pe care sursa unică
+            # a rezolvat-o. Varianta lungă rămâne pentru Telegram, unde se randează.
             "mesaj_scurt": (
                 build_vat_plafon_msg(
                     vat_st.get("status"), r.venit_brut, _thr
