@@ -1228,6 +1228,7 @@ def declaratie_unica_d212(year: int):
     if vat_st is None:
         vat = None
     else:
+        from app.domain.vat_plafon_msg import build_vat_plafon_msg
         _thr = vat_st.get("threshold_ron")
         vat = {
             "is_payer": vat_st.get("is_payer", False),
@@ -1237,6 +1238,13 @@ def declaratie_unica_d212(year: int):
             "remaining_ron": (max(0.0, round(_thr - r.venit_brut, 2)) if _thr else None),
             "status": vat_st.get("status"),
             "message": vat_st.get("message"),
+            # Textul benzii de praguri vine tot din SURSA UNICĂ, prin payload —
+            # dashboard-ul NU-și mai compune propriul text de plafon TVA în JS.
+            "mesaj_scurt": (
+                build_vat_plafon_msg(
+                    vat_st.get("status"), r.venit_brut, _thr
+                )["scurt"] if _thr else None
+            ),
         }
 
     return jsonify({

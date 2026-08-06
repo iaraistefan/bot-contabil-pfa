@@ -33,6 +33,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from app.domain.contributii import PARAMETRI_CONTRIBUTII, salariu_minim as _salariu_minim_an
+from app.domain.vat_plafon_msg import build_vat_plafon_msg  # sursă unică text plafon TVA
 
 logger = logging.getLogger(__name__)
 
@@ -436,26 +437,17 @@ class FiscalProfile:
 
         if total_income_ron >= threshold:
             status = "DEPASIT_PLAFON"
-            message = (
-                f"⚠️ Ai depășit plafonul TVA "
-                f"({total_income_ron:.0f} / {threshold:.0f} RON). "
-                f"De la depășire treci pe regim cu TVA — înregistrarea ca "
-                f"plătitor o depui până în 10 zile de la sfârșitul lunii."
-            )
         elif utilized_pct >= 80:
             status = "APROAPE_PLAFON"
-            message = (
-                f"🟡 Aproape de plafon TVA: "
-                f"{utilized_pct:.0f}% folosit "
-                f"({total_income_ron:.0f} / {threshold:.0f} RON)"
-            )
         else:
             status = "OK"
-            message = (
-                f"✅ Sub plafon TVA: "
-                f"{utilized_pct:.0f}% folosit "
-                f"({total_income_ron:.0f} / {threshold:.0f} RON)"
-            )
+
+        # Textul vine din SURSA UNICĂ (app/domain/vat_plafon_msg.py) — aici NU
+        # se scrie niciun mesaj de plafon TVA. Vezi acolo temeiul legal
+        # (art. 310 alin. (6) după OG 22/2025).
+        message = build_vat_plafon_msg(
+            status, total_income_ron, threshold
+        )["lung"]
 
         return {
             "status": status,

@@ -1513,9 +1513,10 @@
     if(vat && !vat.is_payer && vat.threshold_ron!=null){
       const cls=_prCls(vat.status);
       const l=`Cifra de afaceri <b>${lei0(vat.cifra_afaceri)} lei</b> din ${lei0(vat.threshold_ron)} lei`;
-      const r = cls==="over" ? `ai depășit plafonul — trebuie să te înregistrezi ca plătitor de TVA în 10 zile`
-              : cls==="near" ? `mai ai doar ${lei0(vat.remaining_ron)} lei până devii plătitor de TVA — bine de știut din vreme`
-              :                `mai ai ${lei0(vat.remaining_ron)} lei până devii plătitor de TVA`;
+      // Textul vine din SURSA UNICĂ (app/domain/vat_plafon_msg.py), prin payload.
+      // NU compune text de plafon TVA aici — regula (art. 310 alin. (6), OG 22/2025)
+      // se scrie într-un singur loc, în Python. Fallback neutru dacă lipsește câmpul.
+      const r = vat.mesaj_scurt || `${lei0(vat.remaining_ron)} lei până la plafon`;
       bars.push(_prBar(cls,"Plafon TVA",vat.utilized_pct,l,r));
     }
     // 2. PODEA CASS — peste podea = pe venitul real (NU e alarmă → teal); sub podea = pe minim (status)
