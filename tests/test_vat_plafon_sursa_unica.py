@@ -71,6 +71,9 @@ def test_aproape_spune_cat_a_ramas_si_ca_nu_exista_zile_de_gratie():
     assert "🟡" in lung
     assert "86%" in lung                           # 340k/395k
     assert "55.000 lei" in lung                    # cât a mai rămas
+    # 395.000 − 340.000 = 55.000 EXACT. Fără „~": o aproximare pe o cifră
+    # exactă învaţă userul că cifrele noastre sunt orientative.
+    assert "~" not in lung and "~" not in m["scurt"]
     # fondul juridic: pe loc, din acea tranzacţie, fără graţie
     assert "pe loc" in lung
     assert "tranzacția care îl rupe" in lung
@@ -96,6 +99,10 @@ def test_depasit_spune_ca_esti_deja_platitor_si_da_pasii():
     assert "formularul 700" in lung
     assert "SPV" in lung
     assert "retroactiv" in lung
+    # art. 310 alin. (6^1) lit. b): se datorează DIFERENŢA (colectat − deductibil),
+    # nu TVA brut. Partea din lege favorabilă userului — nu se omite.
+    assert "diferența" in lung
+    assert "minus TVA-ul pe care ai dreptul să-l deduci" in lung
     # data înregistrării = ziua depăşirii (art. 316 alin. (1^1) lit. b)
     assert "ziua în care ai depășit plafonul" in lung
     # varianta scurtă

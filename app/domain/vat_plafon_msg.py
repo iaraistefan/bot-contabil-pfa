@@ -35,8 +35,14 @@ următoare — de unde „până pe 10 ale lunii următoare". OG 22/2025 a elimi
 ficţiunea. Termenul e ACUM chiar ziua depăşirii; nu mai există zile de graţie.
 
 Consecinţe, tot din art. 310:
-  - alin. (6^1): dacă ANAF constată întârzierea, înregistrează din oficiu DE LA
-    data depăşirii şi stabileşte TVA de plată pe perioada scursă.
+  - alin. (6^1) lit. b): dacă ANAF constată întârzierea, înregistrează din
+    oficiu DE LA data depăşirii şi stabileşte obligaţii de plată constând în
+    „DIFERENŢA dintre taxa pe care persoana impozabilă ar fi trebuit să o
+    colecteze şi taxa pe care ar fi avut dreptul să o deducă". NU TVA brut —
+    deducerile din perioadă (motorină, service, comision) se scad. De asta
+    mesajul de stare DEPĂŞIT spune explicit „se datorează diferenţa": e partea
+    din lege care lucrează în favoarea userului, şi ar fi necinstit s-o ascunzi
+    într-un mesaj care oricum sperie.
   - alin. (6^2)-(6^3): dacă persoana constată singură, îşi cere înregistrarea de
     la data depăşirii şi înscrie diferenţa în primul decont.
   - art. 316 alin. (1^1) lit. b): înregistrarea e valabilă DE LA data depăşirii,
@@ -92,7 +98,9 @@ def build_vat_plafon_msg(status, cifra_afaceri, threshold_ron):
             f"nu ziua în care depui cererea.\n"
             f"3️⃣ TVA-ul se datorează retroactiv, de la acea tranzacție "
             f"încoace — inclusiv pe facturile pe care le-ai emis între timp "
-            f"fără TVA.\n\n"
+            f"fără TVA. Se datorează diferența: TVA-ul pe care trebuia să-l "
+            f"colectezi, minus TVA-ul pe care ai dreptul să-l deduci din "
+            f"aceeași perioadă (motorină, service, comision).\n\n"
             f"Nu e o catastrofă, dar nu o amâna: fiecare zi de întârziere "
             f"adaugă dobânzi și penalități la ce ai de plătit."
         )
@@ -105,7 +113,7 @@ def build_vat_plafon_msg(status, cifra_afaceri, threshold_ron):
         lung = (
             f"🟡 Te apropii de plafonul de TVA: {pct:.0f}% "
             f"({_lei(ca)} din {_lei(thr)} lei).\n\n"
-            f"Mai ai ~*{_lei(ramas)} lei* până la plafon.\n\n"
+            f"Mai ai *{_lei(ramas)} lei* până la plafon.\n\n"
             f"Bine de știut acum, cât ai timp: în clipa în care îl depășești, "
             f"devii plătitor de TVA *pe loc* — chiar de la tranzacția care îl "
             f"rupe. Nu există zile de grație, iar cererea de înregistrare se "
