@@ -192,18 +192,25 @@
 - ⏳ [idee amânată] Foaie de parcurs auto-generată (GPS + date Bolt) — dificil + ❓INCERT legal, validează cu consultant
 - Arhitectură microservicii + retry asincron pt SPV (XML ANAF se schimbă des, SPV instabil)
 - Optimizare fiscală predictivă ("dacă treci normă→real economisești Y"; timing înregistrare TVA; stopaj 2% Bolt cu certificat rezidență Estonia)
+- **Dosar de venit pentru bănci** — pachet exportabil (venituri dovedite + declarații depuse) pt credit/leasing. Șoferul PFA e refuzat des la bancă fiindcă nu-și poate proba venitul; noi avem deja datele.
+- **SPV Inbox Manager** — citește și traduce mesajele din SPV („ce vrea ANAF de la mine?"). *Are sens DOAR după depunerea automată* (blocantul 25) — până atunci n-avem conexiunea.
+- **Simulator PFA vs. micro-SRL** — extinde simulatorul de regim existent (normă vs. real) cu a treia formă juridică. Întrebarea apare natural la venituri mari.
+- **Benchmark anonimizat între useri similari** („șoferii ca tine deduc în medie X") — *cere o bază de useri destul de mare ca anonimizarea să fie reală*. Nu înainte de lansare.
 
 ### 3.4 DE EVITAT (gimmick/ROI slab)
 - ⛔ Mileage GPS ca feature fiscal (valoare ZERO în RO — sistem real deduce costuri reale 50/100, NU km)
 - Insights demand "unde să conduci" (Gridwise-style — nu ține de contabilitate, date indisponibile Bolt API)
 - Chatbot generic fără acces la datele contului (ChatGPT o face gratis)
 - E-commerce/stocuri + multi-țară înainte de a domina RO
+- ⛔ **„Diurnă automată" pentru fiecare zi lucrată** — art. 68 alin. (5) lit. i) cere deplasare **ÎN ALTĂ LOCALITATE**. Un șofer care conduce în orașul lui NU e în delegare. Automatizarea ar produce o deducere sistematic nelegală, la scară, pe toți userii — exact genul de „optimizare" care aduce controlul pe care noi promitem că-l previi.
+- ⛔ **Generator de contract de comodat** — comodatul e pe cale să fie ELIMINAT din autorizarea transportului alternativ (vezi punctul de urmărire legislativă din §2). N-are sens să construim o unealtă pentru un mecanism care poate dispărea.
+- ⛔ **Cont bancar propriu / BaaS / micro-credite / plata automată a taxelor în stil Hnry** — cer licență de instituție de plată. Mută produsul din contabilitate în fintech: alt cost, alt risc, alt regulator, altă echipă. (Seiful de taxe VIRTUAL — blocantul 24 — dă 80% din valoare cu 0% din licență.)
 
 ---
 
 ## §2. ÎNTREBĂRI DESCHISE & DECIZII DE BUSINESS
 
-> **Numerele sunt ID-uri de decizie, nu poziții** — nu se renumerotează, ca trimiterile din jurnal să rămână valide. **#2** (ritmul datelor) și **#4** (prețul) au fost scoase de aici: #2 e închis în §1.6 (ritmul produsului = ritmul payout-ului), #4 trăiește ca blocantul 13 din §5, unde contează la lansare.
+> **Numerele sunt ID-uri de decizie, nu poziții** — nu se renumerotează, ca trimiterile din jurnal să rămână valide. **#2** (ritmul datelor) și **#4** (prețul) au fost scoase de aici: #2 e închis în §1.6 (ritmul produsului = ritmul payout-ului), #4 trăiește ca blocantul 12 din §5, unde contează la lansare.
 
 1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
 3. ✅ #3 e-Factura build vs wrapper — REZOLVAT: WRAPPER Oblio (SDK Python, 29€/an, e-Factura inclusă). Build ANAF direct = 2-4 luni, evitat.
@@ -211,6 +218,16 @@
 6. ✅ #6 Structură juridică CECCAR — REZOLVAT (research triangulat 4 surse: Claude+Perplexity+Gemini+cel intern). VERDICT: minimul CECCAR pentru ridesharing = ZERO. PFA are drept legal să depună singur (Legea 82/1991 art.1(5)+10(4¹)); nicio certificare D212 obligatorie; reprezentarea (împuternicit) NU e rezervată profesiei. Model A (software + user depune din SPV-ul lui) = zero CECCAR, cost zero, inatacabil (art.348) — se mapează pe traseu D. Model B (reprezentare) = tot zero-CECCAR-rezervat. Plătești CECCAR doar dacă vinzi serviciul contabil în sine (premium opțional Faza 2). SOLO confirmă modelul (firmă software CAEN 6210, NU firmă CECCAR, depune ca împuternicit).
    - CAPCANĂ contabil angajat (art.12 OG 65/1994): expertul angajat pe SRL NU poate presta pentru clienții SRL-ului. Soluție: reziliezi CIM, ea face PFI/cabinet propriu, contract B2B cu Coniar (audit algoritmic general, nu per-client → cost per-user zero). NECESITĂ AVOCAT: T&C exonerare + structura contabilului + statusul art.348 (înăsprire Senat oct 2025 spre 6luni-5ani).
    - AVERTISMENT (din Gemini): modelul BPO-mascat (platforma preia semnătura clientului, ca SOLO) e riscant — raport Incorpo.ro acuză SOLO de mii de falsuri (semnături generate cu mouse-ul). Dacă mergem spre depunere de către noi, userul trebuie consimțământ REAL informat, nu semnătură auto.
+
+### 📡 PUNCT DE URMĂRIRE LEGISLATIVĂ — comodatul în transportul alternativ
+
+**Ce s-a depus:** proiect de lege la Senat (**iunie 2026**, parlamentari PSD) care modifică **art. 13 din OUG 49/2019**. Autorizațiile s-ar elibera doar pentru autoturisme deținute în **proprietate, închiriere sau leasing** — **comodatul nu ar mai fi acceptat**.
+
+**Cât de mare e:** peste **45.000 de mașini**, ~**70% din parcul autorizat** (date ARR).
+
+**⚠️ NU E ÎN VIGOARE.** Poate fi modificat, poate primi perioadă de tranziție, poate fi respins. Discuții similare durează de ani de zile în România. **Nu construim pe presupunerea că trece** — dar nici nu ne lasă nepregătiți dacă trece.
+
+**CONSECINȚA PENTRU PRODUS:** dacă trece, masa de șoferi trece pe mașină **în proprietate** → **AMORTIZAREA devine mecanismul central de deductibilitate**, nu un caz marginal. De aici prioritatea blocantului 1 din §5 (amortizarea, care azi nu există deloc în cod). Tot de aici și interdicția din §3.4 pe generatorul de contract de comodat.
 
 ---
 
@@ -226,6 +243,8 @@
 ## §5. PÂNĂ LA LANSARE
 
 > **Dacă întrebi „ce mai e până la lansare?", răspunsul e AICI. Nu în §1.x, nu în jurnal, nu în capul modulelor de cod.**
+>
+> **CONVENȚIE DE NUMEROTARE (diferită de §2):** blocantele se renumerotează pe măsură ce se închid — §5 e **listă de bifat**, nu jurnal de decizii ca §2. În jurnal, blocantele se referă pe **NUME**, niciodată pe număr.
 
 ### SCARA DE TIERE — principiul
 
@@ -235,48 +254,60 @@ Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă �
 - **PRO** — *generează registrul și declarațiile, le depune SINGUR, cu îndrumarea noastră* (DUK Integrator + Java, pas cu pas).
 - **MAX** — *depunem noi în SPV.* Toată treaba.
 
-Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul 11).
+Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul 10).
 
 ### BLOCANTE — CORECTITUDINE FISCALĂ
 
 > **Principiu:** orice calcul fiscal incomplet e blocant. Un impozit greșit distruge încrederea o singură dată și definitiv.
-> Fiecare punct de mai jos se **verifică întâi dacă mai e deschis** — unele s-ar putea să fi fost închise deja în feliile 5A/5B.
+> *Auditat în cod (august 2026).* **RCA/CASCO pe comodat a fost ÎNCHIS** — `posting.py:150-158` întoarce deja 0% pe comodat (felia 5B), cu tip nedeclarat → 50 conservator și comparație case-insensitive. A ieșit din listă. Ordinea de mai jos e ordinea de atacat.
 
-1. **RCA/CASCO pe comodat** — azi deduce 50%, ar trebui 0% nedeductibil.
-2. **CASS** — liniar vs. tranșe fixe pentru PFA. *Verificare în cod.*
-3. **TVA** — declanșarea „la data depășirii", nu „10 zile".
-4. **Amortizare** — logica de plafon.
-5. **Casă de marcat** — verifică dacă sfatul dat azi de bot e corect pentru transport alternativ.
+1. 🔺 **AMORTIZAREA — NU EXISTĂ DELOC.** Nu e o formulare de reparat, e o funcție de construit: `grep amortiz` peste tot codul de producție dă **un singur** rezultat, cuvântul „amortizoare" într-o listă de piese auto. Zero model, zero categorie, zero plafon (nici cel de 1.500 lei/lună pt autoturisme), zero durată normală de funcționare, zero legătură între vehiculul din `vehicule` și o cheltuială anuală. **Un PFA cu mașina în proprietate nu deduce NIMIC azi** — pe o mașină de 60.000 lei înseamnă câteva mii de lei de impozit plătiți în plus, an de an. *A URCAT pe locul 1:* dacă trece proiectul de lege din §2 (comodatul scos din OUG 49/2019), masa de șoferi trece pe mașină în proprietate și amortizarea devine **mecanismul central de deductibilitate**, nu un caz marginal.
+   **⚠️ RISCUL E BIDIRECȚIONAL — a doua direcție e cea gravă.** Lipsa mecanismului nu produce doar sub-deducere. Nu există **niciun gardian** care să recunoască o factură de achiziție de autoturism: ea cade pe fallback-ul `other_expense`, care e `DeductibilityRule.FULL` (`ridesharing.py:252-256`) → **deducere integrală într-o singură lună**, în loc de capitalizare + amortizare pe durata normală de funcționare.
+   - *Userul NU trimite factura* → sub-deducere. Plătește impozit în plus. Neplăcut, dar al lui.
+   - *Userul TRIMITE factura* → **SUPRA-deducere**. 60.000 lei intrați integral pe cheltuială într-o lună. La control, ANAF recalculează baza și adaugă dobânzi și penalități. **Asta e direcția care ne omoară** — nu-l lăsăm pe user cu bani în minus, îl lăsăm cu o datorie pe care i-am creat-o noi.
+2. **TVA — declanșarea.** `fiscal_profile.py:442-443` și `proactive_alerts.py:439` spun „înregistrarea o depui până în 10 zile de la sfârșitul lunii". **Greșeala nu e de termen, e de ÎNȚELES:** omul citește și crede că are 10 zile de respiro, când de fapt **din momentul depășirii e deja în regim de TVA** — formalitatea are termen, obligația nu.
+   **Sunt TREI suprafețe, nu două.** A treia — `app/http/templates/dashboard.html:1516` („*ai depășit plafonul — trebuie să te înregistrezi ca plătitor de TVA în 10 zile*") — e **cea mai proastă dintre toate**: nu conține deloc clauza „de la depășire treci pe regim cu TVA", deci userul rămâne **exclusiv** cu ideea celor 10 zile de respiro. Celelalte două măcar spun adevărul pe jumătate. Reparația se face mutând textul într-o sursă unică, ca la `VAT_THRESHOLD_RON` — dar sursa unică trebuie să alimenteze și dashboard-ul, nu doar cele două module Python.
+3. **VALIDEAZĂ CASS pentru asigurații sub podea.** Formula generală e corectă și liniară (10% × bază, clampată între 6 SMB și plafon — `contributii.py:195-234`; „liniar vs. tranșe" e ÎNCHIS). Rămâne un caz: cine e **sub 6 SMB dar are altă asigurare** (salariat/pensionar) plătește azi 10% pe venitul net real, **fără urcare la podea**. Codul însuși marchează asta ca nesigur (`contributii.py:213-215`): bazat pe **surse secundare convergente**, NU pe text primar din Codul fiscal. **De confirmat cu un contabil CECCAR.**
+4. **Casă de marcat — VERIFICAREA SFATULUI.** Verifică dacă ce spune botul azi despre AMEF e corect pentru transport alternativ. *Ăsta e blocantul de **corectitudine**: să nu mintă.* **NU e duplicat** cu „Modulul casă de marcat + F4109" din blocantele de PRODUS — acela e blocantul de **acoperire**: să construim obligația care urmează după sfat. Se pot închide independent și în orice ordine.
 
 ### BLOCANTE — PRODUS
 
-6. **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
-7. **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
-8. **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
-9. **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
-10. **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
-11. **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
-12. **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero.
+5. **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
+6. **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
+7. **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
+8. **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
+9. **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
+10. **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
+11. **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
 
 ### BLOCANTE — COMERCIAL
 
-13. **PREȚUL FINAL pe fiecare treaptă** — azi sunt intervale. *Fără cifre nu se pot crea Products/Prices în live.*
+12. **PREȚUL FINAL pe fiecare treaptă** — azi sunt intervale. *Fără cifre nu se pot crea Products/Prices în live.*
     📌 **Ancoră verificată (aug 2026): SOLO costă 229 lei/lună la preț complet**, după emiterea codului de TVA. Susține grila din §1 (99-149 / 179-199 / 289-349) — **nu** prețuri mai mici. Liderul de bătut e la 229 cu procesare umană și cutie neagră; nu intrăm sub el din reflex.
-14. **Juridic** — termeni și condiții, politică de confidențialitate, temei de prelucrare, retenție. *Stocăm CNP, CUI, venituri.*
-15. **Suport** — cine răspunde, în cât timp, pe ce canal.
-16. **Brand** — OSIM clasele 9/35/36/42 + domeniile coniar.ro/.com. **Înainte de orice reclamă.**
+13. **Juridic** — termeni și condiții, politică de confidențialitate, temei de prelucrare, retenție. *Stocăm CNP, CUI, venituri.*
+14. **Suport** — cine răspunde, în cât timp, pe ce canal.
+15. **Brand** — OSIM clasele 9/35/36/42 + domeniile coniar.ro/.com. **Înainte de orice reclamă.**
 
 ### BLOCANTE — LANSARE
 
-17. **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
-18. **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
-19. **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
-20. **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
-21. **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+16. **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
+17. **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
+18. **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
+19. **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
+20. **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+
+### IEFTINE ȘI ÎNAINTE DE LANSARE
+
+> Toate patru se construiesc pe **motoare care există deja**. Niciuna nu cere partener bancar, asigurător, licență sau furnizor nou. Nu sunt blocante în sensul strict — dar raportul valoare/efort e atât de bun încât ar fi o risipă să lanseze fără ele.
+
+21. **Audit Trail** — export cronologic cu **temeiul legal pentru fiecare clasificare**, de predat inspectorului la control. Materializează principiul „AI explicabil" din §3.2, care azi e doar o intenție: motorul deja *știe* de ce a dat 50% sau 0% (regim, tip deținere, categorie), doar că n-o scrie nicăieri într-o formă pe care s-o pui pe masă la ANAF. Antidotul direct la cutia neagră SOLO.
+22. **Recuperarea retroactivă de deduceri la onboarding** — import extras pe 6-12 luni + categorizare retroactivă → **„îți găsim bani înapoi"**. Cel mai puternic moment de activare posibil: userul vede valoare în lei *înainte* să fi făcut vreo muncă. Conducta de import + clasificare există deja; nou e doar declanșarea pe istoric la înscriere.
+23. **Detector de risc de reclasificare ca activitate dependentă** (art. 7 Cod fiscal) — scor de concentrare a venitului pe surse. **Nimeni în RO nu-l are.** Datele sunt deja în `Document.platforma`; e o interogare plus un prag, nu un motor nou.
+24. **Seiful de taxe v1** — buzunar **VIRTUAL** cu sold urmărit + memento de transfer la fiecare încasare. Fără bancă, fără IBAN, fără licență. E nivelul „notificare" din §3.1 (rezervă taxe), cel ieftin — nu BaaS-ul cu IBAN virtual, care rămâne amânat.
 
 ### BLOCANT DOAR PENTRU TREAPTA MAX
 
-22. **§1.2 depunere automată în SPV** — rațiunea de a exista a lui MAX. *Necesită înainte:* research pe împuternicirea ANAF (cum depui legal în numele altuia, la scară) + cine răspunde dacă o depunere eșuează sau întârzie.
+25. **§1.2 depunere automată în SPV** — rațiunea de a exista a lui MAX. *Necesită înainte:* research pe împuternicirea ANAF (cum depui legal în numele altuia, la scară) + cine răspunde dacă o depunere eșuează sau întârzie.
     **DECIZIE DE LUAT:** lansăm cu 3 trepte și MAX „în curând" (listă de așteptare), sau cu toate 4?
 
 ### AMÂNATE DELIBERAT (după lansare)
