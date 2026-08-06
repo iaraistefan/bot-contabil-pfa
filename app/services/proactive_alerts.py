@@ -38,6 +38,8 @@ from typing import Dict, List, Optional, Tuple
 import pytz
 import requests
 
+from app.domain.vat_plafon_msg import build_vat_plafon_msg  # sursă unică text plafon TVA
+
 logger = logging.getLogger(__name__)
 ROMANIA_TZ = pytz.timezone("Europe/Bucharest")
 
@@ -429,21 +431,16 @@ def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
 # ============================================================
 
 def _tva_plafon_message(st: dict, ca: float) -> str:
-    """Mesaj TVA cu suma rămasă (din st['threshold_ron'], nu hardcodat)."""
-    threshold = st["threshold_ron"]
-    pct = st["utilized_pct"]
-    if st["status"] == "DEPASIT_PLAFON":
-        return (
-            f"🔴 Ai depășit plafonul de TVA de {threshold:.0f} RON (ai ajuns la "
-            f"{ca:.0f} RON). Nu intra în panică — de la depășire treci pe regim cu "
-            f"TVA, iar înregistrarea ca plătitor o depui până în 10 zile de la "
-            f"sfârșitul lunii."
-        )
-    remaining = max(0.0, threshold - ca)
-    return (
-        f"🟡 Te apropii de plafonul de TVA: {pct:.0f}% ({ca:.0f} / {threshold:.0f} RON). "
-        f"Mai ai ~{remaining:.0f} lei până devii plătitor de TVA."
-    )
+    """
+    Mesaj TVA pentru alerta zilnică — DELEGAT la sursa unică.
+
+    Textul (și temeiul legal, art. 310 alin. (6) după OG 22/2025) trăiesc în
+    `app/domain/vat_plafon_msg.py`. Aici rămâne doar racordarea la forma în
+    care alertele au datele: threshold din `st`, cifra de afaceri din `ca`.
+    """
+    return build_vat_plafon_msg(
+        st["status"], ca, st["threshold_ron"]
+    )["lung"]
 
 
 def _maybe_send_plafon(session, bot_token, user, year, code, st, message) -> int:
