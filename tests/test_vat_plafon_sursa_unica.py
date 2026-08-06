@@ -176,6 +176,47 @@ def test_gardian_suprafetele_consuma_sursa_unica():
     assert "vat.mesaj_scurt" in dash
 
 
+def test_gardian_varianta_lunga_nu_ajunge_in_payload_web():
+    """
+    Blocul `vat` din payload-ul API NU expune varianta lungă.
+
+    Varianta lungă e scrisă în markdown de Telegram (*bold*). În web nu se
+    randează — cine o afişează vede asteriscuri literale. Web-ul primeşte doar
+    `mesaj_scurt`, care n-are markdown.
+
+    Şi NU se rezolvă adăugând un `lung_plain`: un al doilea text de întreţinut
+    diverge de primul, exact problema pe care sursa unică tocmai a rezolvat-o.
+    """
+    ap = (APP_DIR / "http" / "app.py").read_text(encoding="utf-8")
+    start = ap.index('"is_payer": vat_st.get(')
+    bloc_brut = ap[start:ap.index("}", start)]
+    # Doar CODUL, fără comentarii: comentariul de acolo explică de ce `message`
+    # şi `lung_plain` nu au ce căuta în payload, iar gardianul s-ar agăţa de
+    # propria explicaţie.
+    bloc = "\n".join(
+        linie for linie in bloc_brut.splitlines()
+        if not linie.strip().startswith("#")
+    )
+
+    assert '"mesaj_scurt"' in bloc, "blocul vat trebuie să livreze mesaj_scurt"
+    assert '"message"' not in bloc, (
+        "Varianta LUNGĂ a reapărut în payload-ul web. Are markdown Telegram, "
+        "care nu se randează în browser."
+    )
+    assert "lung_plain" not in bloc, (
+        "Nu adăuga o a doua variantă de text pentru web — diverge de prima. "
+        "Web-ul foloseşte mesaj_scurt; varianta lungă rămâne pentru Telegram."
+    )
+
+
+def test_varianta_scurta_nu_are_markdown_telegram():
+    """Ce pleacă spre web nu conţine markdown care nu se randează acolo."""
+    for status in (STATUS_OK, STATUS_APROAPE, STATUS_DEPASIT):
+        scurt = build_vat_plafon_msg(status, 340_000, 395_000)["scurt"]
+        assert "*" not in scurt
+        assert "_" not in scurt
+
+
 # ============================================================
 #   3. GARDIAN — „10 ZILE" A DISPĂRUT DIN app/
 # ============================================================
