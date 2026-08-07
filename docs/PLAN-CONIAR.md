@@ -193,7 +193,7 @@
 - Arhitectură microservicii + retry asincron pt SPV (XML ANAF se schimbă des, SPV instabil)
 - Optimizare fiscală predictivă ("dacă treci normă→real economisești Y"; timing înregistrare TVA; stopaj 2% Bolt cu certificat rezidență Estonia)
 - **Dosar de venit pentru bănci** — pachet exportabil (venituri dovedite + declarații depuse) pt credit/leasing. Șoferul PFA e refuzat des la bancă fiindcă nu-și poate proba venitul; noi avem deja datele.
-- **SPV Inbox Manager** — citește și traduce mesajele din SPV („ce vrea ANAF de la mine?"). *Are sens DOAR după depunerea automată* (blocantul „§1.2 depunere automată în SPV", azi 26) — până atunci n-avem conexiunea.
+- **SPV Inbox Manager** — citește și traduce mesajele din SPV („ce vrea ANAF de la mine?"). *Are sens DOAR după depunerea automată* (blocantul „§1.2 depunere automată în SPV", azi 27) — până atunci n-avem conexiunea.
 - **Simulator PFA vs. micro-SRL** — extinde simulatorul de regim existent (normă vs. real) cu a treia formă juridică. Întrebarea apare natural la venituri mari.
 - **Benchmark anonimizat între useri similari** („șoferii ca tine deduc în medie X") — *cere o bază de useri destul de mare ca anonimizarea să fie reală*. Nu înainte de lansare.
 
@@ -204,13 +204,13 @@
 - E-commerce/stocuri + multi-țară înainte de a domina RO
 - ⛔ **„Diurnă automată" pentru fiecare zi lucrată** — art. 68 alin. (5) lit. i) cere deplasare **ÎN ALTĂ LOCALITATE**. Un șofer care conduce în orașul lui NU e în delegare. Automatizarea ar produce o deducere sistematic nelegală, la scară, pe toți userii — exact genul de „optimizare" care aduce controlul pe care noi promitem că-l previi.
 - ⛔ **Generator de contract de comodat** — comodatul e pe cale să fie ELIMINAT din autorizarea transportului alternativ (vezi punctul de urmărire legislativă din §2). N-are sens să construim o unealtă pentru un mecanism care poate dispărea.
-- ⛔ **Cont bancar propriu / BaaS / micro-credite / plata automată a taxelor în stil Hnry** — cer licență de instituție de plată. Mută produsul din contabilitate în fintech: alt cost, alt risc, alt regulator, altă echipă. (Seiful de taxe VIRTUAL — blocantul „Seiful de taxe v1", azi 25 — dă 80% din valoare cu 0% din licență.)
+- ⛔ **Cont bancar propriu / BaaS / micro-credite / plata automată a taxelor în stil Hnry** — cer licență de instituție de plată. Mută produsul din contabilitate în fintech: alt cost, alt risc, alt regulator, altă echipă. (Seiful de taxe VIRTUAL — blocantul „Seiful de taxe v1", azi 26 — dă 80% din valoare cu 0% din licență.)
 
 ---
 
 ## §2. ÎNTREBĂRI DESCHISE & DECIZII DE BUSINESS
 
-> **Numerele sunt ID-uri de decizie, nu poziții** — nu se renumerotează, ca trimiterile din jurnal să rămână valide. **#2** (ritmul datelor) și **#4** (prețul) au fost scoase de aici: #2 e închis în §1.6 (ritmul produsului = ritmul payout-ului), #4 trăiește ca blocantul „PREȚUL FINAL pe fiecare treaptă" din §5 (azi 13), unde contează la lansare.
+> **Numerele sunt ID-uri de decizie, nu poziții** — nu se renumerotează, ca trimiterile din jurnal să rămână valide. **#2** (ritmul datelor) și **#4** (prețul) au fost scoase de aici: #2 e închis în §1.6 (ritmul produsului = ritmul payout-ului), #4 trăiește ca blocantul „PREȚUL FINAL pe fiecare treaptă" din §5 (azi 14), unde contează la lansare.
 
 1. ✅ #1 REZOLVAT — traseu D→A, vezi §1.2
 3. ✅ #3 e-Factura build vs wrapper — REZOLVAT: WRAPPER Oblio (SDK Python, 29€/an, e-Factura inclusă). Build ANAF direct = 2-4 luni, evitat.
@@ -286,34 +286,45 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 11. **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
 12. **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
 
+13. **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
+    - **VIZIBILITATE:** nu există nicăieri o listă de documente neconfirmate. După ce mesajul urcă în istoricul chat-ului, nimic nu mai amintește de el. **Userul pierde tăcut extracția și nu află niciodată.**
+    - **DURABILITATE:** pending-ul trăiește în `context.user_data` (`confirmare.py:106`), dict din memoria procesului. **Niciun `PicklePersistence` configurat nicăieri** → moare la fiecare redeploy Render. Mesajul „confirmarea a expirat" descrie corect ce simte userul, dar **cauza reală e restartul, nu timpul**.
+    - **FIȘIERE ORFANE:** `register_source_file` scrie și comite **înainte** de `process_entry` (`bot_contabil.py:2752` vs `:2786`), deci un abandon lasă un `SourceFile` cu baiții arhivați și niciun `Document` în spate. Cost de stocare + **întrebare de retenție**: păstrăm imagini pe care userul nu le-a confirmat niciodată.
+
+    **DE CE ACUM:** golul **preexistă din Pas R1** și **NU e o regresie a PR #123**. Dar gardianul capex creează un motiv nou de abandon — *„nu știu ce să răspund"* — și apare exact pe **documentul cu cea mai mare valoare din sistem**, fără nicio urgență care să-l împingă pe user să răspundă. Cazul cel mai grav al unui gol vechi a devenit mult mai probabil.
+
+    ✅ **CE E DEJA ÎN REGULĂ, de păstrat la orice reparație:** retrimiterea pozei funcționează, fiindcă dedup-ul verifică **existența unui `Document` legat de fișier, nu SHA-ul pozei** (`bot_contabil.py:2757-2784`). Un abandon nu produce `Document`, deci userul **NU** primește fals „e deja înregistrată". Fără asta, golul ar fi fost catastrofal: omul ar fi rămas convins că documentul e salvat când de fapt nu există.
+
+    ⚠️ **NOTĂ DE COMPORTAMENT:** `_index_de_intrebat` blochează **tot lotul**, nu doar documentul mare. Trei bonuri într-o poză, unul peste prag → toate trei așteaptă răspunsul. Fail-closed consecvent, dar **de reconsiderat la reparație**.
+
 ### BLOCANTE — COMERCIAL
 
-13. **PREȚUL FINAL pe fiecare treaptă** — azi sunt intervale. *Fără cifre nu se pot crea Products/Prices în live.*
+14. **PREȚUL FINAL pe fiecare treaptă** — azi sunt intervale. *Fără cifre nu se pot crea Products/Prices în live.*
     📌 **Ancoră verificată (aug 2026): SOLO costă 229 lei/lună la preț complet**, după emiterea codului de TVA. Susține grila din §1 (99-149 / 179-199 / 289-349) — **nu** prețuri mai mici. Liderul de bătut e la 229 cu procesare umană și cutie neagră; nu intrăm sub el din reflex.
-14. **Juridic** — termeni și condiții, politică de confidențialitate, temei de prelucrare, retenție. *Stocăm CNP, CUI, venituri.*
-15. **Suport** — cine răspunde, în cât timp, pe ce canal.
-16. **Brand** — OSIM clasele 9/35/36/42 + domeniile coniar.ro/.com. **Înainte de orice reclamă.**
+15. **Juridic** — termeni și condiții, politică de confidențialitate, temei de prelucrare, retenție. *Stocăm CNP, CUI, venituri.*
+16. **Suport** — cine răspunde, în cât timp, pe ce canal.
+17. **Brand** — OSIM clasele 9/35/36/42 + domeniile coniar.ro/.com. **Înainte de orice reclamă.**
 
 ### BLOCANTE — LANSARE
 
-17. **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
-18. **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
-19. **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
-20. **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
-21. **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+18. **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
+19. **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
+20. **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
+21. **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
+22. **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
 
 ### IEFTINE ȘI ÎNAINTE DE LANSARE
 
 > Toate patru se construiesc pe **motoare care există deja**. Niciuna nu cere partener bancar, asigurător, licență sau furnizor nou. Nu sunt blocante în sensul strict — dar raportul valoare/efort e atât de bun încât ar fi o risipă să lanseze fără ele.
 
-22. **Audit Trail** — export cronologic cu **temeiul legal pentru fiecare clasificare**, de predat inspectorului la control. Materializează principiul „AI explicabil" din §3.2, care azi e doar o intenție: motorul deja *știe* de ce a dat 50% sau 0% (regim, tip deținere, categorie), doar că n-o scrie nicăieri într-o formă pe care s-o pui pe masă la ANAF. Antidotul direct la cutia neagră SOLO.
-23. **Recuperarea retroactivă de deduceri la onboarding** — import extras pe 6-12 luni + categorizare retroactivă → **„îți găsim bani înapoi"**. Cel mai puternic moment de activare posibil: userul vede valoare în lei *înainte* să fi făcut vreo muncă. Conducta de import + clasificare există deja; nou e doar declanșarea pe istoric la înscriere.
-24. **Detector de risc de reclasificare ca activitate dependentă** (art. 7 Cod fiscal) — scor de concentrare a venitului pe surse. **Nimeni în RO nu-l are.** Datele sunt deja în `Document.platforma`; e o interogare plus un prag, nu un motor nou.
-25. **Seiful de taxe v1** — buzunar **VIRTUAL** cu sold urmărit + memento de transfer la fiecare încasare. Fără bancă, fără IBAN, fără licență. E nivelul „notificare" din §3.1 (rezervă taxe), cel ieftin — nu BaaS-ul cu IBAN virtual, care rămâne amânat.
+23. **Audit Trail** — export cronologic cu **temeiul legal pentru fiecare clasificare**, de predat inspectorului la control. Materializează principiul „AI explicabil" din §3.2, care azi e doar o intenție: motorul deja *știe* de ce a dat 50% sau 0% (regim, tip deținere, categorie), doar că n-o scrie nicăieri într-o formă pe care s-o pui pe masă la ANAF. Antidotul direct la cutia neagră SOLO.
+24. **Recuperarea retroactivă de deduceri la onboarding** — import extras pe 6-12 luni + categorizare retroactivă → **„îți găsim bani înapoi"**. Cel mai puternic moment de activare posibil: userul vede valoare în lei *înainte* să fi făcut vreo muncă. Conducta de import + clasificare există deja; nou e doar declanșarea pe istoric la înscriere.
+25. **Detector de risc de reclasificare ca activitate dependentă** (art. 7 Cod fiscal) — scor de concentrare a venitului pe surse. **Nimeni în RO nu-l are.** Datele sunt deja în `Document.platforma`; e o interogare plus un prag, nu un motor nou.
+26. **Seiful de taxe v1** — buzunar **VIRTUAL** cu sold urmărit + memento de transfer la fiecare încasare. Fără bancă, fără IBAN, fără licență. E nivelul „notificare" din §3.1 (rezervă taxe), cel ieftin — nu BaaS-ul cu IBAN virtual, care rămâne amânat.
 
 ### BLOCANT DOAR PENTRU TREAPTA MAX
 
-26. **§1.2 depunere automată în SPV** — rațiunea de a exista a lui MAX. *Necesită înainte:* research pe împuternicirea ANAF (cum depui legal în numele altuia, la scară) + cine răspunde dacă o depunere eșuează sau întârzie.
+27. **§1.2 depunere automată în SPV** — rațiunea de a exista a lui MAX. *Necesită înainte:* research pe împuternicirea ANAF (cum depui legal în numele altuia, la scară) + cine răspunde dacă o depunere eșuează sau întârzie.
     **DECIZIE DE LUAT:** lansăm cu 3 trepte și MAX „în curând" (listă de așteptare), sau cu toate 4?
 
 ### AMÂNATE DELIBERAT (după lansare)
