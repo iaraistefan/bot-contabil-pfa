@@ -49,7 +49,10 @@ def _extract_callbacks():
 # +onb|platforme = gate platforme Bolt/Uber, Uber sub-pas C;
 # +ghid|view / ghid|list / ghid|all = ghid de obligații navigabil + toggle personalizat/toate (Ghid 2+3);
 # +vehicul|regim|{r} / regim|{REGIM_UTILIZARE_MIXT} / regimok / ef|regim = gardian UI regim utilizare
-#   (MIXT/EXCLUSIV) pe vehicul, editare + gardian confirmare uz exclusiv).
+#   (MIXT/EXCLUSIV) pe vehicul, editare + gardian confirmare uz exclusiv;
+# +confirm|capex|{idx}|da / |nu = gardian achiziție vehicul — peste pragul de sumă botul
+#   ÎNTREABĂ ce e documentul în loc să-l clasifice automat. Butoane NOI, nu redenumiri:
+#   niciun callback_data existent nu s-a schimbat (`missing` a rămas gol).
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -59,7 +62,8 @@ EXPECTED_CALLBACKS = {
     "boltsync|cancel", "boltsync|confirm|{year}|{month}",
     "coduri|del_cnp", "coduri|del_tva", "coduri|set_cnp", "coduri|set_tva",
     "coduri|skip",
-    "confirm|back", "confirm|cancel", "confirm|edit", "confirm|field|{idx}|{field_key}",
+    "confirm|back", "confirm|cancel", "confirm|capex|{idx}|da", "confirm|capex|{idx}|nu",
+    "confirm|edit", "confirm|field|{idx}|{field_key}",
     "confirm|item|{i}", "confirm|save", "confirm|tip|{idx}|CHELTUIALA",
     "confirm|tip|{idx}|FACTURA_COMISION", "confirm|tip|{idx}|VENIT",
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",

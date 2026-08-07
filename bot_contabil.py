@@ -54,6 +54,7 @@ import logging
 import traceback
 from datetime import datetime, date
 from app.domain.tax_rules import cota_tva  # sursă unică cotă TVA pe dată (fiscal #1)
+from app.domain.capex import este_achizitie  # gardian achiziție mijloc fix
 from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -379,6 +380,9 @@ def persist_transactions(session, user_id, doc_id, item, banca):
         tip=item.tip, platforma=item.platforma, detalii=item.detalii,
         brut=item.brut, comision=item.comision, tva=item.tva,
         net=item.net, cash=item.cash, banca=banca, data_doc=item.data,
+        # Categoria aleasă EXPLICIT de om (gardianul de achiziție). None →
+        # comportament identic cu înainte: clasificare prin scoring semantic.
+        category_override=getattr(item, "category_override", None),
     )
 
 
@@ -442,6 +446,32 @@ def _build_confirm_message(results, activity, session=None, user_id=None) -> str
                 f"📅 Data: {data_doc}\n"
                 f"💵 Baza: {item.comision} RON\n"
                 f"🏛️ *TVA (21%): {tva:.2f} RON* (D301)\n"
+            )
+        elif tip == DocType.CHELTUIALA and este_achizitie(
+            getattr(item, "category_override", None)
+        ):
+            # ACHIZIȚIE DE MIJLOC FIX — mesaj propriu, NU procentul de
+            # deductibilitate. „0%" ar fi adevărat aritmetic și fals ca sens:
+            # ar sugera că mașina nu se deduce deloc.
+            try:
+                luna_txt = " " + LUNI_LONG.get(
+                    datetime.strptime(data_doc, "%d.%m.%Y").month, ""
+                ).lower()
+            except (ValueError, TypeError):
+                luna_txt = ""
+            msg_confirm += (
+                f"📂 Dosar: {folder_label}{doc_tag}{tx_tag}\n"
+                f"🚗 *Factură mașină* — {item.brut:.2f} RON\n"
+                f"   📅 Data: {data_doc}\n"
+                f"\n"
+                f"   Am înregistrat-o, dar n-o pun la cheltuielile lunii"
+                f"{luna_txt}.\n"
+                f"   O mașină nu se scade dintr-o dată. Se amortizează — adică se\n"
+                f"   scade puțin câte puțin, an de an, cât timp o folosești la curse.\n"
+                f"   Cât anume pe an încă nu calculez eu. Până atunci, cere-i cifra\n"
+                f"   contabilului tău, dacă lucrezi cu unul.\n"
+                f"\n"
+                f"   Factura rămâne la dosar. Ai nevoie de ea 10 ani.\n"
             )
         elif tip == DocType.CHELTUIALA:
             cat_icon, cat_label, ded_pct, ded_note = _resolve_expense_meta(

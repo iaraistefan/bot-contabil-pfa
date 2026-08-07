@@ -247,6 +247,31 @@ class RidesharingActivity(BaseActivity):
             accounting_code="6028",
         ),
 
+        # -- Achizitie autoturism -- MIJLOC FIX, nu cheltuiala lunii --
+        ExpenseCategory(
+            code="vehicle_acquisition",
+            label="Cumpărare mașină",
+            icon="🚗",
+            # keywords GOL, INTENȚIONAT: categoria e inaccesibilă scoring-ului
+            # semantic. Singurul drum spre ea e alegerea explicită a userului
+            # (butonul din confirmare) → o factură de service nu poate ateriza
+            # aici din greșeală, indiferent ce scrie pe ea.
+            keywords=[],
+            # 0 e răspunsul ARITMETIC corect la întrebarea pe care o pune
+            # get_effective_deductibility(): „ce procent din suma asta intră în
+            # luna curentă". Zero din 48.500 intră în august. Sensul (nu e
+            # nedeductibilă — se deduce în ani, prin amortizare) îl poartă
+            # CATEGORIA, care se persistă și după care se grupează oricum.
+            deductibility=DeductibilityRule.NON_DEDUCTIBLE,
+            deductibility_note=(
+                "Nu se scade în luna cumpărării. Se amortizează — adică se scade "
+                "puțin câte puțin, an de an. Calculul amortizării încă nu e în "
+                "Coniar."
+            ),
+            default_vat_treatment=VATTreatment.STANDARD_21,
+            accounting_code="2133",
+        ),
+
         # -- Alte cheltuieli -- fallback final --
         ExpenseCategory(
             code="other_expense",

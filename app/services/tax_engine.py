@@ -32,6 +32,7 @@ from app.domain.fiscal_profile import (
 )
 from app.domain.tax_calculator import compute_full_estimate, TaxEstimate
 from app.domain.tax_rules import cota_tva
+from app.domain.capex import este_achizitie
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,12 @@ def compute_period(
     expense_brut_by_cat: Dict[str, float] = defaultdict(float)
     expense_deductible_by_cat: Dict[str, float] = defaultdict(float)
     expense_pct_by_cat: Dict[str, int] = {}
+    # ACHIZIȚII DE MIJLOC FIX — acumulator SEPARAT, nu cheltuiala lunii.
+    # Nu intră în expense_brut_by_cat / expense_deductible_by_cat, deci nici în
+    # expense_total_brut, nici în donut, nici în sortarea descrescătoare. Altfel
+    # o mașină de 48.500 lei ar fi „cea mai mare cheltuială a lunii" — un rând
+    # adevărat pe care contextul îl face să mintă.
+    capex_by_cat: Dict[str, float] = defaultdict(float)
 
     income_cash = 0.0
     income_bank = 0.0
@@ -99,6 +106,12 @@ def compute_period(
                 income_bank += tx.amount_brut
 
         elif tx.tx_type == "EXPENSE":
+            if este_achizitie(tx.category):
+                # Iese din TOATE agregatele de cheltuieli ale lunii, prin
+                # construcție — nu prin scădere ulterioară.
+                capex_by_cat[tx.category] += tx.amount_brut
+                continue
+
             pct = tx.deductibility_pct if tx.deductibility_pct is not None else 100
             deductible = round(tx.amount_brut * pct / 100.0, 2)
 
@@ -147,6 +160,20 @@ def compute_period(
             "amount_deductible": round(expense_deductible_by_cat[code], 2),
             "note": cat.deductibility_note if cat and cat.deductibility_note else "",
         })
+
+    # Achiziții de mijloc fix — listă proprie, lângă cheltuieli, nu în ele.
+    capex_breakdown: List[Dict[str, Any]] = []
+    for code, brut in capex_by_cat.items():
+        cat = activity.get_expense_category(code)
+        capex_breakdown.append({
+            "code": code,
+            "label": cat.label if cat else code.replace("_", " ").title(),
+            "icon": cat.icon if cat else "🚗",
+            "amount_brut": round(brut, 2),
+            "note": cat.deductibility_note if cat and cat.deductibility_note else "",
+        })
+    capex_breakdown.sort(key=lambda x: -x["amount_brut"])
+    capex_total = round(sum(capex_by_cat.values()), 2)
 
     income_breakdown.sort(key=lambda x: -x["amount"])
     expense_breakdown.sort(key=lambda x: -x["amount_brut"])
@@ -200,9 +227,14 @@ def compute_period(
         "income_by_platform": income_by_platform,   # defalcare venit pe platformă (Bolt/Uber/Altele)
         "income_cash": round(income_cash, 2),
         "income_bank": round(income_bank, 2),
+        # ATENȚIE la înțeles: `expense_total_brut` e brutul cheltuielilor LUNII.
+        # Achizițiile de mijloc fix NU sunt incluse — ele au capex_total.
         "expense_total_brut": expense_total_brut,
         "expense_deductible_total": expense_deductible_total,
         "expense_breakdown": expense_breakdown,
+        # Achiziții capitalizate (mașină): înregistrate, dar în afara lunii.
+        "capex_breakdown": capex_breakdown,
+        "capex_total": capex_total,
         "vat_out_total": round(vat_out, 2),
         "vat_in_total": round(vat_in, 2),
         "vat_net": vat_net,
