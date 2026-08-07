@@ -723,6 +723,13 @@
             <div class="chart-box sm"><canvas id="chDonut"></canvas></div>
           </div>
         </div>
+        <!-- Achizitii de mijloc fix: inregistrate, dar NU cheltuiala lunii.
+             Bloc separat, in afara listei si a donut-ului. -->
+        <div class="panel" id="ch-capex-panel" style="display:none;margin-bottom:var(--sp-4)">
+          <div class="panel-h"><div class="t">Cumpărări care nu intră în luna asta</div></div>
+          <div class="rows" id="ch-capex-rows"></div>
+          <div class="hint" style="padding:var(--sp-3)">O mașină nu se scade dintr-o dată. Se amortizează — adică se scade puțin câte puțin, an de an. Calculul amortizării încă nu e în Coniar; până atunci cere-i cifra contabilului tău, dacă lucrezi cu unul.</div>
+        </div>
         <div class="alert">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
           <div><div class="t">Deductibilitate combustibil</div><div class="d">Combustibilul se deduce <b>50%</b> dacă folosești mașina și personal, sau <b>100%</b> dacă o folosești doar pentru curse. Regimul îl setezi pe mașină, în bot: <b>Vehicule → Editează → Regim utilizare</b>. Pentru 100%, ANAF cere dovada că mașina nu e folosită deloc personal — foaia de parcurs la zi e acea dovadă.</div></div>
@@ -1802,6 +1809,16 @@
         }).join("") : (isNew ? pgEmpty("i-receipt","Aici vezi cheltuielile tale deductibile","Fiecare bon urcat îți scade impozitul. Trimite-le în bot — le citește AI-ul, fără introducere manuală.") : '<div class="hint" style="padding:var(--sp-3)">Nicio cheltuială în '+MONTHS[M]+' încă.</div>');
       }
       drawDonut("chDonut", items);
+      // Achizitii capitalizate: lista proprie, in afara donut-ului si a
+      // sortarii cheltuielilor. Ascunsa complet cand nu exista.
+      const capex=p.capex_breakdown||[];
+      const cxPanel=document.getElementById("ch-capex-panel");
+      const cxBox=document.getElementById("ch-capex-rows");
+      if(cxPanel) cxPanel.style.display = capex.length ? "" : "none";
+      if(cxBox) cxBox.innerHTML = capex.map(i=>{
+        const ic=i.icon?'<span style="font-size:var(--text-base)">'+escHtml(i.icon)+'</span>':ICO.EXPENSE;
+        return `<div class="row"><div class="ic">${ic}</div><div class="info"><div class="t">${escHtml(i.label)}</div><div class="m">Se deduce în ani, prin amortizare</div></div><div class="amt num">${RON(i.amount_brut)}</div></div>`;
+      }).join("");
     }catch(e){console.error(e);}
   }
 

@@ -17,9 +17,15 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
+from app.domain.capex import CAT_ACHIZITIE_VEHICUL
+
 
 # Valorile acceptate pentru `tip`. Trebuie sa corespunda cu DocType din app/enums.py.
 ALLOWED_TIP = {"VENIT", "CHELTUIALA", "FACTURA_COMISION"}
+
+# Lista alba pentru `category_override` — categorii pe care le poate seta DOAR
+# un buton apasat de om, niciodata AI-ul.
+ALLOWED_OVERRIDE = {CAT_ACHIZITIE_VEHICUL}
 
 # Variante frecvente pe care AI-ul le-ar putea returna -> mapate la valoarea corecta.
 # Previne respingerea unui document bun din cauza unei etichete usor diferite.
@@ -60,8 +66,22 @@ class ExtractionItem(BaseModel):
     detalii: Optional[str] = Field(default="", max_length=500)
     # Pas R1.2 - numarul documentului (serie + nr), ex "INSINT/1518242"
     numar_document: Optional[str] = Field(default=None, max_length=80)
+    # Categorie decisa EXPLICIT de user prin buton (gardianul de achizitie).
+    # NU e un camp pe care AI-ul il completeaza: promptul nu-l mentioneaza, iar
+    # validatorul accepta doar o lista alba, deci o halucinatie nu poate ateriza
+    # aici. Traieste pe ExtractionItem fiindca item-ul e purtatorul dintre
+    # ecranul de confirmare si scriere (posting.category_override).
+    category_override: Optional[str] = Field(default=None, max_length=40)
 
     # --- Validatori ---
+
+    @field_validator("category_override", mode="before")
+    @classmethod
+    def _validate_category_override(cls, v):
+        """Doar categorii alese de om prin buton. Orice altceva -> None."""
+        if v is None or v == "":
+            return None
+        return str(v).strip() if str(v).strip() in ALLOWED_OVERRIDE else None
     @field_validator("tip", mode="before")
     @classmethod
     def _validate_tip(cls, v):

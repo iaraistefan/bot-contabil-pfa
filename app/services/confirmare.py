@@ -34,6 +34,7 @@ from telegram.ext import ContextTypes
 
 from app.ai.schemas import ExtractionItem
 from app.domain.tax_rules import cota_tva
+from app.domain.capex import CAT_ACHIZITIE_VEHICUL, necesita_intrebare_achizitie
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,12 @@ def _data_item(item: dict) -> date:
 
 _PENDING_KEY = "confirm_pending"
 _EDIT_KEY = "confirm_edit"
+
+# Marcaj pe item-ul pending: „am întrebat deja despre suma asta".
+# Trăiește DOAR în faza de UI (dict-ul pending). La salvare item-ul se
+# reconstruiește prin ExtractionItem(**d), care ignoră cheile necunoscute —
+# deci marcajul nu ajunge niciodată în DB, și nici nu trebuie.
+_ASKED_KEY = "capex_asked"
 
 TIP_LABELS = {
     "VENIT": "Venit",
@@ -169,6 +176,10 @@ def _format_item(idx: int, item: dict, dup_info=None) -> str:
         lines.append(f"💵 Sumă: {_fmt_num(item.get('brut'))} RON")
         if item.get("detalii"):
             lines.append(f"📝 {item.get('detalii')}")
+        # Alegerea facuta la gardianul de achizitie — vizibila inainte de salvare,
+        # ca omul sa poata anula daca a apasat gresit.
+        if item.get("category_override") == CAT_ACHIZITIE_VEHICUL:
+            lines.append("🚗 _Cumpărare de mașină — nu intră la cheltuielile lunii_")
 
     # Avertisment duplicat (Pas R1.2)
     if dup_info:
@@ -199,10 +210,67 @@ def _format_item(idx: int, item: dict, dup_info=None) -> str:
 #                    AFISARE ECRAN CONFIRMARE
 # ============================================================
 
+def _index_de_intrebat(items):
+    """
+    Indexul primului document care depaseste pragul si despre care N-am intrebat
+    inca. None daca nu e niciunul.
+    """
+    for i, it in enumerate(items):
+        if necesita_intrebare_achizitie(it) and not it.get(_ASKED_KEY):
+            return i
+    return None
+
+
+async def _show_intrebare_achizitie(chat_id, context, idx, item, query=None):
+    """
+    Intreaba omul ce e documentul, in loc sa ghiceasca dupa suma.
+
+    Poarta e AICI, nu la salvare: orice drum spre confirmare (poza, text, PDF)
+    trece prin show_confirmation, deci nu exista cale ocolitoare.
+    """
+    text = (
+        "🤔 *Stai puțin — ce e documentul ăsta?*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💵 {_fmt_num(item.get('brut'))} RON"
+        + (f" — {item.get('platforma')}" if item.get("platforma") else "")
+        + "\n"
+        f"📅 {item.get('data') or '— (pun data de azi)'}\n"
+    )
+    if item.get("detalii"):
+        text += f"📝 {item.get('detalii')}\n"
+    text += (
+        "\n━━━━━━━━━━━━━━━━━━━━\n"
+        "La sume mari nu ghicesc, fiindcă cele două se tratează complet diferit.\n\n"
+        "O cheltuială obișnuită se scade în luna în care ai făcut-o.\n"
+        "O mașină nu — ea se scade puțin câte puțin, în ani.\n\n"
+        "Care din două e?"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🚗 Cumpărare de mașină", callback_data=f"confirm|capex|{idx}|da"
+        )],
+        [InlineKeyboardButton(
+            "🧾 Altă cheltuială", callback_data=f"confirm|capex|{idx}|nu"
+        )],
+        [InlineKeyboardButton("❌ Anulează", callback_data="confirm|cancel")],
+    ])
+
+    if query is not None:
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=kb)
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id, text=text, parse_mode="Markdown", reply_markup=kb
+        )
+
+
 async def show_confirmation(chat_id, context, query=None):
     """
     Afiseaza ecranul de confirmare cu datele pending.
     Daca 'query' e dat, editeaza mesajul existent; altfel trimite unul nou.
+
+    GARDIAN ACHIZITIE: daca exista un document peste prag despre care n-am
+    intrebat inca, intrebarea are prioritate. Se raspunde la ele pe rand, apoi
+    se ajunge la ecranul normal.
     """
     pending = get_pending(context)
     if not pending:
@@ -210,6 +278,13 @@ async def show_confirmation(chat_id, context, query=None):
 
     items = pending["items"]
     duplicates = pending.get("duplicates", {})
+
+    idx_intrebare = _index_de_intrebat(items)
+    if idx_intrebare is not None:
+        await _show_intrebare_achizitie(
+            chat_id, context, idx_intrebare, items[idx_intrebare], query=query
+        )
+        return
 
     blocks = []
     for i, it in enumerate(items):
@@ -403,6 +478,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
             prompts.get(field, "Scrie noua valoare:"),
             parse_mode="Markdown",
         )
+        return
+
+    # === Raspuns la gardianul de achizitie ===
+    if action == "capex":
+        idx = int(parts[2])
+        raspuns = parts[3] if len(parts) > 3 else "nu"
+        if idx < len(items):
+            # Marcam ca INTREBAT indiferent de raspuns — altfel intrebarea
+            # s-ar relua la infinit pe „Altă cheltuială".
+            items[idx][_ASKED_KEY] = True
+            if raspuns == "da":
+                items[idx]["category_override"] = CAT_ACHIZITIE_VEHICUL
+            else:
+                # „Altă cheltuială" → fluxul normal, complet neatins.
+                items[idx].pop("category_override", None)
+        await show_confirmation(query.message.chat_id, context, query=query)
         return
 
     # === Seteaza tipul (buton) ===

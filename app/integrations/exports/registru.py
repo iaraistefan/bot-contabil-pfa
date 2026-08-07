@@ -153,6 +153,9 @@ CATEGORY_LABELS = {
     "materials": "Materiale",
     "services": "Servicii (utilități, abonamente)",
     "other_expense": "Alte cheltuieli",
+    # Mijloc fix — rândul rămâne în registru (document de arhivat 10 ani),
+    # dar nu e cheltuiala lunii.
+    "vehicle_acquisition": "Cumpărare mașină (mijloc fix)",
 }
 
 
