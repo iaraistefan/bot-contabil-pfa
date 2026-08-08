@@ -4,7 +4,7 @@
 
 > ⚠️ **„TEMEI DA" ÎNSEAMNĂ DOAR CĂ O REFERINȚĂ E SCRISĂ LÂNGĂ TEXT — NU CĂ E CORECTĂ.**
 >
-> **Dovedit la F1/F2 (august 2026):** `contributii.py` atribuia plafonul CASS de 72 SMB **legii greșite** (141/2025 în loc de 239/2025) — și era numărat **DA**. Referința exista, arăta a temei, trecea inspecția vizuală, era falsă.
+> **Dovedit la închiderea contradicției CASS (PR #127, august 2026):** `contributii.py` atribuia plafonul CASS de 72 SMB **legii greșite** (141/2025 în loc de 239/2025) — și era numărat **DA**. Referința exista, arăta a temei, trecea inspecția vizuală, era falsă.
 >
 > **Cele 22 de „DA" nu sunt o măsură de siguranță.** Forma care contează e **articol + act + DATA VERIFICĂRII pe forma consolidată** — azi o poartă **o singură intrare** (#43, plafonul TVA).
 

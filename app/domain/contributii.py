@@ -67,10 +67,13 @@ PARAMETRI_CONTRIBUTII = {
         # DOAR pentru veniturile realizate incepand cu 01.01.2026 (D212 depusa in 2027).
         # 72 × 4050 = 291.600 baza -> CASS max 29.160. Pentru 2025 ramane 60 (vezi sus).
         #
-        # ⚠️ ATRIBUIRE DIN SURSE SECUNDARE CONVERGENTE (PwC, KPMG, Crowe, ContApp).
+        # ⚠️ TEMEI-NEVERIFICAT (conventie §3.2: `grep -rn TEMEI-NEVERIFICAT app/`
+        # da lista completa a atribuirilor nesustinute de forma consolidata).
+        # ATRIBUIRE DIN SURSE SECUNDARE CONVERGENTE (PwC, KPMG, Crowe, ContApp).
         # NEVERIFICATA pe forma consolidata: legislatie.just.ro era CAZUT la data
         # cercetarii (august 2026) — ECONNREFUSED, apoi 502. De RE-VERIFICAT cand
-        # portalul revine; abia atunci se poate scrie data verificarii langa temei.
+        # portalul revine; se scoate marcajul DOAR cand temeiul primeste data
+        # verificarii pe forma consolidata (modelul: app/domain/vat_plafon_msg.py).
         # CORECTURA: pana acum scria „Legea 141/2025" — GRESIT. Legea 141/2025 a
         # introdus exceptia pentru pensionari (art. 174 alin. (7) lit. c), aplicabila
         # veniturilor anului 2025), NU plafonul. Doua legi diferite, confundate.
