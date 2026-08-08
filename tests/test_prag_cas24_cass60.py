@@ -2,7 +2,7 @@
 Teste pentru pragurile noi (Faza 3 — extensie plafoane):
 - prag_cas24_status: CAS 24 SMB = 97.200 → baza CAS se DUBLEAZĂ ("rău").
 - prag_cass60_status: plafon superior CASS → CASS se PLAFONEAZĂ ("bine"/informativ).
-  Plafonul depinde de an (Legea 141/2025): 60 SMB = 243.000 (2025) / 72 SMB = 291.600 (2026+).
+  Plafonul depinde de an (Legea 239/2025): 60 SMB = 243.000 (2025) / 72 SMB = 291.600 (2026+).
   Nume „60” = istoric; funcția citește valoarea pe an din PARAMETRI_CONTRIBUTII.
 
 Aceeași formă ca prag_cas_status (status OK/APROAPE/DEPASIT, prin _prag_core).
@@ -60,7 +60,7 @@ def test_cas24_smb_din_params():
 
 # ────────────────────────────────────────────────────────────
 # CASS plafon superior — plafonare ("bine"/informativ)
-# Plafon = 60 SMB = 243.000 (2025) / 72 SMB = 291.600 (2026+, Legea 141/2025)
+# Plafon = 60 SMB = 243.000 (2025) / 72 SMB = 291.600 (2026+, Legea 239/2025)
 # ────────────────────────────────────────────────────────────
 
 
@@ -102,4 +102,4 @@ def test_cass60_mesaj_plafonare_la_atingere():
 
 def test_cass60_smb_din_params():
     assert prag_cass60_status(0, 2025)["threshold_ron"] == 243_000   # 60 × 4050
-    assert prag_cass60_status(0, 2026)["threshold_ron"] == 291_600   # 72 × 4050 (L.141/2025)
+    assert prag_cass60_status(0, 2026)["threshold_ron"] == 291_600   # 72 × 4050 (L.239/2025)

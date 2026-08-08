@@ -52,7 +52,8 @@ SALARIU_MINIM_BRUT_2026 = _salariu_minim_an(2026)        # 4050 RON
 COTA_IMPOZIT_PFA = 10                                     # %
 COTA_CAS = PARAMETRI_CONTRIBUTII[2026]["cota_cas"]        # 25 %
 COTA_CASS = PARAMETRI_CONTRIBUTII[2026]["cota_cass"]      # 10 %
-# Plafon superior CASS (multiplu SMB) — sursa unica; 72 pt. 2026 (Legea 141/2025).
+# Plafon superior CASS (multiplu SMB) — sursa unica; 72 pt. 2026 (Legea 239/2025 —
+# atribuire neverificata, vezi nota din contributii.PARAMETRI_CONTRIBUTII).
 CASS_PLAFON_SUS_MULT_2026 = PARAMETRI_CONTRIBUTII[2026]["cass_sus"]  # 72
 COTA_IMPOZIT_PROFIT_SRL = 16    # %
 COTA_TVA_STANDARD = 21          # %

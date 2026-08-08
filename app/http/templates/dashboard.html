@@ -1309,7 +1309,7 @@
   const FLINE = {
     impozit:{name:"Impozit pe venit", tech:"Impozit de 10% pe cât îți rămâne după ce scazi CAS și CASS (art. 68 Cod fiscal)."},
     cas:    {name:"CAS — pensie",      tech:"Sub 12 salarii minime, CAS-ul e opțional (implicit 0). Peste 12: plătești 25% pe baza a 12 salarii minime; peste 24 de salarii minime, baza se dublează."},
-    cass:   {name:"CASS — sănătate",   tech:"Sub 6 salarii minime: CASS pe baza minimă de 6 salarii minime. Între 6 și 72: 10% pe venitul real. Peste 72 de salarii minime, se plafonează (plafon 2026, Legea 141/2025)."},
+    cass:   {name:"CASS — sănătate",   tech:"Plătești 10% pe venitul net, între o podea și un plafon. Sub 6 salarii minime pe an se aplică podeaua: plătești ca și cum ai fi câștigat atât. Podeaua nu ți se aplică dacă ai pe lângă și salariu de cel puțin 6 salarii minime pe an, sau dacă ai pensie — la pensie nu contează suma. Atunci plătești 10% doar pe cât ai câștigat real. Peste 72 de salarii minime, se plafonează."},
   };
   function _flSub(it,d){
     if(it.tip==="impozit") return `cota ${it.cota_pct}%`;

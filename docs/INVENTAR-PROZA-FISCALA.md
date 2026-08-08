@@ -2,6 +2,12 @@
 
 > **STATUT: aceasta e o COADĂ DE LUCRU, nu o referință.** Sursa de adevăr e **temeiul scris în cod lângă fiecare afirmație** (modelul: `app/domain/vat_plafon_msg.py`). Pe măsură ce o intrare e verificată, temeiul **migrează în cod** și intrarea se bifează aici. Liniile se referă la `main`-ul de la data inventarului și **se vor desincroniza la refactorizări** — asta e acceptat: într-o coadă de lucru, staleness-ul costă un grep, nu un răspuns greșit.
 
+> ⚠️ **„TEMEI DA" ÎNSEAMNĂ DOAR CĂ O REFERINȚĂ E SCRISĂ LÂNGĂ TEXT — NU CĂ E CORECTĂ.**
+>
+> **Dovedit la F1/F2 (august 2026):** `contributii.py` atribuia plafonul CASS de 72 SMB **legii greșite** (141/2025 în loc de 239/2025) — și era numărat **DA**. Referința exista, arăta a temei, trecea inspecția vizuală, era falsă.
+>
+> **Cele 22 de „DA" nu sunt o măsură de siguranță.** Forma care contează e **articol + act + DATA VERIFICĂRII pe forma consolidată** — azi o poartă **o singură intrare** (#43, plafonul TVA).
+
 > **HARTĂ, NU VERDICT. NICIO INTRARE NU E VERIFICATĂ CONTRA LEGII.**
 >
 > Documentul ăsta răspunde la o singură întrebare: **unde afirmă codul o regulă fiscală în proză, către user?** Nu spune dacă afirmația e corectă. „Temei DA" înseamnă că referința legală e scrisă lângă text în cod — nu că cineva a confirmat-o contra formei consolidate.
@@ -122,7 +128,7 @@
 ## E. Contribuții — `app/domain/contributii.py`
 | # | Locație | Afirmația | Temei | Sev. |
 |---|---|---|---|---|
-| 50 | `:32,62-65` | Plafon CASS urcă 60→72 SMB doar pentru veniturile din 2026 (Legea 141/2025) | DA | **MARE** |
+| 50 | `:32,62-65` | Plafon CASS urcă 60→72 SMB doar pentru veniturile din 2026 (~~Legea 141/2025~~ → **Legea 239/2025**) | ⚠️ corectat, **neverificat** | **MARE** |
 | 51 | `:47` | Salariu minim 4.050 lei (HG 1506/2024) | DA | **MARE** |
 | 52 | `:50,59-61` | Praguri CAS 12 și 24 SMB; podea CASS 6 SMB | NU | **MARE** |
 | 53 | `:29-31,213-215` | Sub 6 SMB cu altă asigurare → 10% pe venitul real, fără urcare la podea | NU *(marcat în cod ca surse secundare)* | **MARE** |
@@ -173,7 +179,7 @@
 | 72 | `:735` | Combustibil 50%/100% pe regim; ANAF cere dovada, foaia de parcurs | NU | **MARE** |
 | 73 | `:765` | TVA 21% pe comisionul Bolt prin D301 + VIES prin D390, lunar până pe 25 | NU | **MARE** |
 | 74 | `:1310` | Impozit 10% pe ce rămâne după CAS și CASS (art. 68 Cod fiscal) | DA | **MARE** |
-| 75 | `:1312` | CASS: sub 6 SMB pe baza minimă · 6-72 pe real · peste 72 plafonat (Legea 141/2025) | DA | **MARE** |
+| 75 | `:1312` | CASS: podea 6 SMB · 10% pe real · plafon 72 SMB — **acum poartă și excepția** (salariu ≥ 6 SMB · pensie fără prag), art. 174 alin. (7) | NU *(citarea legii scoasă din textul user)* | **MARE** |
 | 76 | `:1330` | CAS devine obligatoriu doar peste 12 salarii minime | NU | **MARE** |
 | 77 | `:1373` | Norma indisponibilă la ridesharing până în 2026 | NU | MEDIE |
 | 78 | `:1375` | Plafon normă 126.038 lei (2026); trecerea se face de anul viitor | NU | **MARE** |
@@ -182,7 +188,9 @@
 | 81 | `:884-886,905-911` | Cod special art. 317; Bolt art. 12 / Uber art. 7 | DA | MEDIE |
 | 82 | `:1556` | Pragurile vin din salariul minim + plafonul TVA legal (OG 22/2025) | DA | MEDIE |
 
-> **#75** e cealaltă jumătate a contradicției — vezi #53 și Observația 3.
+> **#75** — **OMISIUNE CONȘTIENTĂ:** textul nou nu menționează **lit. b)** din art. 174 alin. (7) (venituri din lit. c)-h) pentru care se datorează CASS la cel puțin 6 SMB). *Motiv:* rar la profilul de ridesharing, iar **direcția erorii e supra-plata, nu sub-declararea**. Consemnat ca **omisiune, nu ca text complet** — dacă produsul se extinde pe chirii, se reevaluează.
+>
+> **#75** era cealaltă jumătate a contradicției cu **#53** — vezi Observația 3.
 
 ## L. Gardianul de conformitate — `app/domain/compliance_guardian.py`
 | # | Locație | Afirmația | Temei | Sev. |

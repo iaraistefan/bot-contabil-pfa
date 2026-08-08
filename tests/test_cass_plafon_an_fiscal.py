@@ -1,5 +1,5 @@
 """
-Plafon SUPERIOR CASS versionat pe an fiscal (Legea 141/2025).
+Plafon SUPERIOR CASS versionat pe an fiscal (Legea 239/2025).
 
 - Venituri 2025 (D212 depusă în 2026): plafon = 60 SMB = 243.000 → CASS max 24.300.
 - Venituri 2026+ (D212 depusă în 2027): plafon = 72 SMB = 291.600 → CASS max 29.160.
