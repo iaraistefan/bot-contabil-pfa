@@ -1,5 +1,7 @@
 # INVENTAR — PROZA FISCALĂ
 
+> **STATUT: aceasta e o COADĂ DE LUCRU, nu o referință.** Sursa de adevăr e **temeiul scris în cod lângă fiecare afirmație** (modelul: `app/domain/vat_plafon_msg.py`). Pe măsură ce o intrare e verificată, temeiul **migrează în cod** și intrarea se bifează aici. Liniile se referă la `main`-ul de la data inventarului și **se vor desincroniza la refactorizări** — asta e acceptat: într-o coadă de lucru, staleness-ul costă un grep, nu un răspuns greșit.
+
 > **HARTĂ, NU VERDICT. NICIO INTRARE NU E VERIFICATĂ CONTRA LEGII.**
 >
 > Documentul ăsta răspunde la o singură întrebare: **unde afirmă codul o regulă fiscală în proză, către user?** Nu spune dacă afirmația e corectă. „Temei DA" înseamnă că referința legală e scrisă lângă text în cod — nu că cineva a confirmat-o contra formei consolidate.
