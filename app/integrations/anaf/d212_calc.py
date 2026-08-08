@@ -23,7 +23,8 @@ REGULI IMPLEMENTATE (venituri 2025, salariu minim 4050 lei):
   CASS (10%), pentru venit net > 0:
     - baza = clamp(venit net, 6 sal, cass_sus sal)
       * venituri 2025: cass_sus = 60 sal -> clamp(venit, 24.300, 243.000), CASS max 24.300
-      * venituri 2026+: cass_sus = 72 sal (Legea 141/2025) -> clamp(venit, 24.300, 291.600),
+      * venituri 2026+: cass_sus = 72 sal (Legea 239/2025 — atribuire neverificata,
+        vezi contributii.PARAMETRI_CONTRIBUTII) -> clamp(venit, 24.300, 291.600),
         CASS max 29.160
     - CASS = baza * 10%   (minim 2.430)
     - venit net <= 0 -> CASS = 0

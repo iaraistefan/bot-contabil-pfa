@@ -24,12 +24,16 @@ REGULI:
     baza_aleasa > baza minima    -> contribuabilul poate alege o baza mai mare
 - CASS (10%):
     venit net <= 0               -> 0
-    0 < venit net < 6 SMB        -> baza MINIMA 6 SMB (NU 0!)
+    0 < venit net < 6 SMB        -> baza MINIMA 6 SMB (NU 0!)   [art. 174 alin. (6)]
                                     exceptie asigurat_salariat (salariat/pensionar):
                                     10% pe VENITUL NET REAL (NU urca la 6 SMB, NU 0)
+                                    [art. 174 alin. (7): lit. a) salarii >= 6 SMB ·
+                                     lit. c) pensii, FARA prag — vezi blocantul F1
+                                     „granularitatea asigurat_salariat"]
     6 SMB <= venit net <= cass_sus SMB -> 10% pe venit net real
     venit net > cass_sus SMB     -> plafon cass_sus SMB
-                                    (cass_sus = 60 pt. 2025, 72 pt. 2026+ — Legea 141/2025)
+                                    (cass_sus = 60 pt. 2025, 72 pt. 2026+ —
+                                     Legea 239/2025, atribuire NEVERIFICATA, vezi mai jos)
 
 Rotunjire: 2 zecimale (pastreaza D212 bit-identic cu d212_calc actual).
 Retur: dict {"valoare", "baza", "cota_pct", "nota", "aplicabil"}.
@@ -59,9 +63,21 @@ PARAMETRI_CONTRIBUTII = {
         "cas_jos": 12,
         "cas_sus": 24,
         "cass_jos": 6,
-        # Legea 141/2025: plafonul superior CASS urca 60->72 SMB DOAR pentru
-        # veniturile realizate incepand cu 01.01.2026 (D212 depusa in 2027).
+        # Legea 239/2025 (Pachetul fiscal 2): plafonul superior CASS urca 60->72 SMB
+        # DOAR pentru veniturile realizate incepand cu 01.01.2026 (D212 depusa in 2027).
         # 72 × 4050 = 291.600 baza -> CASS max 29.160. Pentru 2025 ramane 60 (vezi sus).
+        #
+        # ⚠️ TEMEI-NEVERIFICAT (conventie §3.2: `grep -rn TEMEI-NEVERIFICAT app/`
+        # da lista completa a atribuirilor nesustinute de forma consolidata).
+        # ATRIBUIRE DIN SURSE SECUNDARE CONVERGENTE (PwC, KPMG, Crowe, ContApp).
+        # NEVERIFICATA pe forma consolidata: legislatie.just.ro era CAZUT la data
+        # cercetarii (august 2026) — ECONNREFUSED, apoi 502. De RE-VERIFICAT cand
+        # portalul revine; se scoate marcajul DOAR cand temeiul primeste data
+        # verificarii pe forma consolidata (modelul: app/domain/vat_plafon_msg.py).
+        # CORECTURA: pana acum scria „Legea 141/2025" — GRESIT. Legea 141/2025 a
+        # introdus exceptia pentru pensionari (art. 174 alin. (7) lit. c), aplicabila
+        # veniturilor anului 2025), NU plafonul. Doua legi diferite, confundate.
+        # Aceasta e SURSA UNICA a atribuirii; celelalte locuri trimit aici.
         "cass_sus": 72,
     },
 }
@@ -390,7 +406,8 @@ def prag_cass60_status(venit_net: float, an: int) -> dict:
 
     NUME ISTORIC: „60” reflectă plafonul din 2025; valoarea depinde de an —
     60 SMB pentru venituri 2025 (243.000), 72 SMB pentru venituri 2026+
-    (291.600, Legea 141/2025). Funcția citește mereu PARAMETRI_CONTRIBUTII[an],
+    (291.600, Legea 239/2025 — atribuire neverificată, vezi nota de la
+    PARAMETRI_CONTRIBUTII). Funcția citește mereu PARAMETRI_CONTRIBUTII[an],
     deci e corectă pe orice an; doar identificatorul a rămas pe vechea valoare.
 
     La/peste plafon, CASS nu mai crește proporțional — rămâne la cass_sus × SMB × 10%.

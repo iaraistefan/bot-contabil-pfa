@@ -48,7 +48,9 @@ PARAMETRI_FISCALI = {
         "cas_prag_jos": 12,
         "cas_prag_sus": 24,
         "cass_prag_jos": 6,
-        "cass_prag_sus": 72,   # Legea 141/2025: plafon CASS 60→72 SMB pt. venituri 2026+
+        # Legea 239/2025: plafon CASS 60→72 SMB pt. venituri 2026+ (atribuire
+        # neverificată — vezi nota din contributii.PARAMETRI_CONTRIBUTII)
+        "cass_prag_sus": 72,
     },
 }
 
