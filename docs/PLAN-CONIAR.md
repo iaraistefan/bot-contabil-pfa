@@ -262,7 +262,7 @@ Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă �
 - **PRO** — *generează registrul și declarațiile, le depune SINGUR, cu îndrumarea noastră* (DUK Integrator + Java, pas cu pas).
 - **MAX** — *depunem noi în SPV.* Toată treaba.
 
-Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul „ALINIEREA GATING-ULUI cu scara de tiere", azi P6).
+Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul „ALINIEREA GATING-ULUI cu scara de tiere", azi P7).
 
 ### BLOCANTE — CORECTITUDINE FISCALĂ
 
@@ -294,15 +294,21 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 
 ### BLOCANTE — PRODUS
 
-- **P1** · **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
-- **P2** · **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
-- **P3** · **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
-- **P4** · **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
-- **P5** · **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
-- **P6** · **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
-- **P7** · **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
+- **P1** · 🔥 **D212 NU PRODUCE NICIUN ARTEFACT.** Fără XML, fără fișier — **omul citește numărul pe dashboard și îl tastează singur** în formularul ANAF. E **singura declarație fără ieșire**, și e **cea mai importantă pe care o depune un PFA**.
+   **Consecință directă:** n-are moment de generare, deci **nu poate fi arhivată ca celelalte patru** (F1 acoperă doar D100/D301/D390/D207 — vezi PR #131).
+   **TREI VARIANTE DE DECIS:**
+   - **(a) arhivare la SCHIMBARE** — scrii doar când numărul diferă de ultimul arhivat; transformă zgomotul în **cronologia estimării**;
+   - **(b) îi dăm întâi un ARTEFACT** și arhivăm generarea, ca la celelalte;
+   - **(c) amândouă** — dar atunci tabelul ține **două feluri de fapt** („ce am generat" vs „ce ți-am arătat") și trebuie **să le distingă explicit**, altfel minte despre ce conține.
+- **P2** · **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
+- **P3** · **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
+- **P4** · **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
+- **P5** · **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
+- **P6** · **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
+- **P7** · **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
+- **P8** · **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
 
-- **P8** · **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
+- **P9** · **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
     - **VIZIBILITATE:** nu există nicăieri o listă de documente neconfirmate. După ce mesajul urcă în istoricul chat-ului, nimic nu mai amintește de el. **Userul pierde tăcut extracția și nu află niciodată.**
     - **DURABILITATE:** pending-ul trăiește în `context.user_data` (`confirmare.py:106`), dict din memoria procesului. **Niciun `PicklePersistence` configurat nicăieri** → moare la fiecare redeploy Render. Mesajul „confirmarea a expirat" descrie corect ce simte userul, dar **cauza reală e restartul, nu timpul**.
     - **FIȘIERE ORFANE:** `register_source_file` scrie și comite **înainte** de `process_entry` (`bot_contabil.py:2752` vs `:2786`), deci un abandon lasă un `SourceFile` cu baiții arhivați și niciun `Document` în spate. Cost de stocare + **întrebare de retenție**: păstrăm imagini pe care userul nu le-a confirmat niciodată.
