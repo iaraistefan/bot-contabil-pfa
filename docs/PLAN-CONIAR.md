@@ -191,6 +191,14 @@
 - **Marcaj `TEMEI-NEVERIFICAT`** — convenție de urmărire: orice atribuire legală **nesusținută de forma consolidată** poartă șirul fix `TEMEI-NEVERIFICAT` în cod, ca lista lor completă să se obțină cu un `grep`, nu cu memorie sau cu un blocant separat. Se pune **o singură dată, la sursa atribuirii** (nu în fiecare loc care o consumă — vezi principiul de mai sus) și se scoate **doar** când temeiul primește data verificării pe forma consolidată. E perechea operațională a lui **F3**: gardianul oprește proza fiscală nouă fără temei datat, marcajul ține evidența celei vechi.
 - **„UN GARDIAN CARE AFIRMĂ UN PARAMETRU FISCAL E EL ÎNSUȘI PROZĂ FISCALĂ."** La PR #128, valoarea venea din sursă unică, dar **aserția din test era o copie de mână**. Testele intră în lista locurilor unde se afirmă reguli — deci **ancorele se derivă din parametru, nu se scriu**.
 - **„UN GARDIAN CARE APĂRĂ GREȘEALA E MAI RĂU DECÂT NICIUNUL, fiindcă arată a siguranță."** Cu ancoră literală, testul ar fi cerut păstrarea cifrei vechi și ar fi **picat exact pe cine o corecta**.
+- **„PRIMA VERSIUNE A UNUI GARDIAN APĂRĂ INSTANȚA, NU CLASA DE GREȘEALĂ."** S-a repetat **de trei ori într-o singură sesiune** (august 2026):
+  1. ancora de test scrisă literal `6` în loc de derivată din `cass_jos` — apăra **valoarea de atunci**, nu regula;
+  2. temeiul cerut ca simplă referință în loc de referință **verificată cu dată** — apăra **prezența unei citări**, nu adevărul ei;
+  3. gardianul de wiring verificând cele patru call-site-uri cunoscute în loc să scaneze repo-ul — apăra **locurile știute**, nu proprietatea „niciun call-site nearhivat".
+
+  **CAUZA E STRUCTURALĂ, nu neglijență:** gardianul se scrie imediat după ce repari cazul concret, deci **cazul e ce ai în cap**. Instanța e vie, clasa e abstractă.
+  **COROLAR:** după ce scrii un gardian, **NU** întreba „prinde ce tocmai am reparat?" — răspunsul e garantat *da* și nu spune nimic. Întreabă **„care e forma GENERALĂ a greșelii, și prinde o versiune pe care n-am văzut-o?"**
+  Și: **o intrare din lista albă poate purta propria condiție de expirare**, altfel excepțiile temporare devin permanente tăcut.
 - **„Un gardian se judecă după modul lui de eșec, nu după cât e de deștept."** **Fail-closed bate fail-open.** Un gardian al cărui mod de eșec e chiar lucrul păzit **nu e gardian** — vezi de ce poarta de achiziție e o întrebare, nu detecție pe VIN (§4, august 2026). Înainte de orice detecție automată cu miză fiscală: scrie explicit ce se întâmplă când semnalul **lipsește**. Dacă răspunsul e „comportamentul de dinainte, adică bug-ul", reproiectează.
 
 ### 3.3 IDEI AVANSATE (notate, nu pt început)
