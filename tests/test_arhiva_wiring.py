@@ -227,10 +227,7 @@ async def test_livrarea_reuseste_chiar_daca_arhivarea_cade(monkeypatch, tmp_path
 # ════════════════════════════════════════════════════════════
 
 def test_call_siteurile_folosesc_arhiva():
-    """
-    Cade daca un call-site revine la `decl.genereaza(...)` direct: declaratia ar
-    pleca la user fara sa lase urma, tacit.
-    """
+    """Cele patru call-site-uri cunoscute trec prin wrapper."""
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
     bot = (root / "bot_contabil.py").read_text(encoding="utf-8")
@@ -240,8 +237,101 @@ def test_call_siteurile_folosesc_arhiva():
     assert "arhiva.genereaza_si_arhiveaza_d207(" in bot
     assert "arhiva.genereaza_si_arhiveaza(" in web
     assert "arhiva.genereaza_si_arhiveaza_d207(" in web
-    # generatorul brut nu mai are voie sa fie chemat direct din call-site-uri
-    assert "decl_nou.genereaza(" not in bot
-    assert "decl_nou.genereaza_d207_anual(" not in bot
-    assert "decl.genereaza(" not in web
-    assert "decl.genereaza_d207_anual(" not in web
+
+
+# ── Gardianul REPO-WIDE ────────────────────────────────────────────────────────
+# Nu verifica doar cele patru locuri stiute: SCANEAZA TOT codul dupa apeluri
+# directe catre generatoare. Un al CINCILEA call-site, adaugat peste sase luni
+# intr-un fisier nou, trebuie sa PICE testul — nu sa treaca nedetectat.
+#
+# AST, nu grep pe siruri: modulul poate fi importat sub ORICE alias
+# (`decl`, `decl_nou`, `_decl`, ...) si se poate importa si direct
+# (`from ... import genereaza`). Un gardian pe alias-uri fixe s-ar ocoli
+# accidental, la prima redenumire de import.
+
+_MODUL_GENERATOR = "declaratii_service"
+_FUNCTII_DE_INTRARE = {"genereaza", "genereaza_d207_anual", "genereaza_d212"}
+
+# LISTA ALBA — apelanti legitimi, cu motivul lânga fiecare.
+_APELANTI_PERMISI = {
+    # Wrapper-ul insusi: singura cale legitima catre generator in productie.
+    "app/services/declaratii_arhiva.py":
+        "wrapper-ul de arhiva — asta E calea prin care trec ceilalti",
+    # D212 nu produce artefact, deci n-are moment de generare si NU e legat la
+    # arhiva (vezi blocantul de PRODUS „D212 nu produce niciun artefact").
+    # Cand se decide varianta (a)/(b)/(c), intrarea asta trebuie SA DISPARA.
+    "app/services/tax_engine.py":
+        "D212 — nelegat inca la arhiva; se scoate cand se inchide blocantul P1",
+}
+
+
+def _apeluri_directe_la_generator():
+    """Toate apelurile catre generatoare, cu fisier:linie. AST, nu grep."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    gasite = []
+    for p in root.rglob("*.py"):
+        rel = p.relative_to(root).as_posix()
+        if any(x in p.parts for x in (".git", "__pycache__", "_preview")):
+            continue
+        # Testele au voie: verifica generatorul PUR, care e chiar contractul lui.
+        # Gardianul apara call-site-urile de PRODUCTIE.
+        if rel.startswith("tests/"):
+            continue
+        if rel in _APELANTI_PERMISI:
+            continue
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        alias_modul, importate_direct = set(), set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    if a.name.endswith(_MODUL_GENERATOR):
+                        alias_modul.add(a.asname or a.name.split(".")[-1])
+            elif isinstance(n, ast.ImportFrom):
+                mod = n.module or ""
+                for a in n.names:
+                    if a.name == _MODUL_GENERATOR:
+                        alias_modul.add(a.asname or a.name)
+                    elif mod.endswith(_MODUL_GENERATOR) and a.name in _FUNCTII_DE_INTRARE:
+                        importate_direct.add(a.asname or a.name)
+
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Call):
+                continue
+            f = n.func
+            if isinstance(f, ast.Attribute) and f.attr in _FUNCTII_DE_INTRARE:
+                if isinstance(f.value, ast.Name) and f.value.id in alias_modul:
+                    gasite.append(f"{rel}:{n.lineno} -> {f.value.id}.{f.attr}()")
+            elif isinstance(f, ast.Name) and f.id in importate_direct:
+                gasite.append(f"{rel}:{n.lineno} -> {f.id}()")
+    return gasite
+
+
+def test_niciun_apel_direct_la_generator_in_productie():
+    """
+    REPO-WIDE: niciun cod de productie nu cheama generatorul direct, in afara
+    listei albe. Un call-site nou care ocoleste arhiva ar trimite declaratia la
+    user FARA sa lase urma — exact gaura pentru care exista blocantul F1.
+    """
+    gasite = _apeluri_directe_la_generator()
+    assert not gasite, (
+        "Apel(uri) directe catre generator, in afara arhivei:\n  "
+        + "\n  ".join(gasite)
+        + "\n\nFoloseste app.services.declaratii_arhiva (genereaza_si_arhiveaza*), "
+          "sau adauga o intrare in _APELANTI_PERMISI CU MOTIV, daca e legitim."
+    )
+
+
+def test_lista_alba_e_reala():
+    """O intrare pe lista alba care nu mai exista ascunde faptul ca s-a mutat codul."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    for rel, motiv in _APELANTI_PERMISI.items():
+        assert (root / rel).exists(), f"lista alba trimite la un fisier inexistent: {rel}"
+        assert motiv.strip(), f"intrare fara motiv pe lista alba: {rel}"
