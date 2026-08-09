@@ -532,6 +532,50 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS cod_postal VARCHAR(20)",
         ],
     },
+    {
+        "id": "026_declaratii_generate",
+        "description": (
+            "ARHIVA declaratiilor (blocantul fiscal F1): pana acum nu se persista "
+            "NIMIC — nici rezultatul, nici inputurile. Generatoarele din "
+            "app/integrations/anaf/ sunt pure, XML-ul pleca prin BytesIO si disparea. "
+            "NU e gaura de conformitate (copia autoritativa e in SPV), ci de "
+            "REPRODUCTIBILITATE: recalcularea unui an trecut citea TACIT profilul de "
+            "azi. Tabel APPEND-ONLY: fara update, o declaratie generata e fapt istoric. "
+            "FARA UNIQUE pe (user,tip,perioada,d_rec) — DELIBERAT: doua generari sunt "
+            "doua evenimente reale; unicitatea ar face-o tabel de stare. "
+            "FK RESTRICT (ca la factura_abonament): arhiva fiscala nu dispare cu userul. "
+            "luna NULLABLE (D207/D212 sunt anuale); xml NULLABLE (D212 n-are fisier, "
+            "iar esecurile se arhiveaza si ele). D700 nu intra: e cerere SPV, nu "
+            "declaratie. Aditiv + idempotent; INERT pana la wiring-ul call-site-urilor."
+        ),
+        "sql": [
+            """
+            CREATE TABLE IF NOT EXISTS declaratii_generate (
+                id               SERIAL PRIMARY KEY,
+                created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                tip              VARCHAR(10) NOT NULL,
+                an               INTEGER NOT NULL,
+                luna             INTEGER,
+                d_rec            INTEGER NOT NULL DEFAULT 0,
+                inputuri_json    JSON,
+                rezultat_json    JSON,
+                xml              TEXT,
+                nume_fisier_xml  VARCHAR(120),
+                generat          BOOLEAN NOT NULL DEFAULT TRUE,
+                motiv_negenerat  VARCHAR(50)
+            )
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_declaratii_generate_user_tip_an
+                ON declaratii_generate (user_id, tip, an)
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS ix_declaratii_generate_created_at
+                ON declaratii_generate (created_at)
+            """,
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

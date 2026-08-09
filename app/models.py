@@ -645,3 +645,80 @@ class FacturaAbonament(Base):
             f"<FacturaAbonament user={self.user_id} {self.status} "
             f"stripe={self.stripe_invoice_id} oblio={self.oblio_serie}{self.oblio_numar}>"
         )
+
+
+# Tipurile arhivate. D700 NU intra: e cerere de inregistrare prin SPV (ghid text,
+# fara XML si fara perioada), nu declaratie.
+DECL_TIPURI_ARHIVATE = ("D100", "D301", "D390", "D207", "D212")
+
+
+class DeclaratieGenerata(Base):
+    """
+    ARHIVA declaratiilor generate — inputurile SI rezultatul, la momentul generarii.
+
+    DE CE (blocantul F1): pana acum nu se persista nimic. Generatoarele din
+    app/integrations/anaf/ sunt pure, XML-ul pleca prin BytesIO si disparea. NU e
+    gaura de conformitate (copia autoritativa e in SPV), ci de REPRODUCTIBILITATE:
+    recalcularea unui an trecut citea TACIT profilul de azi, deci putea da alt numar
+    decat s-a depus, iar noi nu puteam distinge „motorul era gresit atunci" de
+    „userul a raspuns altfel atunci".
+
+    IMUTABIL: append-only, fara cale de update. O declaratie generata e FAPT ISTORIC.
+    Repository-ul expune doar create + citiri.
+
+    FARA constrangere de unicitate pe (user, tip, perioada, d_rec) — DELIBERAT.
+    Doua generari ale aceleiasi perioade sunt doua evenimente reale; unicitatea ar
+    transforma o arhiva append-only intr-un tabel de stare.
+    """
+    __tablename__ = "declaratii_generate"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # RESTRICT, nu CASCADE (ca la factura_abonament): arhiva fiscala nu are voie sa
+    # dispara odata cu userul. Stergerea unui user cu declaratii ESUEAZA — deliberat.
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False, index=True,
+    )
+
+    tip = Column(String(10), nullable=False, index=True)   # vezi DECL_TIPURI_ARHIVATE
+    an = Column(Integer, nullable=False, index=True)
+    # NULL pentru anuale (D207, D212) — n-au luna.
+    luna = Column(Integer, nullable=True)
+    # 0 = initiala, 1 = rectificativa. Azi mereu 0 (niciun call-site nu-l seteaza),
+    # dar coloana exista ca prima rectificativa sa nu ceara migrare.
+    d_rec = Column(Integer, nullable=False, default=0)
+
+    # Inputurile, ca JSON — conventia casei (totals_json, sources_json, before/after_json).
+    # Serializare pe LISTA EXPLICITA de campuri (declaratii_arhiva._CAMPURI_*), NU dump
+    # de obiect: `firma` si `profile` sunt obiecte, iar un dump ar lega arhiva de forma
+    # lor interna. Un gardian cade daca semnatura unui generator capata un parametru
+    # necunoscut arhivei.
+    inputuri_json = Column(JSON, nullable=True)
+    # Rezultatul: sume, avertismente[], ghid_plain. Ghidul e „de ce"-ul deja compus —
+    # materia prima pentru „Audit Trail" (I1).
+    rezultat_json = Column(JSON, nullable=True)
+
+    # XML-ul generat. NULL la D212 (calcul + ghid, fara fisier) si la generarile
+    # esuate. Masurat: 629-1083 octeti pe perioada tipica -> inline, fara storage extern.
+    xml = Column(Text, nullable=True)
+    nume_fisier_xml = Column(String(120), nullable=True)
+
+    # Se arhiveaza SI esecurile: „am incercat si n-a iesit" e informatie fiscala
+    # (ex. D100 la cota 0 = scutit, sau profil neconfigurat).
+    generat = Column(Boolean, nullable=False, default=True)
+    motiv_negenerat = Column(String(50), nullable=True)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_declaratii_generate_user_tip_an", "user_id", "tip", "an"),
+    )
+
+    def __repr__(self):
+        per = f"{self.an}" + (f"/{self.luna:02d}" if self.luna else "")
+        return (
+            f"<DeclaratieGenerata {self.tip} {per} user={self.user_id} "
+            f"d_rec={self.d_rec} generat={self.generat}>"
+        )
