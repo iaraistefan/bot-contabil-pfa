@@ -1430,9 +1430,15 @@ def genereaza_declaratie(tip: str, year: int, month: int):
         # D100 → planul multi-brand (sursă unică); D301/D390 → baza_intracom (total).
         # Cota nerezident legacy păstrată ca fallback dacă planul lipsește.
         cota_nerez = from_user_dict(profile).cota_nerezident
-        rez = decl.genereaza(tip, year, month, baza_intracom, firma=firma,
-                             cota_nerezident=cota_nerez, d100_plan=d100_plan,
-                             intracom_by_brand=by_brand)
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza. Acelasi generator PUR, plus
+        # persistarea (sesiune proprie in wrapper; cea de calcul e deja inchisa).
+        # Esecul arhivarii NU opreste raspunsul, dar tipa in log.
+        from app.services import declaratii_arhiva as arhiva
+        rez = arhiva.genereaza_si_arhiveaza(
+            user_id, tip, year, month, baza_intracom, firma=firma,
+            cota_nerezident=cota_nerez, d100_plan=d100_plan,
+            intracom_by_brand=by_brand,
+        )
     except Exception as e:
         logger.error(f"API declaratie gen error {tip} {year}/{month} user={user_id}: {e}")
         return jsonify({"error": "internal error", "message": str(e)}), 500
@@ -1513,7 +1519,11 @@ def genereaza_declaratie_d207(year: int):
 
     try:
         firma = decl.date_firma_din_profil(profile)
-        rez = decl.genereaza_d207_anual(year, firma, by_brand, from_user_dict(profile))
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza (vezi nota de la D100/D301/D390).
+        from app.services import declaratii_arhiva as arhiva
+        rez = arhiva.genereaza_si_arhiveaza_d207(
+            user_id, year, firma, by_brand, from_user_dict(profile)
+        )
     except ValueError as e:
         # Optiunea b (comision neatribuit) / regim nerezident nesetat → mesaj clar,
         # NU 500. Userul stie ce sa corecteze (atribuie platforma / seteaza regimul).

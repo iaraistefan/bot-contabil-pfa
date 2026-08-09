@@ -55,6 +55,7 @@ import traceback
 from datetime import datetime, date
 from app.domain.tax_rules import cota_tva  # sursă unică cotă TVA pe dată (fiscal #1)
 from app.domain.capex import este_achizitie  # gardian achiziție mijloc fix
+from app.services import declaratii_arhiva as arhiva  # F1 — arhiva declarațiilor
 from typing import List
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -1865,8 +1866,14 @@ async def _trimite_declaratie_noua(query, context, user_id, year, month, tip):
         # D100 → planul multi-brand (sursă unică); D301/D390 → baza (total).
         # Cota nerezident legacy păstrată ca fallback dacă planul lipsește.
         cota_nerez = from_user_dict(profile).cota_nerezident
-        rez = decl_nou.genereaza(tip, year, month, baza, firma=firma,
-                                 cota_nerezident=cota_nerez, d100_plan=d100_plan)
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza. Wrapper-ul cheama acelasi
+        # generator PUR si persista rezultatul cu sesiune proprie (aici sesiunea de
+        # calcul e deja inchisa, vezi `finally` de mai sus). Un esec de arhivare NU
+        # opreste livrarea, dar tipa in log.
+        rez = arhiva.genereaza_si_arhiveaza(
+            user_id, tip, year, month, baza, firma=firma,
+            cota_nerezident=cota_nerez, d100_plan=d100_plan,
+        )
     except Exception as e:
         logger.error(f"_trimite_declaratie_noua gen error {tip}: {e}")
         await context.bot.send_message(chat_id=chat_id, text=f"⚠️ N-am putut genera {tip}. Încearcă din nou.")
@@ -1954,7 +1961,10 @@ async def execute_fisa_d207(query, context, user_id, year):
     try:
         from app.domain.fiscal_profile import from_user_dict
         firma = decl_nou.date_firma_din_profil(profile)
-        rez = decl_nou.genereaza_d207_anual(year, firma, by_brand, from_user_dict(profile))
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza (vezi nota de la D100/D301/D390).
+        rez = arhiva.genereaza_si_arhiveaza_d207(
+            user_id, year, firma, by_brand, from_user_dict(profile)
+        )
     except ValueError as e:
         # Optiunea b (comision neatribuit) / regim nerezident nesetat → mesaj clar.
         await context.bot.send_message(chat_id=chat_id, text=f"ℹ️ {e}")
