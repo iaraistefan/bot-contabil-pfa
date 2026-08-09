@@ -70,8 +70,12 @@ class User(Base):
     norma_venit_anuala = Column(Float, nullable=True)
     # Cazuri-limita CAS/CASS (PAS 2). NULL/False = caz standard (regresie 0).
     # is_pensionar: scutit de CAS pe PFA (art. 150) + CASS pe net real sub prag.
-    # is_salariat: angajat cu norma intreaga altundeva -> CASS pe net real sub prag
-    # (CAS pe PFA ramane prag-based pe net PFA, neafectat).
+    #   Art. 174 alin. (7) lit. c): pensiile NU au prag — orice pensie califica.
+    # is_salariat: are salarii de CEL PUTIN 6 salarii minime pe an (art. 174 alin.
+    #   (7) lit. a)) -> deja asigurat la nivelul cerut de lege -> CASS pe net real
+    #   sub prag, fara podea. ⚠️ NU inseamna „angajat" pur si simplu: part-time sau
+    #   angajare partiala de an pot fi SUB prag, si atunci podeaua SE aplica.
+    #   (CAS pe PFA ramane prag-based pe net PFA, neafectat.)
     is_pensionar = Column(Boolean, nullable=True)
     is_salariat = Column(Boolean, nullable=True)
     # Casă de marcat (PAS 3): userul a DECLARAT că încasează numerar de la pasageri.

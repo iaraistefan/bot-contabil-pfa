@@ -775,6 +775,7 @@ def onboarding_status():
     if err:
         return err
     from app.repositories import vehicule as vehicule_repo
+    from app.domain import contributii   # pragul CASS derivat (F1) — vezi `_cass_prag_jos_ron`
     session = get_session()
     try:
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -812,6 +813,17 @@ def onboarding_status():
             "is_pensionar": bool(profile.get("is_pensionar")),
             "is_salariat": bool(profile.get("is_salariat")),
             "incaseaza_numerar": bool(profile.get("incaseaza_numerar")),
+            # F1 — pragul de 6 salarii minime, DERIVAT din sursa unică
+            # (contributii.prag_cass6_status → PARAMETRI_CONTRIBUTII), NU scris în
+            # template. Motivul: am înlocuit un prag pe care userul îl putea evalua
+            # instant („normă întreagă") cu unul care cere să știe salariul minim și
+            # să înmulțească. Cine nu poate răspunde, ghicește — iar direcția de
+            # eroare a flagului `is_salariat` e SUB-DECLARAREA. Read-only: nu e în
+            # _ONBOARDING_SAVE_FIELDS, deci wizardul nu-l poate scrie înapoi.
+            "_cass_prag_jos_ron": contributii.prag_cass6_status(
+                0.0, date.today().year
+            )["threshold_ron"],
+            "_cass_prag_jos_an": date.today().year,
             # Proportionalizare mid-an (PAS 4a) — date activitate (optionale, ISO str/None).
             "data_inceput_activitate": profile.get("data_inceput_activitate"),
             "data_sfarsit_activitate": profile.get("data_sfarsit_activitate"),

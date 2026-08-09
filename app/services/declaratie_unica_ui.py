@@ -163,7 +163,8 @@ async def _intreaba_asigurare(send_func):
     await send_func(
         "🏥 *Asigurare de sănătate*\n\n"
         "Ai fost asigurat de sănătate prin ALTĂ sursă în acel an?\n"
-        "_(salariu cu CASS la minim 6 salarii minime, pensie, etc.)_\n\n"
+        "_(salariu de cel puțin 6 salarii minime pe an, sau pensie — "
+        "la pensie nu contează suma)_\n\n"
         "Contează mult: dacă DA și venitul PFA e sub prag, ești scutit "
         "de CASS-ul minim.",
         parse_mode="Markdown",
