@@ -2217,7 +2217,7 @@
       // Situație personală (PAS 2) — afectează CAS/CASS
       const sit=[];
       if(s.is_pensionar) sit.push("pensionar · CAS scutit");
-      if(s.is_salariat) sit.push("angajat · CASS pe venit real");
+      if(s.is_salariat) sit.push("salariu peste 6 salarii minime · CASS pe venit real");
       if(sit.length) formaTxt+=" · "+sit.join(" · ");
       // Activitate mixtă (PAS 4b): split temporal normă → real de la data adăugării.
       if(s.regim_impunere==="NORMA_VENIT" && s.are_activitate_neeligibila_norma){
@@ -2481,7 +2481,7 @@
     const rand=(emoji,txt)=>`<div style="display:flex;gap:var(--sp-2);padding:var(--sp-2) 0;border-bottom:1px solid var(--line)"><span>${emoji}</span><div class="hint" style="color:var(--ink)">${txt}</div></div>`;
     let rez=rand("🏢", e(d.firma_nume||d.firma_cui||"Firma ta"));
     if(d.regim_impunere) rez+=rand("🧾", "Regim: "+(WIZ_REGIM_LBL[d.regim_impunere]||d.regim_impunere));
-    if(d.is_pensionar||d.is_salariat){ const sit=[]; if(d.is_pensionar)sit.push("pensionar"); if(d.is_salariat)sit.push("angajat"); rez+=rand("👤","Situație: "+sit.join(" · ")); }
+    if(d.is_pensionar||d.is_salariat){ const sit=[]; if(d.is_pensionar)sit.push("pensionar"); if(d.is_salariat)sit.push("salariu peste 6 salarii minime"); rez+=rand("👤","Situație: "+sit.join(" · ")); }
     if(d.veh_nr) rez+=rand("🚗", e(d.veh_nr)+(d.veh_marca?" · "+e(d.veh_marca):""));
     if(d.is_ridesharing){
       const plat=[]; if(d.regim_nerezident_bolt)plat.push(WIZ_NEREZ_LBL[d.regim_nerezident_bolt]||"Bolt");
@@ -2686,7 +2686,7 @@
     wizShell("Situația ta personală", `
       <div class="hint" style="margin-bottom:var(--sp-3)">Bifează ce ți se aplică — afectează contribuțiile (CAS/CASS) și obligațiile. Opțional; dacă niciuna nu se aplică, treci mai departe.</div>
       ${tog("is_pensionar","🧓","Sunt pensionar","Pensionarii NU plătesc CAS (pensie) pe activitatea PFA. CASS se aplică pe venitul real.")}
-      ${tog("is_salariat","💼","Sunt angajat cu normă întreagă altundeva","Ca asigurat prin salariu, CASS pe PFA se calculează pe venitul real (fără baza minimă). CAS pe PFA rămâne după prag.")}
+      ${tog("is_salariat","💼",`Am salariu de cel puțin 6 salarii minime pe an${WIZ.data._cass_prag_jos_ron?` (${lei0(WIZ.data._cass_prag_jos_ron)} lei în ${WIZ.data._cass_prag_jos_an})`:""}`,"Contează nivelul, nu doar faptul că ești angajat: legea cere salarii de cel puțin 6 salarii minime pe an ca să fii considerat deja asigurat. Dacă da, CASS pe PFA se calculează pe venitul real, fără podeaua minimă. Dacă ai lucrat part-time sau doar o parte din an, s-ar putea să fii sub prag — atunci podeaua se aplică. CAS pe PFA rămâne după prag, neatins.")}
       ${cashTog}
       <div style="margin-top:var(--sp-1);border-top:1px solid var(--line-2);padding-top:var(--sp-3)">
         <div class="hint" style="margin-bottom:var(--sp-2)">📅 Ai început activitatea în cursul anului (nu de la 1 ianuarie) sau o vei înceta? Opțional — lasă gol dacă PFA-ul e activ tot anul. La <b>începere</b>, plafonul CAS se recalculează proporțional; norma de venit se prorata pe zile.</div>
