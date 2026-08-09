@@ -198,6 +198,7 @@
 
   **CAUZA E STRUCTURALĂ, nu neglijență:** gardianul se scrie imediat după ce repari cazul concret, deci **cazul e ce ai în cap**. Instanța e vie, clasa e abstractă.
   **COROLAR:** după ce scrii un gardian, **NU** întreba „prinde ce tocmai am reparat?" — răspunsul e garantat *da* și nu spune nimic. Întreabă **„care e forma GENERALĂ a greșelii, și prinde o versiune pe care n-am văzut-o?"**
+  **CÂND se pune întrebarea contează la fel de mult ca întrebarea însăși.** Toate trei incidentele au fost prinse la **REVIEW**, niciunul la scriere — exact ce prezice principiul. În minutul în care ai scris gardianul, **instanța e încă prea vie ca să vezi clasa**. Deci întrebarea se pune **la rece**: la review, sau după o pauză. Cine lucrează singur trebuie **s-o amâne deliberat**, nu s-o pună imediat.
   Și: **o intrare din lista albă poate purta propria condiție de expirare**, altfel excepțiile temporare devin permanente tăcut.
 - **„Un gardian se judecă după modul lui de eșec, nu după cât e de deștept."** **Fail-closed bate fail-open.** Un gardian al cărui mod de eșec e chiar lucrul păzit **nu e gardian** — vezi de ce poarta de achiziție e o întrebare, nu detecție pe VIN (§4, august 2026). Înainte de orice detecție automată cu miză fiscală: scrie explicit ce se întâmplă când semnalul **lipsește**. Dacă răspunsul e „comportamentul de dinainte, adică bug-ul", reproiectează.
 
