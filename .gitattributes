@@ -1,3 +1,7 @@
-# Fixiere binare — fără conversie de linii (altfel autocrlf corupe PDF-ul la checkout)
-*.pdf binary
-tests/fixtures/** binary
+# Fisierele oficiale ANAF (XSD + Schematron) si skeleton-ul ISO Schematron se
+# pastreaza BYTE-CU-BYTE ca la sursa. Fara asta, git ar normaliza LF -> CRLF la
+# checkout pe Windows, ar schimba continutul si ar invalida amprentele SHA-256
+# din app/integrations/anaf/scheme/d212/PROVENIENTA.md — adica exact dovada ca
+# validam contra schemei oficiale, nu contra unei copii derivate.
+app/integrations/anaf/scheme/** -text
+tests/schematron_skeleton/** -text
