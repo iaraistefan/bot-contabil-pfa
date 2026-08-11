@@ -66,8 +66,10 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 from xml.sax.saxutils import escape
+import os
 import re
 import unicodedata
+import xml.etree.ElementTree as ET
 
 
 # ============================================================
@@ -91,6 +93,108 @@ DET_VEN_NET_SISTEM_REAL = "1"
 
 # Forma de organizare: 1 = individual (PFA), 2 = asociere fara personalitate juridica.
 FORMA_ORG_INDIVIDUAL = "1"
+
+
+# ============================================================
+#         AN_R — CE INSEAMNA, SI DE UNDE IL LUAM
+# ============================================================
+#
+# LANTUL DE DOVEZI (nu reface rationamentul, e facut si verificat):
+#
+# 1. Eticheta din documentatia de structura e ambigua. `an_r` e descris drept
+#    "Anul de raportare", dar instructiunile oficiale folosesc EXACT aceeasi
+#    expresie pentru anul veniturilor ("in anul de raportare, s-a inregistrat
+#    pierdere fiscala"). Eticheta singura nu decide nimic.
+#
+# 2. Formularul are DOUA casete de an, nu una. Din instructiunile OpANAF
+#    2736/2025: capitolul I "Date privind impozitul pe veniturile realizate si
+#    contributiile sociale datorate pentru anul ........" si capitolul II
+#    "Date privind contributia de asigurari sociale de sanatate datorata de
+#    catre persoanele fizice care opteaza pentru plata contributiei pentru
+#    anul .......".
+#
+# 3. XML-ul are UN SINGUR atribut de an (`an_r`, pe radacina). Deci nu poate fi
+#    anul ambelor capitole — unul dintre ele ramane implicit.
+#
+# 4. BR-D212-0023 decide care: cere ca `data_incep`, `data_sf`, `data_suspendare`
+#    (si perechile lor de la norma/strainatate) sa aiba anul egal cu `an_r - 1`.
+#    Alea sunt datele de desfasurare a activitatii din Capitolul I, adica
+#    perioada in care s-a produs venitul declarat.
+#
+# CONCLUZIE: `an_r` = anul Capitolului II (optiunea CASS) = anul DEPUNERII.
+# Anul veniturilor din Capitolul I e `an_r - 1` si NU are camp propriu in XML.
+# De aceea generatorul primeste `an_venituri` si scrie `an_r = an_venituri + 1`.
+#
+# ⚠️ Anul NU vine niciodata din ceasul sistemului. Vine din anul de calcul,
+#    pasat explicit. O declaratie pe 2025 depusa cu intarziere in 2027 tot
+#    an_r=2026 trebuie sa poarte.
+
+# Fisierul din care citim anul acoperit. Modul de esec conteaza: daca ANAF
+# reformuleaza regula, vrem sa ne oprim, nu sa ghicim (vezi _extrage_an_r_impus).
+CALE_REGULI_BUSINESS = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "scheme", "d212", "business", "d212-business.sch")
+
+_SCHEMATRON_NS = "{http://purl.oclc.org/dsdl/schematron}"
+_an_impus_cache = {}
+
+
+def _extrage_an_r_impus(cale: str) -> int:
+    """Citeste din BR-D212-0006 anul de raportare pe care il impune pachetul ANAF.
+
+    Regula, in `business/d212-business.sch`, arata asa:
+
+        <rule context="//@*[name(.) = 'an_r']">
+          <let name="an" value="number(normalize-space(.))"/>
+          <let name="isValid" value="$an = 2026"/>
+          <assert test="$isValid" flag="fatal" id="BR-D212-0006"> ... </assert>
+        </rule>
+
+    Il DERIVAM in loc sa-l hardcodam: cand ANAF publica pachetul pentru anul
+    urmator si cineva inlocuieste fisierele din scheme/d212/, generatorul se
+    adapteaza fara nicio schimbare de cod. Sursa unica pe valoare, aplicata si
+    pe justificare.
+
+    Raises:
+        RuntimeError: daca anul NU poate fi extras. Deliberat NU exista implicit:
+            un fallback tacit ar reface exact problema pe care o reparam —
+            generatorul ar pretinde iar un domeniu pe care nu-l poate onora.
+            Mai bine ne oprim zgomotos decat sa emitem fisiere nevalidabile.
+    """
+    if cale in _an_impus_cache:
+        return _an_impus_cache[cale]
+
+    def opreste(motiv: str):
+        raise RuntimeError(
+            f"Nu pot citi anul de raportare impus de BR-D212-0006 din {cale}: "
+            f"{motiv}. Probabil ANAF a reformulat regula in pachetul nou. "
+            f"Verifica fisierul si actualizeaza _extrage_an_r_impus — pana atunci "
+            f"NU generam D212, ca sa nu producem fisiere pe care nu le putem valida."
+        )
+
+    try:
+        radacina = ET.parse(cale).getroot()
+    except (OSError, ET.ParseError) as e:
+        opreste(f"fisierul nu poate fi citit sau parsat ({e})")
+
+    for regula in radacina.iter(_SCHEMATRON_NS + "rule"):
+        if not any(a.get("id") == "BR-D212-0006"
+                   for a in regula.iter(_SCHEMATRON_NS + "assert")):
+            continue
+        for let in regula.iter(_SCHEMATRON_NS + "let"):
+            potrivire = re.search(r"\$an\s*=\s*(\d{4})", let.get("value") or "")
+            if potrivire:
+                an = int(potrivire.group(1))
+                _an_impus_cache[cale] = an
+                return an
+        opreste("am gasit regula BR-D212-0006 dar nu si comparatia `$an = <an>`")
+
+    opreste("nu am gasit regula BR-D212-0006")
+
+
+def anul_de_raportare_acoperit() -> int:
+    """Anul `an_r` pe care il accepta pachetul de scheme vendorizat acum."""
+    return _extrage_an_r_impus(CALE_REGULI_BUSINESS)
 
 
 # ============================================================
@@ -220,8 +324,20 @@ def genereaza_d212(
     Raises:
         ValueError: date invalide (an, CNP, regim neacoperit de v1)
     """
-    if not (2018 <= an_venituri <= 2100):
-        raise ValueError(f"An invalid pentru D212: {an_venituri} (permis 2018-2100).")
+    # Domeniul NU e un interval inventat de noi: e exact anul pe care il valideaza
+    # pachetul de scheme din scheme/d212/. Inainte acceptam 2018-2100 si produceam
+    # pentru orice alt an fisiere pe care propriul nostru Schematron le respingea —
+    # adica promiteam un domeniu pe care nu-l puteam onora.
+    an_r_acoperit = anul_de_raportare_acoperit()
+    an_r = an_venituri + 1
+    if an_r != an_r_acoperit:
+        raise ValueError(
+            f"Pachetul de scheme din scheme/d212/ valideaza doar declaratia cu "
+            f"an_r={an_r_acoperit}, adica veniturile din {an_r_acoperit - 1}. "
+            f"Ai cerut veniturile din {an_venituri} (ar da an_r={an_r}). "
+            f"Pentru alt an descarca pachetul corespunzator de la ANAF "
+            f"(www.anaf.ro/declaratii/doc/d212.zip) — vezi PROVENIENTA.md."
+        )
 
     regim = getattr(rezultat, "regim", "SISTEM_REAL")
     if regim != "SISTEM_REAL":
@@ -247,8 +363,6 @@ def genereaza_d212(
             "Nr. certificatului de inregistrare ONRC e obligatoriu pentru "
             "activitati independente (BR-D212-0095). Nu inventam un numar."
         )
-
-    an_r = an_venituri + 1
 
     # ---- cifrele, transcrise din motorul de calcul (nu recalculate) ----
     venit_brut = _lei(rezultat.venit_brut)

@@ -252,6 +252,94 @@ def test_ghidul_spune_ca_baza_cas_e_o_alegere():
     assert "48600" in ghid           # minimul aplicabil, pus de noi
 
 
+# ════════════════════════════════════════════════════════
+#      AN_R — semantica, si de unde vine anul
+# ════════════════════════════════════════════════════════
+
+def test_an_r_e_anul_depunerii_nu_al_veniturilor():
+    """`an_r` = an_venituri + 1. Pinuim semantica, ca sa n-o redescopere nimeni.
+
+    LANTUL DE DOVEZI (verificat pe sursele ANAF, august 2026):
+
+    1. Eticheta din documentatia de structura e AMBIGUA: `an_r` e "Anul de
+       raportare", dar instructiunile oficiale folosesc aceeasi expresie pentru
+       anul veniturilor ("in anul de raportare, s-a inregistrat pierdere
+       fiscala"). Eticheta nu decide.
+
+    2. Formularul are DOUA casete de an: capitolul I "...pentru anul ........"
+       (veniturile) si capitolul II "...care opteaza pentru plata contributiei
+       pentru anul ......." (optiunea CASS).
+
+    3. XML-ul are UN SINGUR atribut de an. Deci unul dintre cei doi ani ramane
+       implicit — intrebarea e care.
+
+    4. BR-D212-0023 raspunde: cere ca `data_incep` / `data_sf` / `data_suspendare`
+       sa aiba anul egal cu `an_r - 1`. Alea sunt datele activitatii din
+       capitolul I, adica perioada in care s-a produs venitul.
+
+    => `an_r` e anul capitolului II / al depunerii. Anul veniturilor = an_r - 1.
+    """
+    xml = _xml()
+    assert _atribute(xml, "d212")["an_r"] == str(AN + 1) == "2026"
+
+
+def test_anul_se_citeste_din_regula_anaf_nu_e_hardcodat():
+    """Sursa unica pe valoare: anul acoperit vine din BR-D212-0006, nu din cod."""
+    assert d212.anul_de_raportare_acoperit() == 2026
+
+
+def test_refuza_anul_pe_care_schemele_nu_l_pot_valida():
+    """Nu promitem un domeniu pe care nu-l putem onora."""
+    with pytest.raises(ValueError, match="valideaza doar declaratia"):
+        d212.genereaza_d212(an_venituri=2026, identitate=_identitate(),
+                            activitate=_activitate(), rezultat=_rezultat_real())
+
+
+def test_extragerea_esuata_opreste_nu_cade_pe_implicit(tmp_path, monkeypatch):
+    """MODUL DE ESEC: daca ANAF reformuleaza BR-D212-0006, ne oprim ZGOMOTOS.
+
+    Un fallback tacit aici ar reface exact problema reparata: generatorul ar
+    pretinde din nou un domeniu pe care nu-l poate onora, doar ca fara sa se
+    mai vada. Un gardian care, cand nu stie, ghiceste, nu e gardian.
+    """
+    ciuntit = tmp_path / "d212-business.sch"
+    ciuntit.write_text(
+        '<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="business"/>',
+        encoding="utf-8")
+    monkeypatch.setattr(d212, "CALE_REGULI_BUSINESS", str(ciuntit))
+
+    with pytest.raises(RuntimeError, match="BR-D212-0006"):
+        d212.anul_de_raportare_acoperit()
+    # si generarea se opreste, nu continua pe vreun an presupus
+    with pytest.raises(RuntimeError, match="NU generam D212"):
+        d212.genereaza_d212(an_venituri=AN, identitate=_identitate(),
+                            activitate=_activitate(), rezultat=_rezultat_real())
+
+
+def test_extragerea_opreste_si_daca_fisierul_lipseste(tmp_path, monkeypatch):
+    monkeypatch.setattr(d212, "CALE_REGULI_BUSINESS", str(tmp_path / "inexistent.sch"))
+    with pytest.raises(RuntimeError, match="nu poate fi citit"):
+        d212.anul_de_raportare_acoperit()
+
+
+def test_extragerea_urmeaza_regula_cand_anaf_schimba_anul(tmp_path, monkeypatch):
+    """Pachetul pentru 2027 pus in loc → generatorul se adapteaza FARA cod nou."""
+    viitor = tmp_path / "d212-business.sch"
+    viitor.write_text(
+        '<pattern xmlns="http://purl.oclc.org/dsdl/schematron" id="business">'
+        '<rule context="//@*[name(.) = \'an_r\']">'
+        '<let name="an" value="number(normalize-space(.))"/>'
+        '<let name="isValid" value="$an = 2027"/>'
+        '<assert test="$isValid" flag="fatal" id="BR-D212-0006">x</assert>'
+        '</rule></pattern>', encoding="utf-8")
+    monkeypatch.setattr(d212, "CALE_REGULI_BUSINESS", str(viitor))
+
+    assert d212.anul_de_raportare_acoperit() == 2027
+    xml = d212.genereaza_d212(an_venituri=2026, identitate=_identitate(),
+                              activitate=_activitate(), rezultat=_rezultat_real())
+    assert _atribute(xml, "d212")["an_r"] == "2027"
+
+
 def test_refuza_norma_de_venit():
     """Norma se declara in cap12, alta structura — nu o aproximam cu cap11."""
     rez = calculeaza_d212(venit_brut=0, cheltuieli_deductibile=0, an=AN,

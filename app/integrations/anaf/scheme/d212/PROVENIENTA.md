@@ -38,6 +38,44 @@ Nu am vendorizat din arhivă: `d212_docTehnica_v1.0.8_17042026.xls` și
 `structura_D212_V1.0.8_17042026.pdf` (documentație pentru oameni, nu artefacte
 executabile de validare).
 
+## ⚠️ Pachetul e legat de UN SINGUR an fiscal
+
+Nu e o bibliotecă de reguli valabilă oricând. Două reguli fixează anul, literal:
+
+| regulă | fișier | ce impune |
+|---|---|---|
+| `BR-D212-0006` | `business/d212-business.sch` | `<let name="isValid" value="$an = 2026"/>` — `an_r` **trebuie** să fie 2026 |
+| `BR-D212-0023` | `business/d212-business-2.sch` | `<let name="yearExp" value="string($an_r_num - 1)"/>` — datele de activitate (`data_incep`, `data_sf`, `data_suspendare`, …) trebuie să aibă anul `an_r − 1` |
+
+Deci pachetul acesta validează **exclusiv** declarația cu `an_r=2026`, adică
+veniturile realizate în **2025**.
+
+### Ce înseamnă `an_r`
+
+Nu anul veniturilor. Formularul are **două** casete de an — capitolul I
+„…pentru anul ……" (veniturile) și capitolul II „…care optează pentru plata
+contribuției pentru anul ……" (opțiunea CASS) — dar XML-ul are **un singur**
+atribut de an. `BR-D212-0023` arată care dintre ele e: datele de desfășurare a
+activității din capitolul I trebuie să fie din `an_r − 1`.
+
+**`an_r` = anul capitolului II = anul depunerii. Anul veniturilor e `an_r − 1`
+și nu are câmp propriu în XML.**
+
+Eticheta „Anul de raportare" din documentația de structură induce în eroare:
+instrucțiunile oficiale folosesc aceeași expresie pentru anul veniturilor.
+Nu te lua după ea.
+
+### Anul nu e hardcodat în generator
+
+`d212_generator.anul_de_raportare_acoperit()` îl **citește din
+`BR-D212-0006`** la rulare. Când înlocuiești fișierele de aici cu pachetul
+pentru anul următor, generatorul se adaptează fără nicio schimbare de cod.
+
+Dacă ANAF reformulează regula astfel încât extragerea să nu mai reușească,
+generatorul **se oprește cu `RuntimeError`** — deliberat nu există valoare
+implicită. Un fallback tăcut ar face generatorul să pretindă din nou un domeniu
+pe care nu-l poate onora, doar că fără să se mai vadă.
+
 ## Cum se actualizează
 
 Când ANAF publică o versiune nouă:
@@ -49,6 +87,10 @@ Când ANAF publică o versiune nouă:
    se vede exact ce câmp mai trebuie completat.
 4. Dacă numărul de reguli declanșate crește mult, ridică `PRAG_REGULI` în
    `tests/anaf_schema_validare.py`.
+5. Anul acoperit **nu** trebuie schimbat în cod — se citește din `BR-D212-0006`.
+   Testele care pinuiesc anul (`test_anul_se_citeste_din_regula_anaf_nu_e_hardcodat`,
+   `test_an_r_e_anul_depunerii_nu_al_veniturilor`) vor cădea cu anul nou; e
+   semnalul că actualizarea a intrat, nu o regresie.
 
 ## Un avertisment despre `D212.sch`
 
