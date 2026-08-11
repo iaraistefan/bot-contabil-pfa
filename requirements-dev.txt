@@ -1,0 +1,15 @@
+# Dependinte DOAR pentru rularea suitei de teste. NU se instaleaza in productie
+# (generatoarele de declaratii nu au nevoie de ele — construiesc XML din string-uri).
+#
+#   py -3.10 -m pip install -r requirements-dev.txt
+
+pytest>=8.0
+pytest-asyncio>=0.23
+
+# --- validarea contra schemelor oficiale ANAF (tests/anaf_schema_validare.py) ---
+# lxml: validare XSD (d212_schema.xsd, namespace v11)
+lxml>=5.0
+# saxonche: motor XSLT 3.0, necesar fiindca Schematron-ul ANAF e scris cu
+# queryBinding="xslt2" — libxslt-ul din lxml e XSLT 1.0 si NU il poate rula.
+# Fara el, testele de Schematron se sar (vezi importorskip) si ramane doar XSD-ul.
+saxonche>=12.0
