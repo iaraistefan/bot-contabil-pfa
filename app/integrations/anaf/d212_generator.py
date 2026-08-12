@@ -438,6 +438,25 @@ def genereaza_d212(
     linii.append("<d212 " + " ".join(a for a in atribute_radacina if a) + ">")
 
     # ---- oblig_realizat: Sectiunile 3 + 4 + obligatii (INAINTEA lui cap11) ----
+    #
+    # ⚠️ REQUIRED-BY-SCHEMA / IGNORED-BY-FORM. Nu incerca sa scoti elementul asta
+    #    "ca optimizare" — pare balast, dar schema il impune. Ambele jumatati sunt
+    #    masurate, nu presupuse (probe pe formularul public, 11-12 august 2026):
+    #
+    #    REQUIRED: un fisier identic dar FARA <oblig_realizat>, cu aceleasi bife,
+    #    e respins de Schematron cu 11 esecuri — BR-D212-0041/0042/0043/0045/0046/
+    #    0048/0049/0052/0053 (toate de forma "daca bifa131=1 atunci <camp> trebuie
+    #    completat") plus BR-D212-0054/0055 pe CASS. Deci cat timp bifele sunt pe 1,
+    #    elementul nu e optional.
+    #
+    #    IGNORED: la import, formularul a afisat CAS 0 si impozit 6750, desi
+    #    fisierul continea cas_datorat=12150 si real_impozit_datorat_ai=5535.
+    #    Formularul recalculeaza din cap11 + bife: 75000 - 0 - 7500 = 67500, x10%.
+    #    Cifrele noastre de aici nu ajung in declaratie.
+    #
+    #    Consecinta practica: valorile trebuie sa fie COERENTE INTRE ELE (ca sa
+    #    treaca de Schematron), nu neaparat sa fie citite de cineva. Iar CAS-ul
+    #    userul trebuie sa-l introduca manual in formular — vezi ghidul.
     atribute_oblig = []
     if bifa131:
         atribute_oblig += [
@@ -571,13 +590,18 @@ def genereaza_ghid_d212(
     L.append("")
 
     if cas > 0:
-        L.append(b("Baza pentru CAS e o ALEGERE, nu o cifra fixa."))
+        L.append(b("⚠️ PAS OBLIGATORIU: CAS-ul NU vine cu fisierul."))
         L.append(
-            f"Legea nu-ti spune cat sa platesti la pensie — iti spune doar de la cat "
-            f"in jos nu ai voie. Eu am pus MINIMUL care ti se aplica: {cas_baza} lei, "
-            f"adica {cas} lei CAS. Poti sa MARESTI baza direct in formular, daca vrei "
-            f"pensie mai mare: platesti 25% din cat alegi, si exact cat platesti se "
-            f"duce in punctajul tau. Alegerea e a ta — eu doar iti arat de unde pleaca."
+            f"Formularul ANAF nu preia CAS-ul din import — l-am testat, ramane pe 0. "
+            f"Dupa ce importi, scrie {cas_baza} in campul "
+            f"\"Baza anuala de calcul al CAS\". Atat. CAS-ul devine {cas} lei."
+        )
+        L.append(
+            f"De ce trebuie sa-l pui tu: legea nu-ti spune cat sa platesti la pensie, "
+            f"iti spune doar de la cat in jos nu ai voie. {cas_baza} e MINIMUL care ti "
+            f"se aplica. Poti sa scrii mai mult, daca vrei pensie mai mare: platesti "
+            f"25% din cat alegi, si exact cat platesti se duce in punctajul tau. "
+            f"Alegerea e a ta — eu doar iti arat de unde pleaca."
         )
         L.append("")
 
@@ -590,9 +614,29 @@ def genereaza_ghid_d212(
     L.append("  1. Intri in SPV cu utilizator si parola")
     L.append("  2. \"Depunere declaratie unica si alte formulare\" → formularul D212")
     L.append("  3. Apesi \"Importa fisier salvat\" si alegi D212.xml")
-    L.append("  4. VERIFICI tot, completezi ce lipseste")
-    L.append("  5. \"Genereaza fisier PDF pentru depunere\" → depui prin SPV")
+    if cas > 0:
+        L.append(f"  4. Scrii {cas_baza} la \"Baza anuala de calcul al CAS\"")
+        L.append("  5. VERIFICI tot, completezi ce lipseste")
+        L.append("  6. \"Genereaza fisier PDF pentru depunere\" → depui prin SPV")
+    else:
+        L.append("  4. VERIFICI tot, completezi ce lipseste")
+        L.append("  5. \"Genereaza fisier PDF pentru depunere\" → depui prin SPV")
     L.append("")
     L.append("Cifrele sunt calculate din datele tale, dar raspunderea pentru "
              "declaratie ramane a ta. Verifica-le inainte sa depui.")
+
+    # VERIFICAREA LA MOMENTUL ANGAJAMENTULUI — ultima linie a ghidului, dinadins.
+    #
+    # Nu putem face greseala imposibila: nu controlam formularul ANAF, deci nu
+    # putem impiedica pe nimeni sa depuna cu CAS 0. Singurul loc unde o verificare
+    # chiar functioneaza e imediat inaintea pasului ireversibil — nu la inceputul
+    # ghidului, unde se citeste si se uita, ci lipita de butonul de depunere.
+    #
+    # Miza e reala si dubla: fara baza CAS completata, declaratia subdeclara
+    # contributia SI supradeclara impozitul (fara CAS dedus, baza impozabila creste).
+    if cas > 0:
+        L.append("")
+        L.append(b("Inainte sa apesi \"Genereaza fisier PDF pentru depunere\", "
+                   "uita-te la sumarul din dreapta. Daca la CAS scrie 0, nu ai "
+                   "introdus baza — intoarce-te."))
     return "\n".join(L)
