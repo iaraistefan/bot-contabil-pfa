@@ -246,10 +246,35 @@ def test_ghidul_nu_cere_userului_ce_completam_noi():
     assert "Initiala tatalui" in dupa_titlu
 
 
-def test_ghidul_spune_ca_baza_cas_e_o_alegere():
+def test_ghidul_da_cifra_gata_de_tastat_pentru_baza_cas():
+    """CAS-ul nu se transfera prin import — ghidul trebuie sa dea cifra, nu s-o descrie."""
     ghid = d212.genereaza_ghid_d212(AN, _rezultat_real(), plain=True)
-    assert "ALEGERE" in ghid and "MARESTI" in ghid
-    assert "48600" in ghid           # minimul aplicabil, pus de noi
+    assert "PAS OBLIGATORIU" in ghid
+    assert 'scrie 48600 in campul "Baza anuala de calcul al CAS"' in ghid
+    assert "12150 lei" in ghid                      # cat devine CAS-ul
+    assert "MINIMUL" in ghid and "pensie mai mare" in ghid   # de ce e alegerea lui
+    assert '  4. Scrii 48600 la "Baza anuala de calcul al CAS"' in ghid
+
+
+def test_verificarea_cas_e_ULTIMA_linie_a_ghidului():
+    """La momentul angajamentului, nu la inceput unde se citeste si se uita.
+
+    Nu putem face greseala imposibila (nu controlam formularul ANAF), deci punem
+    verificarea lipita de pasul ireversibil.
+    """
+    ghid = d212.genereaza_ghid_d212(AN, _rezultat_real(), plain=True)
+    ultima = ghid.rstrip().splitlines()[-1]
+    assert 'Inainte sa apesi "Genereaza fisier PDF pentru depunere"' in ultima
+    assert "Daca la CAS scrie 0" in ultima and "intoarce-te" in ultima
+
+
+def test_fara_cas_ghidul_nu_cere_pasul_si_nu_avertizeaza():
+    """CAS 0 legitim (sub plafon) → un avertisment "daca vezi 0" ar fi fals alarm."""
+    ghid = d212.genereaza_ghid_d212(AN, _rezultat_real(venit_brut=40000,
+                                                       cheltuieli=10000), plain=True)
+    assert "PAS OBLIGATORIU" not in ghid
+    assert "Daca la CAS scrie 0" not in ghid
+    assert '  5. "Genereaza fisier PDF pentru depunere" → depui prin SPV' in ghid
 
 
 # ════════════════════════════════════════════════════════
