@@ -542,8 +542,22 @@ def from_user_dict(profile_dict: Optional[Dict[str, Any]]) -> FiscalProfile:
     """
     profile_dict = profile_dict or {}
 
-    # Forma juridică
-    forma_str = profile_dict.get("firma_forma_juridica") or "PFA"
+    # Forma juridică — ULTIMA plasă, păstrată dinadins: fără ea, un profil incomplet
+    # ar arunca în loc să calculeze. Dar de acum plasa FACE ZGOMOT si cand valoarea
+    # LIPSESTE, nu doar cand e invalida.
+    #
+    # De ce conteaza: forma juridica decide cota de impozit si e citita de tax_engine,
+    # posting, registru si calendarul fiscal. Un SRL a carui denumire n-a fost
+    # recunoscuta ar fi tratat ca PFA pe tot lantul. Pentru un PFA real e corect din
+    # intamplare — si exact de-aia trebuie sa se auda: daca linia asta apare in log,
+    # inseamna ca un drum de completare a lasat profilul gol.
+    forma_bruta = profile_dict.get("firma_forma_juridica")
+    if not forma_bruta:
+        logger.warning(
+            "Forma juridica ABSENTA din profil — fallback PFA. Calculul fiscal "
+            "merge pe PFA fara ca userul sa fi confirmat forma."
+        )
+    forma_str = forma_bruta or "PFA"
     try:
         forma = FormaJuridica(forma_str)
     except ValueError:

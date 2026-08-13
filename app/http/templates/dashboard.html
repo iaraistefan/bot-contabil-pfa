@@ -2210,7 +2210,10 @@
       // (transparență: afișaj = ce calculează motorul D212).
       const regimLbl={NORMA_VENIT:"normă de venit",SISTEM_REAL:"sistem real",MICRO_1:"micro 1%",MICRO_3:"micro 3%"};
       const rg=regimLbl[s.regim_impunere]||"sistem real";
-      let formaTxt=(s.firma_forma_juridica||"PFA")+" · "+rg;
+      // FĂRĂ „||PFA": dacă în bază e gol, scriem „necompletat", nu inventăm o formă.
+      // Un afișaj care repetă implicitul stratului de date (fiscal_profile: or "PFA")
+      // îl face invizibil — userul vede „PFA" și crede că e completat.
+      let formaTxt=(s.firma_forma_juridica||"necompletat")+" · "+rg;
       if(s.regim_impunere==="NORMA_VENIT" && s.norma_venit_anuala>0){
         formaTxt+=" ("+Number(s.norma_venit_anuala).toLocaleString("ro-RO")+" lei/an)";
       }
@@ -2475,6 +2478,11 @@
   function wizAdvance(){ if(WIZ.i<WIZ.steps.length-1){ WIZ.i++; wizRender(); } else { wizDone(); } }
   // ── Ecran FINALIZARE (sub-pas C): rezumat + complete → dashboard normal ──
   const WIZ_REGIM_LBL={NORMA_VENIT:"Normă de venit",SISTEM_REAL:"Sistem real"};
+  // Cele șase forme juridice (oglindesc FORME_JURIDICE din app/services/onboarding.py).
+  const WIZ_FORMA_LBL={PFA:"PFA — Persoană Fizică Autorizată",II:"Întreprindere Individuală (II)",
+    IF:"Întreprindere Familială (IF)",SRL_MICRO:"SRL — Microîntreprindere",
+    SRL_NORMAL:"SRL/SA — Impozit profit",PROFESIE_LIBERALA:"Profesie liberală"};
+  WIZ.formaLabel=function(cod){ return WIZ_FORMA_LBL[cod]||cod||""; };
   const WIZ_NEREZ_LBL={BOLT_CU_CRF:"Bolt 2%",BOLT_FARA_CRF:"Bolt 16%",UBER_CU_CRF:"Uber 0%",UBER_FARA_CRF:"Uber 16%"};
   function wizDone(){
     const d=WIZ.data, e=WIZ.esc;
@@ -2564,10 +2572,18 @@
       const tva=d.is_platitor_tva?"plătitor TVA":"neplătitor TVA";
       const stare=d.is_inactiv?'<span style="color:var(--red)">⚠️ INACTIVĂ la ANAF</span>':'activă';
       const act=d.activity_label?` · ${WIZ.esc(d.activity_label)}`:"";
+      // Forma juridică AFIȘATĂ, nu doar transportată. Pentru un PFA, ANAF întoarce
+      // câmpul oficial gol și forma se ghicește din denumire — ghicitul poate rata,
+      // iar dacă nu e pe ecran userul n-are cum să vadă că lipsește. Botul întreabă
+      // în cazul ăsta (onboarding: forma_lipsa); aici măcar o arătăm și o marcăm.
+      const formaLine=d.forma_juridica
+        ? `<div class="hint">Formă: ${WIZ.esc(WIZ.formaLabel(d.forma_juridica))}</div>`
+        : `<div class="hint is-warn">⚠️ N-am recunoscut forma juridică — alege-o din „✏️ Editez”.</div>`;
       card.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0">
         <div class="hint is-ok" style="font-weight:var(--w-semibold)">✅ Am găsit firma:</div>
         <div style="font-weight:var(--w-semibold);margin:var(--sp-1) 0">${WIZ.esc(d.denumire||"—")}</div>
         <div class="hint">CAEN ${WIZ.esc(d.cod_caen||"—")}${act} · ${tva} · ${stare}</div>
+        ${formaLine}
         ${d.is_inactiv?'<div class="hint is-error" style="margin-top:var(--sp-1)">Firma e inactivă la ANAF — verifică înainte de a continua.</div>':''}
         <div style="display:flex;gap:var(--sp-2);margin-top:var(--sp-3)">
           <button class="btn btn-primary btn-full" onclick="wizCuiConfirm()">✅ Corect</button>
@@ -2586,9 +2602,22 @@
   }
   function wizCuiManual(motiv){
     const card=document.getElementById("wiz-cui-card");
+    // Preselectăm forma detectată de ANAF, dacă a fost detectată. Înainte, ramura
+    // asta nu scria niciodată firma_forma_juridica: cine apăsa „Editez" pierdea o
+    // valoare corectă, iar cine ajungea aici fiindcă detecția eșuase n-avea de unde
+    // s-o completeze.
+    const formaCurenta=(WIZ.data._anaf||{}).forma_juridica||WIZ.data.firma_forma_juridica||"";
     card.innerHTML=`${motiv?`<div class="hint is-warn" style="margin-bottom:var(--sp-2)">${WIZ.esc(motiv)} Completează manual:</div>`:''}
       <label class="set-lbl">Denumire firmă</label>
       <input class="set-inp" id="wiz-denumire" type="text" placeholder="Denumirea PFA" value="${WIZ.esc((WIZ.data._anaf||{}).denumire||WIZ.data.firma_nume||"")}">
+      <label class="set-lbl" style="margin-top:var(--sp-2)">Formă juridică</label>
+      <select class="set-inp" id="wiz-forma">
+        <option value="">— alege —</option>
+        ${Object.keys(WIZ_FORMA_LBL).map(function(k){
+          const sel=(formaCurenta===k)?" selected":"";
+          return `<option value="${k}"${sel}>${WIZ.esc(WIZ_FORMA_LBL[k])}</option>`;
+        }).join("")}
+      </select>
       <div class="hint" style="margin-top:var(--sp-2)">_(CAEN/activitatea le poți seta ulterior în Setări)_</div>`;
     WIZ.data._cuiManual=true; WIZ.data._cuiConfirmat=true;
     const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=false; nb.style.opacity="1"; }
@@ -2813,7 +2842,12 @@
         if(!WIZ.data._cuiConfirmat){ wizMsg("Caută CUI-ul și confirmă (sau alege „Editez”).",true); return; }
         if(WIZ.data._cuiManual){
           const den=(document.getElementById("wiz-denumire")||{}).value||"";
-          await wizSave({firma_nume:den.trim()});
+          // Salvăm ȘI forma juridică: pe ramura asta nu se scria niciodată, deci o
+          // valoare corectă detectată de ANAF se pierdea la simpla apăsare pe „Editez".
+          const forma=(document.getElementById("wiz-forma")||{}).value||"";
+          const dateManual={firma_nume:den.trim()};
+          if(forma){ dateManual.firma_forma_juridica=forma; WIZ.data.firma_forma_juridica=forma; }
+          await wizSave(dateManual);
         } else {
           await wizSave({firma_cui:WIZ.data.firma_cui, firma_nume:WIZ.data.firma_nume,
             firma_forma_juridica:WIZ.data.firma_forma_juridica, regim_tva:WIZ.data.regim_tva,
