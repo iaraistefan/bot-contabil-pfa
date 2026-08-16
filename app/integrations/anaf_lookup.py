@@ -6,6 +6,7 @@ Documentație: https://static.anaf.ro/static/10/Anaf/Informatii_R/Servicii_web/d
 """
 
 import logging
+import re
 import unicodedata
 from datetime import date
 from typing import Optional, Dict, Any
@@ -68,26 +69,71 @@ def _strip_strada_prefix(strada: str) -> str:
     return s
 
 
-def _detect_forma_juridica_from_name(denumire: str) -> Optional[str]:
-    """Detectează forma juridică din denumire (cu diacritice ignorate)."""
-    if not denumire:
-        return None
-    upper = _strip_diacritics(denumire).upper()
+def _normalizeaza_denumire(denumire: str) -> tuple:
+    """Denumire → (text normalizat, listă de cuvinte), pentru potrivire pe CUVANT.
 
-    if "PERSOANA FIZICA AUTORIZATA" in upper or " PFA" in upper or upper.endswith(" PFA"):
-        return "PFA"
-    if "INTREPRINDERE INDIVIDUALA" in upper or " II " in upper:
-        return "II"
-    if "INTREPRINDERE FAMILIALA" in upper or " IF " in upper:
-        return "IF"
-    if any(kw in upper for kw in ["S.R.L.", " SRL", "SRL "]):
-        return "SRL_MICRO"
-    if "S.A." in upper or " SA " in upper:
-        return "SRL_NORMAL"
-    if any(kw in upper for kw in [
-        "CABINET INDIVIDUAL", "BIROU INDIVIDUAL", "CABINET MEDICAL"
-    ]):
-        return "PROFESIE_LIBERALA"
+    Trei pasi, in ordine:
+      1. diacriticele cad (Ș→S, Ă→A) — deja necesar, ANAF scrie cu diacritice;
+      2. PUNCTELE se sterg, nu se inlocuiesc cu spatiu: "P.F.A." → "PFA",
+         "I.I." → "II", "S.A." → "SA". Daca le-am inlocui cu spatiu, "P.F.A."
+         ar deveni trei cuvinte de o litera si nu s-ar mai potrivi nimic;
+      3. restul semnelor devin separatori, ca "I-SHTEF" sa dea doua cuvinte.
+
+    Normalizarea punctuatiei exista DEJA pentru SRL (lista avea si "S.R.L."),
+    dar nu si pentru PFA/II/SA — asimetria aia era bug-ul.
+    """
+    if not denumire:
+        return "", []
+    text = _strip_diacritics(denumire).upper().replace(".", "")
+    text = re.sub(r"[^A-Z0-9]+", " ", text)
+    cuvinte = text.split()
+    return " ".join(cuvinte), cuvinte
+
+
+# Expresii de mai multe cuvinte — neambigue, verificate PRIMELE.
+_FORMA_DUPA_EXPRESIE = [
+    ("PERSOANA FIZICA AUTORIZATA", "PFA"),
+    ("INTREPRINDERE INDIVIDUALA", "II"),
+    ("INTREPRINDERE FAMILIALA", "IF"),
+    ("CABINET MEDICAL", "PROFESIE_LIBERALA"),
+    ("CABINET INDIVIDUAL", "PROFESIE_LIBERALA"),
+    ("BIROU INDIVIDUAL", "PROFESIE_LIBERALA"),
+]
+
+# Abrevieri de un cuvant. ORDINEA CONTEAZA: "SRL"/"SA"/"PFA" nu sunt niciodata
+# altceva decat forma juridica, pe cand "II" si "IF" pot fi cifra romana ori
+# cuvant intr-o denumire ("CAROL II SRL" e un SRL, nu o intreprindere
+# individuala). Deci ambiguele se verifica ULTIMELE.
+_FORMA_DUPA_CUVANT = [
+    ("PFA", "PFA"),
+    ("SRL", "SRL_MICRO"),
+    ("SA", "SRL_NORMAL"),
+    ("II", "II"),
+    ("IF", "IF"),
+]
+
+
+def _detect_forma_juridica_from_name(denumire: str) -> Optional[str]:
+    """Detectează forma juridică din denumire (diacritice și punctuație ignorate).
+
+    Potrivirea e pe CUVANT, nu pe spatiu. Varianta veche ancora abrevierile de
+    spatii (" PFA", " II ", " SA "), ceea ce le rata la inceput de denumire
+    ("PFA POPESCU ION"), la final fara punct ("ALFA SA") si oriunde cu puncte
+    ("POPESCU ION P.F.A."). Toate patru sunt masurate in
+    tests/test_anaf_lookup_forma.py.
+    """
+    norm, cuvinte = _normalizeaza_denumire(denumire)
+    if not norm:
+        return None
+
+    for expresie, forma in _FORMA_DUPA_EXPRESIE:
+        if expresie in norm:
+            return forma
+
+    prezente = set(cuvinte)
+    for cuvant, forma in _FORMA_DUPA_CUVANT:
+        if cuvant in prezente:
+            return forma
     return None
 
 
