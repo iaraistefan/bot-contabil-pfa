@@ -106,8 +106,11 @@ def test_textul_arata_data_in_formatul_declaratiei():
 
 
 def test_textul_fara_data_cere_userului_data():
+    # Fraza e NEUTRA fata de motiv, dinadins: acelasi text serveste configurarea
+    # (ANAF n-a dat data) si Setarile (userul a amanat-o). Varianta initiala,
+    # „n-am gasit-o in ANAF", ar fi fost falsa pe al doilea drum.
     t = text_confirmare_data(None)
-    assert "n-am găsit-o în ANAF" in t
+    assert "Data nu e completată încă" in t
 
 
 # ── 4. Wiring ────────────────────────────────────────────────

@@ -34,7 +34,8 @@ from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura sc
 from app.services import tax_engine
 from app.domain import labels_ro
 from app.domain.doc_autorizare import (
-    NrDocAutorizarePreaLung, normalizeaza_nr_doc_autorizare,
+    MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung, normalizeaza_nr_doc_autorizare,
+    parseaza_data_utilizator,
 )
 from app import storage
 from app.integrations.exports import csv_export
@@ -1635,6 +1636,11 @@ def setari_get():
             "are_activitate_neeligibila_norma": bool(profile.get("are_activitate_neeligibila_norma")),
             "data_activitate_neeligibila": profile.get("data_activitate_neeligibila"),
             "cod_special_tva": profile.get("cod_special_tva") or "",
+            # Certificat ONRC (D212): numarul e read-only (vine automat din ANAF),
+            # data e EDITABILA — e singura din pereche care poate lipsi, iar
+            # mesajul de refuz al D212 trimite aici.
+            "nr_doc_autorizare": profile.get("nr_doc_autorizare") or "",
+            "data_doc_autorizare": profile.get("data_doc_autorizare") or "",
             # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
             # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.
             "regim_nerezident_bolt": (
@@ -1697,6 +1703,18 @@ def setari_post():
     else:
         regim_uber = None
 
+    # Data certificatului ONRC: se scrie prin acelasi parser ca la configurare
+    # („zz.ll.aaaa"), deci refuzul e IDENTIC cu cel din bot — o singura constanta.
+    data_cert = None
+    data_cert_raw = body.get("data_doc_autorizare")
+    if data_cert_raw:
+        data_cert = parseaza_data_utilizator(data_cert_raw)
+        if data_cert is None:
+            return jsonify({
+                "error": "invalid_data_doc_autorizare",
+                "message": MESAJ_DATA_INVALIDA,
+            }), 400
+
     session = get_session()
     try:
         user = users_repo.get_by_id(session, user_id)
@@ -1708,6 +1726,7 @@ def setari_post():
             iban=(iban if iban is not None else None),
             regim_nerezident_bolt=regim_bolt,  # None → neschimbat (vezi update_profile)
             regim_nerezident_uber=regim_uber,
+            data_doc_autorizare=data_cert,     # None → neschimbat
         )
         session.commit()
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -1719,6 +1738,7 @@ def setari_post():
                 profile.get("regim_nerezident_bolt") or profile.get("regim_nerezident") or ""
             ),
             "regim_nerezident_uber": profile.get("regim_nerezident_uber") or "",
+            "data_doc_autorizare": profile.get("data_doc_autorizare") or "",
         })
     except Exception as e:
         session.rollback()

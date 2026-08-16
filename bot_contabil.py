@@ -1,6 +1,10 @@
 from config import settings
 from app.enums import DocType
 from db import init_db, get_session
+from app.domain.doc_autorizare import (
+    MESAJ_DATA_INVALIDA, formateaza_data_d212, parseaza_data_anaf,
+    parseaza_data_utilizator, text_confirmare_data,
+)
 from app.repositories import users as users_repo
 from app.repositories import source_files as source_files_repo
 from app.repositories import documents as documents_repo
@@ -3064,6 +3068,16 @@ async def _coduri_text(profile: dict) -> str:
     cnp = profile.get("cnp")
     cod_tva_txt = f"RO {cod_tva}" if cod_tva else "— nesetat"
     cnp_txt = "setat (ascuns)" if cnp else "— nesetat"
+    # Certificatul ONRC: numarul vine automat din ANAF la configurare, data se
+    # confirma. Aratam starea reala a perechii — D212 le cere impreuna.
+    nr_cert = profile.get("nr_doc_autorizare")
+    data_cert = parseaza_data_anaf(profile.get("data_doc_autorizare"))
+    if nr_cert and data_cert:
+        cert_txt = f"`{nr_cert}` din {formateaza_data_d212(data_cert)}"
+    elif nr_cert:
+        cert_txt = f"`{nr_cert}` — data nesetată"
+    else:
+        cert_txt = "— nesetat"
     return (
         "*🔑 Coduri fiscale*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -3073,6 +3087,8 @@ async def _coduri_text(profile: dict) -> str:
         "_folosit pe D301 si D390_\n\n"
         f"🆔 *CNP:* {cnp_txt}\n"
         "_folosit pe Declaratia Unica D212_\n\n"
+        f"📜 *Certificat ONRC:* {cert_txt}\n"
+        "_numarul si data lui merg impreuna pe D212_\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "_Apasa un buton ca sa setezi._"
     )
@@ -3098,6 +3114,16 @@ def _kb_coduri(profile: dict):
     else:
         rows.append([InlineKeyboardButton(
             "🆔 Setează CNP", callback_data="coduri|set_cnp")])
+    # Data certificatului ONRC: singurul camp al perechii care poate lipsi
+    # (numarul se ia automat din ANAF). Fara butonul asta, cine a amanat-o la
+    # configurare n-avea pe unde s-o mai completeze — vezi mesajul de refuz al
+    # generatorului D212, care trimite exact aici.
+    if profile.get("data_doc_autorizare"):
+        rows.append([InlineKeyboardButton(
+            "✏️ Schimbă data certificatului", callback_data="coduri|set_certdata")])
+    else:
+        rows.append([InlineKeyboardButton(
+            "📜 Setează data certificatului", callback_data="coduri|set_certdata")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -3175,6 +3201,23 @@ async def handle_coduri_callback(update, context, parts, user_id):
             parse_mode="Markdown",
         )
         return
+    if action == "set_certdata":
+        context.user_data["coduri_wizard"] = "certdata"
+        session = get_session()
+        try:
+            profile = users_repo.get_profile_dict(session, user_id) or {}
+        finally:
+            session.close()
+        # Acelasi text ca la configurare (app/domain/doc_autorizare.py) — o
+        # singura sursa, doua drumuri. Daca data exista deja, o propunem pe ea.
+        await query.edit_message_text(
+            text_confirmare_data(
+                parseaza_data_anaf(profile.get("data_doc_autorizare")),
+                nr_doc=profile.get("nr_doc_autorizare"),
+            ) + "\n\nApasa `/coduri_fiscale` ca sa renunti.",
+            parse_mode="Markdown",
+        )
+        return
     if action == "del_tva":
         session = get_session()
         try:
@@ -3249,6 +3292,30 @@ async def handle_coduri_wizard_text(update: Update, context: ContextTypes.DEFAUL
         context.user_data.pop("coduri_wizard", None)
         await update.message.reply_text(
             "✅ CNP salvat (ascuns).\n"
+            "Se foloseste pe *Declaratia Unica D212*.",
+            parse_mode="Markdown",
+        )
+        await _reafiseaza_coduri(update, context, user_id)
+        return
+
+    if kind == "certdata":
+        # Data, nu cifre: „cifre" de mai sus ar lipi 05122025. Acelasi parser ca
+        # la configurare, deci acelasi mesaj de eroare pe amandoua drumurile.
+        data_cert = parseaza_data_utilizator(text)
+        if not data_cert:
+            await update.message.reply_text(MESAJ_DATA_INVALIDA)
+            return
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(
+                session, user_id, data_doc_autorizare=data_cert,
+            )
+            session.commit()
+        finally:
+            session.close()
+        context.user_data.pop("coduri_wizard", None)
+        await update.message.reply_text(
+            f"✅ Am notat: certificatul tau e din *{formateaza_data_d212(data_cert)}*.\n"
             "Se foloseste pe *Declaratia Unica D212*.",
             parse_mode="Markdown",
         )

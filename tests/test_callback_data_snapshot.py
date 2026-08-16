@@ -56,7 +56,11 @@ def _extract_callbacks():
 # +onb|certdata|ok / |edit / |skip = confirmarea datei de pe certificatul ONRC
 #   (nr_doc_autoriz + data_doc_autoriz, D212). Tot butoane NOI: `missing` gol.
 #   Data e pre-completată din ANAF, dar NU se scrie tăcut — de aici cele trei
-#   ieșiri: confirmă, corectează de pe certificat, sau amână.
+#   ieșiri: confirmă, corectează de pe certificat, sau amână;
+# +coduri|set_certdata = aceeași dată, completată DUPĂ onboarding, din
+#   /coduri_fiscale (ecranul care ține deja CNP-ul „folosit pe D212"). Fără el,
+#   cine amâna data la configurare rămânea fără drum înapoi, deși mesajul de
+#   refuz al generatorului D212 îl trimite „în profil". Buton NOU: `missing` gol.
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -64,7 +68,8 @@ EXPECTED_CALLBACKS = {
     "bankpost|verif",
     "banktax|cancel", "banktax|confirm", "banktax|start",
     "boltsync|cancel", "boltsync|confirm|{year}|{month}",
-    "coduri|del_cnp", "coduri|del_tva", "coduri|set_cnp", "coduri|set_tva",
+    "coduri|del_cnp", "coduri|del_tva", "coduri|set_certdata", "coduri|set_cnp",
+    "coduri|set_tva",
     "coduri|skip",
     "confirm|back", "confirm|cancel", "confirm|capex|{idx}|da", "confirm|capex|{idx}|nu",
     "confirm|edit", "confirm|field|{idx}|{field_key}",

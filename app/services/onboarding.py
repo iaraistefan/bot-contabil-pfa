@@ -30,8 +30,9 @@ from app.repositories import users as users_repo
 from app.integrations.anaf_lookup import lookup_cui
 from app.domain.fiscal_profile import VAT_THRESHOLD_RON  # sursă unică prag TVA (B8)
 from app.domain.doc_autorizare import (
-    NrDocAutorizarePreaLung, formateaza_data_d212, normalizeaza_nr_doc_autorizare,
-    parseaza_data_anaf, parseaza_data_utilizator, text_confirmare_data,
+    MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung, formateaza_data_d212,
+    normalizeaza_nr_doc_autorizare, parseaza_data_anaf, parseaza_data_utilizator,
+    text_confirmare_data,
 )
 
 logger = logging.getLogger(__name__)
@@ -780,8 +781,7 @@ async def handle_onboarding_text(
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
-                        "Nu recunosc data asta. Scrie-o ca pe certificat, "
-                        "zi.lună.an — de exemplu `05.12.2025`.\n\n"
+                        MESAJ_DATA_INVALIDA + "\n\n"
                         "_Dacă vrei s-o lăsăm pentru mai târziu, scrie „las-o balta”._"
                     ),
                     parse_mode="Markdown",
