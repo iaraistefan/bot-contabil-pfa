@@ -55,6 +55,17 @@ class User(Base):
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)
     activity_code = Column(String(50), nullable=True)
+    # Certificatul de la Registrul Comertului, in termenii D212 (nu ai ONRC):
+    # nr_doc_autoriz + data_doc_autoriz, documentul care atesta dreptul de a
+    # desfasura activitatea. BR-D212-0095 il cere pentru categ_venit=1016, iar
+    # BR-D212-0096 cere numarul si data impreuna sau deloc.
+    # Numarul: automat din ANAF (nrRegCom). String(15) = C15Type din XSD; ce nu
+    # incape e REFUZAT, nu trunchiat (vezi app/domain/doc_autorizare.py).
+    # Data: pre-completata din data_inregistrare, dar scrisa doar dupa confirmarea
+    # userului — ANAF se contrazice singur pe PFA si „Data eliberarii" de pe
+    # certificat nu apare in raspuns. NULL = neconfirmata inca.
+    nr_doc_autorizare = Column(String(15), nullable=True)
+    data_doc_autorizare = Column(Date, nullable=True)
 
     # === Locatie ===
     judet = Column(String(50), nullable=True)

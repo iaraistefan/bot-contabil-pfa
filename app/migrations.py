@@ -576,6 +576,23 @@ MIGRATIONS = [
             """,
         ],
     },
+    {
+        "id": "027_doc_autorizare_onrc",
+        "description": (
+            "Certificatul ONRC ca date fiscale: nr_doc_autoriz + data_doc_autoriz "
+            "din D212 (BR-D212-0095 le cere pentru categ_venit=1016, BR-D212-0096 "
+            "le cere in pereche). Numarul si data VENEAU deja in raspunsul ANAF V9 "
+            "(nrRegCom, data_inregistrare) si erau extrase de anaf_lookup, dar se "
+            "aruncau — n-aveau unde sa se duca. VARCHAR(15) oglindeste C15Type din "
+            "XSD; ce nu incape e refuzat zgomotos, nu trunchiat. Aditiv si "
+            "idempotent: ambele coloane NULL pentru userii existenti, iar NULL la "
+            "data inseamna «neconfirmata de user», nu «lipsa»."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS nr_doc_autorizare VARCHAR(15)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_doc_autorizare DATE",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

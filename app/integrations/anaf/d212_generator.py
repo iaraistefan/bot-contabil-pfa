@@ -363,6 +363,17 @@ def genereaza_d212(
             "Nr. certificatului de inregistrare ONRC e obligatoriu pentru "
             "activitati independente (BR-D212-0095). Nu inventam un numar."
         )
+    if activitate.data_doc_autorizare is None:
+        # Lipsa asta e ASTEPTATA: data certificatului se confirma de user la
+        # configurare si se poate sari peste. Cand se sare, aici trebuie sa se
+        # vada ce lipseste si de unde se completeaza — nu un AttributeError pe
+        # strftime(None).
+        raise ValueError(
+            "Data certificatului ONRC lipseste. BR-D212-0096 o cere impreuna cu "
+            "numarul (iar numarul e obligatoriu prin BR-D212-0095), deci fara ea "
+            "declaratia nu se poate genera. O completezi in profil — ti-o "
+            "pre-completam din ANAF, tu doar confirmi ce scrie pe certificat."
+        )
 
     # ---- cifrele, transcrise din motorul de calcul (nu recalculate) ----
     venit_brut = _lei(rezultat.venit_brut)

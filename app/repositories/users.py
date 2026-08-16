@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
+from app.domain.doc_autorizare import normalizeaza_nr_doc_autorizare
 from app.models import User
 
 
@@ -97,6 +98,8 @@ def update_profile(
     regim_nerezident_uber: Optional[str] = None,
     caen_principal: Optional[str] = None,
     activity_code: Optional[str] = None,
+    nr_doc_autorizare: Optional[str] = None,
+    data_doc_autorizare: Optional[date] = None,
     judet: Optional[str] = None,
     localitate: Optional[str] = None,
     norma_venit_anuala: Optional[float] = None,
@@ -150,6 +153,14 @@ def update_profile(
         user.caen_principal = caen_principal
     if activity_code is not None:
         user.activity_code = activity_code
+    if nr_doc_autorizare is not None:
+        # Gardianul C15Type traieste AICI, la granita de scriere, ca sa fie unul
+        # singur pentru amandoua drumurile (bot si web). Ridica
+        # NrDocAutorizarePreaLung peste 15 caractere — apelantii care capteaza
+        # automat il prind si lasa campul gol; nimeni nu trunchiaza.
+        user.nr_doc_autorizare = normalizeaza_nr_doc_autorizare(nr_doc_autorizare)
+    if data_doc_autorizare is not None:
+        user.data_doc_autorizare = data_doc_autorizare
     if judet is not None:
         user.judet = judet
     if localitate is not None:
@@ -395,6 +406,11 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "regim_nerezident_uber": user.regim_nerezident_uber,
         "caen_principal": user.caen_principal,
         "activity_code": user.activity_code,
+        "nr_doc_autorizare": user.nr_doc_autorizare,
+        "data_doc_autorizare": (
+            user.data_doc_autorizare.isoformat()
+            if user.data_doc_autorizare else None
+        ),
         "judet": user.judet,
         "localitate": user.localitate,
         "norma_venit_anuala": user.norma_venit_anuala,
