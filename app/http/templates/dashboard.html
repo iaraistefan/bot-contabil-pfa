@@ -882,6 +882,7 @@
               <div class="row"><div class="info"><div class="m">Denumire</div><div class="t" id="set-denumire">—</div></div></div>
               <div class="row"><div class="info"><div class="m">CUI</div><div class="t num" id="set-cui">—</div></div></div>
               <div class="row"><div class="info"><div class="m">Cod special TVA (art. 317)</div><div class="t num" id="set-cod-special">—</div></div></div>
+              <div class="row"><div class="info"><div class="m">Certificat ONRC (număr)</div><div class="t num" id="set-nr-cert">—</div></div></div>
               <div class="row"><div class="info"><div class="m">Formă juridică · regim</div><div class="t" id="set-forma">—</div></div></div>
               <div class="row"><div class="info"><div class="m">TVA</div><div class="t">Neplătitor · cod special art. 317</div></div></div>
               <div class="row"><div class="info"><div class="m">Județ</div><div class="t" id="set-judet">—</div></div></div>
@@ -895,6 +896,17 @@
               <input class="set-inp" id="set-iban" type="text" placeholder="RO00 XXXX 0000 0000 0000 0000" autocomplete="off" spellcheck="false">
               <div id="set-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
               <button class="btn btn-primary" id="set-save" style="margin-top:var(--sp-1)" onclick="salveazaSetari()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Salvează
+              </button>
+            </div>
+            <div class="set-section">
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Data certificatului de la Registrul Comerțului</div>
+              <div class="hint" style="margin-bottom:var(--sp-3)">Declarația Unică cere numărul certificatului tău și data lui — ANAF le vrea pereche, număr fără dată nu se poate. Numărul îl luăm automat din ANAF; data o confirmi tu, pentru că „Data eliberării” tipărită pe certificat nu apare în răspunsul ANAF. <b>Uită-te pe certificat</b> — documentul tău are dreptate, nu registrul meu.</div>
+              <label class="set-lbl">Data certificatului</label>
+              <input class="set-inp" id="set-cert-data" type="text" inputmode="numeric" placeholder="zz.ll.aaaa" autocomplete="off">
+              <div id="set-cert-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
+              <button class="btn btn-primary" id="set-cert-save" style="margin-top:var(--sp-1)" onclick="salveazaDataCertificat()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Salvează
               </button>
@@ -2237,6 +2249,10 @@
       if(nz) nz.value = s.regim_nerezident_bolt||"";   // "" = neconfigurat → fără preselecție
       const nzu=document.getElementById("set-nerezident-uber");
       if(nzu) nzu.value = s.regim_nerezident_uber||"";
+      // Certificat ONRC: numărul e read-only (vine automat din ANAF), data e editabilă.
+      setTxt("set-nr-cert", s.nr_doc_autorizare||"—");
+      const cd=document.getElementById("set-cert-data");
+      if(cd) cd.value = wizDataRo(s.data_doc_autorizare)||"";
       renderIntegrari(s.integrari);
     }catch(e){console.error(e);}
     loadCertificat();
@@ -2370,6 +2386,45 @@
     }
   }
   window.salveazaSetari=salveazaSetari;
+
+  // Data certificatului ONRC din Setări — închide bucla pentru cine a amânat-o
+  // la configurare (mesajul de refuz al D212 trimite aici). Validarea o face
+  // SERVERUL, cu același parser ca botul: refuzul e identic pe ambele drumuri,
+  // nu două texte care seamănă.
+  async function salveazaDataCertificat(){
+    const msg=document.getElementById("set-cert-msg"), btn=document.getElementById("set-cert-save");
+    const val=(document.getElementById("set-cert-data")||{}).value||"";
+    if(!msg) return;
+    msg.style.color="var(--muted)"; msg.textContent="Se salvează…";
+    if(btn) btn.style.opacity=".6";
+    try{
+      const r=await authFetch("/api/v1/setari",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({data_doc_autorizare:val}),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){
+        msg.style.color="var(--pos-br)";
+        msg.textContent="✓ Salvat. Data intră pe Declarația Unică, lângă numărul certificatului.";
+        const inp=document.getElementById("set-cert-data");
+        if(inp && d.data_doc_autorizare) inp.value=wizDataRo(d.data_doc_autorizare);
+        cache.setari=null;
+        haptic("success");
+      }else{
+        msg.style.color="var(--red)";
+        msg.textContent = d.message || "Nu am putut salva. Încearcă din nou.";
+        haptic("error");
+      }
+    }catch(e){
+      msg.style.color="var(--red)";
+      msg.textContent="Conexiune pierdută. Încearcă din nou.";
+      haptic("error");
+    }finally{
+      if(btn) btn.style.opacity="1";
+    }
+  }
+  window.salveazaDataCertificat=salveazaDataCertificat;
 
   // ---- MODAL PLATA ----
   function openPlata(tip, suma, cont, identif){

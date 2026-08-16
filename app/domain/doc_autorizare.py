@@ -108,6 +108,15 @@ def formateaza_data_d212(d: Optional[date]) -> str:
     return s
 
 
+# Refuzul unei date pe care n-o intelegem. UNA singura, pentru toate cele patru
+# locuri unde se poate scrie o data de certificat (configurare bot, configurare
+# web, Setari bot, Setari web) — daca cere acelasi lucru, sa ceara la fel.
+MESAJ_DATA_INVALIDA = (
+    "Nu recunosc data asta. Scrie-o ca pe certificat, în formatul "
+    "zz.ll.aaaa (de exemplu 05.12.2025)."
+)
+
+
 # ============================================================
 #          TEXTUL DE CONFIRMARE A DATEI (profesorul rabdator)
 # ============================================================
@@ -143,7 +152,10 @@ def text_confirmare_data(
     else:
         linii += [
             "",
-            "Data n-am găsit-o în ANAF, așa că pe asta trebuie să mi-o dai tu.",
+            # Neutru DELIBERAT: aceeasi fraza serveste si configurarea (ANAF n-a
+            # dat data) si Setarile (userul a amanat-o). „N-am gasit-o in ANAF"
+            # ar fi fost fals pe al doilea drum.
+            "Data nu e completată încă, așa că pe asta trebuie să mi-o dai tu.",
         ]
     linii += [
         "",
