@@ -2497,16 +2497,70 @@
       if(plat.length) rez+=rand("🌍", "Platforme: "+plat.join(" · "));
       if(wizHasBolt()) rez+=rand("🔗", d._boltConnected?"Bolt API: conectat":"Bolt API: manual (poți conecta din Setări)");
     }
+    // Certificat ONRC: numărul e deja salvat (automat). Data se CONFIRMĂ —
+    // paralel cu textul din app/domain/doc_autorizare.py (aceleași promisiuni,
+    // păzite de test_doc_autorizare_onrc.py).
+    if(d.nr_doc_autorizare && d.data_doc_autorizare){
+      rez+=rand("📜", "Certificat ONRC: "+e(d.nr_doc_autorizare)+" din "+e(wizDataRo(d.data_doc_autorizare)));
+    } else if(d.nr_doc_autorizare){
+      rez+=rand("📜", "Certificat ONRC: "+e(d.nr_doc_autorizare));
+    }
+    const certBlock=(d.nr_doc_autorizare && !d.data_doc_autorizare) ? `
+      <div class="panel" style="text-align:left;margin-bottom:var(--sp-4)">
+        <div style="font-weight:var(--w-bold);margin-bottom:var(--sp-2)">📜 Data certificatului de la Registrul Comerțului</div>
+        <div class="hint" style="margin-bottom:var(--sp-2)">Declarația Unică cere, pe lângă numărul certificatului tău, și data lui — ANAF le vrea pereche, număr fără dată nu se poate.</div>
+        <div class="hint" style="margin-bottom:var(--sp-2)">Data de mai jos e data înregistrării fiscale la ANAF. Ți-o arăt în loc s-o trec tăcut, pentru că nu e chiar același lucru cu „Data eliberării” tipărită pe certificat: aceasta nu apare nicăieri în răspunsul ANAF, deci e cea mai bună potrivire pe care o am, nu o certitudine.</div>
+        <div class="hint" style="margin-bottom:var(--sp-3)"><b>Uită-te pe certificat.</b> Dacă acolo scrie altă dată, schimb-o aici — documentul tău are dreptate, nu registrul meu.</div>
+        <div style="display:flex;gap:var(--sp-2);align-items:center">
+          <input class="set-inp" id="wiz-cert-data" type="text" inputmode="numeric" placeholder="zz.ll.aaaa" value="${e(wizDataRo(WIZ.data._dataDocPropusa)||"")}" style="flex:1">
+          <button class="btn btn-primary" id="wiz-cert-btn" onclick="wizCertConfirm()" style="min-height:44px">Confirmă</button>
+        </div>
+        <div id="wiz-cert-msg" class="hint" style="min-height:18px;margin-top:var(--sp-2)">Poți să sari peste — ți-o cer când generăm Declarația Unică.</div>
+      </div>` : "";
     document.getElementById("wizard-root").innerHTML=`
       <div style="max-width:480px;margin:0 auto;width:100%;text-align:center">
         <div style="font-size:var(--text-3xl);margin-bottom:var(--sp-1)">✅</div>
         <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:var(--sp-1)">Gata! Contul tău e configurat</div>
         <div class="hint" style="margin-bottom:var(--sp-4)">Am salvat tot. Iată ce-ai configurat:</div>
         <div class="panel" style="text-align:left;margin-bottom:var(--sp-4)">${rez}</div>
+        ${certBlock}
         <div id="wiz-done-msg" class="hint is-error" style="min-height:18px;margin-bottom:var(--sp-2)"></div>
         <button class="btn btn-primary" id="wiz-complete-btn" onclick="wizComplete()" style="width:100%;min-height:48px;font-size:var(--text-base)">Intră în Coniar →</button>
       </div>`;
   }
+  // ── Data certificatului ONRC: ISO ⇄ zz.ll.aaaa ──
+  // D212 cere D10Type (lungime fixă 10, zz.ll.aaaa); API-ul vorbește ISO.
+  // Conversie în ambele sensuri, nu copiere de șir.
+  function wizDataRo(iso){
+    const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||""));
+    return m ? (m[3]+"."+m[2]+"."+m[1]) : "";
+  }
+  function wizDataIso(ro){
+    const m=/^\s*(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})\s*$/.exec(String(ro||""));
+    if(!m) return "";
+    const zi=+m[1], luna=+m[2], an=+m[3];
+    const dt=new Date(Date.UTC(an,luna-1,zi));
+    // respinge 31.02: Date „repară" tăcut, noi nu
+    if(dt.getUTCDate()!==zi || dt.getUTCMonth()!==luna-1 || dt.getUTCFullYear()!==an) return "";
+    return an+"-"+String(luna).padStart(2,"0")+"-"+String(zi).padStart(2,"0");
+  }
+  async function wizCertConfirm(){
+    const inp=document.getElementById("wiz-cert-data"), msg=document.getElementById("wiz-cert-msg");
+    const btn=document.getElementById("wiz-cert-btn");
+    const iso=wizDataIso(inp?inp.value:"");
+    if(!iso){ if(msg){ msg.className="hint is-error"; msg.textContent="Nu recunosc data asta. Scrie-o ca pe certificat: zz.ll.aaaa (ex. 05.12.2025)."; } return; }
+    if(btn) btn.style.opacity=".6";
+    try{
+      await wizSave({data_doc_autorizare:iso});
+      WIZ.data.data_doc_autorizare=iso;
+      haptic("success");
+      wizDone();                       // re-randăm: data intră în rezumat
+    }catch(e){
+      if(msg){ msg.className="hint is-error"; msg.textContent="Nu am putut salva. Încearcă din nou."; }
+    }finally{ if(btn) btn.style.opacity="1"; }
+  }
+  window.wizCertConfirm=wizCertConfirm;
+
   async function wizComplete(){
     const msg=document.getElementById("wiz-done-msg"), btn=document.getElementById("wiz-complete-btn");
     if(btn) btn.style.opacity=".6";
@@ -2596,6 +2650,10 @@
     WIZ.data.firma_cui=d.cui; WIZ.data.firma_nume=d.denumire; WIZ.data.firma_forma_juridica=d.forma_juridica;
     WIZ.data.regim_tva=d.regim_tva; WIZ.data.caen_principal=d.cod_caen; WIZ.data.activity_code=d.activity_code;
     WIZ.data.judet=d.judet; WIZ.data.localitate=d.localitate; WIZ.data.is_ridesharing=!!d.is_ridesharing;
+    // Certificat ONRC: numărul intră automat (D212 îl cere ca nr_doc_autoriz).
+    // Data vine ca PROPUNERE — o ținem deoparte până o confirmă userul.
+    WIZ.data.nr_doc_autorizare=d.nr_doc_autorizare||null;
+    WIZ.data._dataDocPropusa=d.data_doc_autorizare_propusa||null;
     WIZ.data._cuiConfirmat=true;
     const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=false; nb.style.opacity="1"; }
     wizMsg("✓ Date confirmate. Apasă „Înainte”.");
@@ -2849,10 +2907,13 @@
           if(forma){ dateManual.firma_forma_juridica=forma; WIZ.data.firma_forma_juridica=forma; }
           await wizSave(dateManual);
         } else {
-          await wizSave({firma_cui:WIZ.data.firma_cui, firma_nume:WIZ.data.firma_nume,
+          const dateAnaf={firma_cui:WIZ.data.firma_cui, firma_nume:WIZ.data.firma_nume,
             firma_forma_juridica:WIZ.data.firma_forma_juridica, regim_tva:WIZ.data.regim_tva,
             caen_principal:WIZ.data.caen_principal, activity_code:WIZ.data.activity_code,
-            judet:WIZ.data.judet, localitate:WIZ.data.localitate});
+            judet:WIZ.data.judet, localitate:WIZ.data.localitate};
+          // Numărul de la Registrul Comerțului, dacă ANAF l-a dat și încape în C15Type.
+          if(WIZ.data.nr_doc_autorizare){ dateAnaf.nr_doc_autorizare=WIZ.data.nr_doc_autorizare; }
+          await wizSave(dateAnaf);
         }
       } else if(step==="regim"){
         if(!WIZ.data.regim_impunere){ wizMsg("Alege un regim.",true); return; }

@@ -29,6 +29,10 @@ from db import get_session
 from app.repositories import users as users_repo
 from app.integrations.anaf_lookup import lookup_cui
 from app.domain.fiscal_profile import VAT_THRESHOLD_RON  # sursă unică prag TVA (B8)
+from app.domain.doc_autorizare import (
+    NrDocAutorizarePreaLung, formateaza_data_d212, normalizeaza_nr_doc_autorizare,
+    parseaza_data_anaf, parseaza_data_utilizator, text_confirmare_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +338,28 @@ def _kb_final_confirm():
         [InlineKeyboardButton("✅ Confirmă și salvează", callback_data="onb|finalize|yes")],
         [InlineKeyboardButton("🔄 Reia de la început", callback_data="onb|finalize|restart")],
     ])
+
+
+def _kb_cert_data(data_propusa):
+    """Confirmarea datei certificatului: o apasare, sau corectare, sau amanare.
+
+    NU e obligatorie. Cine vrea sa-si caute certificatul in sertar apasa „mai
+    tarziu" si merge mai departe — nu blocam configurarea pe prima valoare care
+    ni se pare interesanta. Daca lipseste la generarea D212, se cere acolo.
+    """
+    randuri = []
+    if data_propusa:
+        randuri.append([InlineKeyboardButton(
+            f"✅ Da, {formateaza_data_d212(data_propusa)}",
+            callback_data="onb|certdata|ok",
+        )])
+    randuri.append([InlineKeyboardButton(
+        "✏️ Pe certificat scrie altă dată", callback_data="onb|certdata|edit",
+    )])
+    randuri.append([InlineKeyboardButton(
+        "⏭️ Mai târziu", callback_data="onb|certdata|skip",
+    )])
+    return InlineKeyboardMarkup(randuri)
 
 
 def _kb_coduri_onboarding():
@@ -677,6 +703,17 @@ async def _show_summary(
     if regim_uber:
         nerez_line += f"🌍 *Nerezident Uber:* {nerezident_label(regim_uber)}\n"
 
+    # Certificatul ONRC (D212): numarul e automat, data doar daca a confirmat-o.
+    # Fara numar nu afisam nimic — n-are ce sa confirme userul.
+    cert_line = ""
+    if profile.get("nr_doc_autorizare"):
+        data_cert = parseaza_data_anaf(profile.get("data_doc_autorizare"))
+        cert_line = (
+            f"📜 *Certificat ONRC:* `{profile['nr_doc_autorizare']}`"
+            + (f" din {formateaza_data_d212(data_cert)}\n" if data_cert
+               else " _(data — mai târziu)_\n")
+        )
+
     msg = (
         "*📋 Uite ce am despre tine*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -689,6 +726,7 @@ async def _show_summary(
         f"💰 *Regim TVA:* {regim_tva_label}\n"
         f"📈 *Regim impunere:* {regim_imp}\n"
         f"{nerez_line}"
+        f"{cert_line}"
         f"📍 *Județ:* {profile.get('judet') or '—'}\n"
         f"🏘️ *Localitate:* {profile.get('localitate') or '—'}\n\n"
         "E totul în regulă?"
@@ -723,6 +761,43 @@ async def handle_onboarding_text(
             return False
 
         user_id = user.id
+
+        # Data certificatului, scrisa de mana (dupa „Pe certificat scrie altă
+        # dată"). Se verifica INAINTEA pasilor: nu e un pas, e o parenteza in
+        # pasul CUI, si userul poate iesi din ea scriind „las-o balta".
+        if context.user_data.get("astept_cert_data"):
+            if text.strip().lower() in ("las-o balta", "lasa", "renunt", "renunț"):
+                context.user_data.pop("astept_cert_data", None)
+                context.user_data.pop("cert_data_propusa", None)
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="👍 Am lăsat data pentru mai târziu.",
+                )
+                await _show_anaf_summary(update, context, user_id)
+                return True
+            data_cert = parseaza_data_utilizator(text)
+            if not data_cert:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "Nu recunosc data asta. Scrie-o ca pe certificat, "
+                        "zi.lună.an — de exemplu `05.12.2025`.\n\n"
+                        "_Dacă vrei s-o lăsăm pentru mai târziu, scrie „las-o balta”._"
+                    ),
+                    parse_mode="Markdown",
+                )
+                return True
+            users_repo.update_profile(session, user, data_doc_autorizare=data_cert)
+            session.commit()
+            context.user_data.pop("astept_cert_data", None)
+            context.user_data.pop("cert_data_propusa", None)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ Am notat: *{formateaza_data_d212(data_cert)}*.",
+                parse_mode="Markdown",
+            )
+            await _show_anaf_summary(update, context, user_id)
+            return True
 
         # Step 1 - numele personal
         if step == STEP_NUME_PERSONAL:
@@ -779,6 +854,19 @@ async def handle_onboarding_text(
                 if activity:
                     updates["activity_code"] = activity
 
+                # Certificatul ONRC: NUMARUL se ia automat, fara sa intrebam —
+                # verificat pe CUI real, ANAF intoarce exact ce scrie pe hartie.
+                # DATA nu se scrie aici: o confirma userul (ANAF se contrazice
+                # singur pe PFA), vezi app/domain/doc_autorizare.py.
+                try:
+                    nr_doc = normalizeaza_nr_doc_autorizare(anaf.get("nr_reg_com"))
+                    if nr_doc:
+                        updates["nr_doc_autorizare"] = nr_doc
+                except NrDocAutorizarePreaLung as e:
+                    # Nu blocam onboarding-ul pentru atat, dar nici nu taiem
+                    # numarul: ramane gol si se cere la generarea D212.
+                    logger.warning(f"nr_doc_autorizare nesalvat pentru CUI {cui_text}: {e}")
+
                 users_repo.update_profile(session, user, **updates)
                 users_repo.set_onboarding_step(session, user, STEP_CONFIRMARE)
                 session.commit()
@@ -793,6 +881,25 @@ async def handle_onboarding_text(
                         ),
                         parse_mode="Markdown",
                     )
+
+                # Data certificatului: pre-completata, dar CONFIRMATA de user.
+                # Se intreaba inaintea rezumatului, ca rezumatul sa arate deja
+                # raspunsul. Daca n-avem numar, n-are rost sa cerem data:
+                # BR-D212-0096 le vrea in pereche.
+                if updates.get("nr_doc_autorizare") and not user.data_doc_autorizare:
+                    data_propusa = parseaza_data_anaf(anaf.get("data_inregistrare"))
+                    context.user_data["cert_data_propusa"] = (
+                        data_propusa.isoformat() if data_propusa else None
+                    )
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text_confirmare_data(
+                            data_propusa, nr_doc=updates["nr_doc_autorizare"],
+                        ),
+                        parse_mode="Markdown",
+                        reply_markup=_kb_cert_data(data_propusa),
+                    )
+                    return True
 
                 await _show_anaf_summary(update, context, user_id)
                 return True
@@ -887,6 +994,43 @@ async def handle_onboarding_callback(
                 session.commit()
                 await query.edit_message_text("⏭️ Am sărit peste CUI. Continuăm manual.")
                 await send_step_question(update, context, STEP_FORMA_JURIDICA, user_id)
+            return
+
+        # === Data certificatului ONRC (pre-completata, confirmata de user) ===
+        if action == "certdata":
+            if sub == "ok":
+                data_cert = parseaza_data_anaf(context.user_data.get("cert_data_propusa"))
+                if data_cert:
+                    users_repo.update_profile(session, user, data_doc_autorizare=data_cert)
+                    session.commit()
+                    await query.edit_message_text(
+                        f"✅ Am notat: certificatul tău e din "
+                        f"*{formateaza_data_d212(data_cert)}*.",
+                        parse_mode="Markdown",
+                    )
+                else:
+                    # propunerea s-a pierdut (repornire) — o cerem scrisa
+                    context.user_data["astept_cert_data"] = True
+                    await query.edit_message_text(
+                        "Scrie-mi data de pe certificat, în formatul zz.ll.aaaa "
+                        "(de exemplu 05.12.2025)."
+                    )
+                    return
+            elif sub == "edit":
+                context.user_data["astept_cert_data"] = True
+                await query.edit_message_text(
+                    "Bine — scrie-mi data care apare pe certificatul tău, "
+                    "în formatul zz.ll.aaaa (de exemplu 05.12.2025)."
+                )
+                return
+            else:  # skip
+                await query.edit_message_text(
+                    "👍 Lăsăm data pentru mai târziu. Ți-o cer când generăm "
+                    "Declarația Unică — fără ea ANAF nu acceptă numărul "
+                    "certificatului, așa că merge doar amânată, nu sărită de tot."
+                )
+            context.user_data.pop("cert_data_propusa", None)
+            await _show_anaf_summary(update, context, user_id, via_callback=True)
             return
 
         # === CUI not found -> flux manual ===

@@ -33,6 +33,9 @@ from app.services import subscription as _sub  # Felia 1/4a — tier-uri (gating
 from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura scriere abonament
 from app.services import tax_engine
 from app.domain import labels_ro
+from app.domain.doc_autorizare import (
+    NrDocAutorizarePreaLung, normalizeaza_nr_doc_autorizare,
+)
 from app import storage
 from app.integrations.exports import csv_export
 from app.integrations.exports.registru import (
@@ -804,6 +807,10 @@ def onboarding_status():
             "activity_code": profile.get("activity_code"),
             "judet": profile.get("judet"),
             "localitate": profile.get("localitate"),
+            # Certificat ONRC: la resume, numarul reapare completat, iar blocul de
+            # confirmare a datei dispare daca userul a confirmat-o deja.
+            "nr_doc_autorizare": profile.get("nr_doc_autorizare"),
+            "data_doc_autorizare": profile.get("data_doc_autorizare"),
             "regim_nerezident_bolt": regim_bolt,
             "regim_nerezident_uber": regim_uber,
             "is_ridesharing": profile.get("activity_code") == "ridesharing",
@@ -883,7 +890,20 @@ def cui_lookup():
         "judet": res.get("judet"),
         "localitate": res.get("localitate"),
         "adresa_completa": res.get("adresa_completa"),
+        # Certificatul ONRC pentru D212. Numarul se salveaza automat (wizardul il
+        # duce mai departe in payload); data e doar PROPUNERE — o confirma userul.
+        "nr_doc_autorizare": _nr_doc_autorizare_sau_none(res.get("nr_reg_com"), cui),
+        "data_doc_autorizare_propusa": res.get("data_inregistrare") or None,
     })
+
+
+def _nr_doc_autorizare_sau_none(nr_reg_com, cui):
+    """Numarul ONRC daca incape in C15Type, altfel None + log (niciodata taiat)."""
+    try:
+        return normalizeaza_nr_doc_autorizare(nr_reg_com)
+    except NrDocAutorizarePreaLung as e:
+        app.logger.warning(f"nr_doc_autorizare nesalvat pentru CUI {cui}: {e}")
+        return None
 
 
 # Câmpurile pe care wizardul le poate salva (allowlist — restul se ignoră).
@@ -891,6 +911,9 @@ _ONBOARDING_SAVE_FIELDS = {
     "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
+    # Certificat ONRC (D212): numarul vine automat din lookup; data e scrisa DOAR
+    # dupa confirmarea userului (allowlist, nu auto-completare tacuta).
+    "nr_doc_autorizare", "data_doc_autorizare",
     "is_pensionar", "is_salariat", "incaseaza_numerar",
     # Proportionalizare mid-an (PAS 4a): date activitate (optionale). Vin ca ISO
     # str din JSON → parsate la `date` inainte de update_profile (vezi _parse_date_field).
@@ -903,6 +926,7 @@ _ONBOARDING_SAVE_FIELDS = {
 # obiect `date` (string gol → None = sterge data, util la corectarea unei greseli).
 _ONBOARDING_DATE_FIELDS = {
     "data_inceput_activitate", "data_sfarsit_activitate", "data_activitate_neeligibila",
+    "data_doc_autorizare",
 }
 
 

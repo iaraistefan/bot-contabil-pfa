@@ -52,7 +52,11 @@ def _extract_callbacks():
 #   (MIXT/EXCLUSIV) pe vehicul, editare + gardian confirmare uz exclusiv;
 # +confirm|capex|{idx}|da / |nu = gardian achiziție vehicul — peste pragul de sumă botul
 #   ÎNTREABĂ ce e documentul în loc să-l clasifice automat. Butoane NOI, nu redenumiri:
-#   niciun callback_data existent nu s-a schimbat (`missing` a rămas gol).
+#   niciun callback_data existent nu s-a schimbat (`missing` a rămas gol);
+# +onb|certdata|ok / |edit / |skip = confirmarea datei de pe certificatul ONRC
+#   (nr_doc_autoriz + data_doc_autoriz, D212). Tot butoane NOI: `missing` gol.
+#   Data e pre-completată din ANAF, dar NU se scrie tăcut — de aici cele trei
+#   ieșiri: confirmă, corectează de pe certificat, sau amână.
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -76,6 +80,7 @@ EXPECTED_CALLBACKS = {
     "onb|cui_save_raw", "onb|done", "onb|finalize|restart", "onb|finalize|yes",
     "onb|fix|activity", "onb|fix|back", "onb|fix|forma", "onb|fix|impunere",
     "onb|fix|menu", "onb|fix|tva", "onb|forma|{f['code']}", "onb|impunere|{r['code']}",
+    "onb|certdata|edit", "onb|certdata|ok", "onb|certdata|skip",
     "onb|nerezident|{r['code']}", "onb|platforme|{p['code']}",
     "onb|skip|{skip_target}", "onb|tva|{r['code']}",
     "parcurs|delok|{trip_id}", "parcurs|excel|{year}|{month}",
