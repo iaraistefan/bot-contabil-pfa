@@ -89,6 +89,8 @@ def update_profile(
     firma_nume: Optional[str] = None,
     firma_cui: Optional[str] = None,
     firma_forma_juridica: Optional[str] = None,
+    nume_declarant: Optional[str] = None,
+    prenume_declarant: Optional[str] = None,
     cod_special_tva: Optional[str] = None,
     cnp: Optional[str] = None,
     regim_tva: Optional[str] = None,
@@ -132,6 +134,10 @@ def update_profile(
         user.firma_cui = cui_clean if cui_clean else None
     if firma_forma_juridica is not None:
         user.firma_forma_juridica = firma_forma_juridica
+    if nume_declarant is not None:
+        user.nume_declarant = nume_declarant.strip()[:100] or None
+    if prenume_declarant is not None:
+        user.prenume_declarant = prenume_declarant.strip()[:100] or None
     if cod_special_tva is not None:
         # Pastram doar cifrele (prefixul RO se adauga la afisare)
         cod_clean = "".join(c for c in str(cod_special_tva) if c.isdigit())
@@ -397,6 +403,8 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "firma_nume": user.firma_nume,
         "firma_cui": user.firma_cui,
         "firma_forma_juridica": user.firma_forma_juridica,
+        "nume_declarant": user.nume_declarant,
+        "prenume_declarant": user.prenume_declarant,
         "cod_special_tva": user.cod_special_tva,
         "cnp": user.cnp,
         "regim_tva": user.regim_tva,

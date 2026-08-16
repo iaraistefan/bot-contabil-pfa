@@ -854,6 +854,12 @@ async def handle_onboarding_text(
                 if activity:
                     updates["activity_code"] = activity
 
+                # Numele titularului, spart de ANAF (nume de familie intai).
+                # Doar daca il avem — pe SRL/SA denumirea nu e nume de om.
+                if anaf.get("nume_declarant") and anaf.get("prenume_declarant"):
+                    updates["nume_declarant"] = anaf["nume_declarant"]
+                    updates["prenume_declarant"] = anaf["prenume_declarant"]
+
                 # Certificatul ONRC: NUMARUL se ia automat, fara sa intrebam —
                 # verificat pe CUI real, ANAF intoarce exact ce scrie pe hartie.
                 # DATA nu se scrie aici: o confirma userul (ANAF se contrazice

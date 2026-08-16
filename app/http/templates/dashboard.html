@@ -2707,6 +2707,9 @@
     WIZ.data.judet=d.judet; WIZ.data.localitate=d.localitate; WIZ.data.is_ridesharing=!!d.is_ridesharing;
     // Certificat ONRC: numărul intră automat (D212 îl cere ca nr_doc_autoriz).
     // Data vine ca PROPUNERE — o ținem deoparte până o confirmă userul.
+    // Numele titularului, spart de ANAF — declarațiile îl cer separat.
+    WIZ.data.nume_declarant=d.nume_declarant||null;
+    WIZ.data.prenume_declarant=d.prenume_declarant||null;
     WIZ.data.nr_doc_autorizare=d.nr_doc_autorizare||null;
     WIZ.data._dataDocPropusa=d.data_doc_autorizare_propusa||null;
     WIZ.data._cuiConfirmat=true;
@@ -2968,6 +2971,10 @@
             judet:WIZ.data.judet, localitate:WIZ.data.localitate};
           // Numărul de la Registrul Comerțului, dacă ANAF l-a dat și încape în C15Type.
           if(WIZ.data.nr_doc_autorizare){ dateAnaf.nr_doc_autorizare=WIZ.data.nr_doc_autorizare; }
+          if(WIZ.data.nume_declarant && WIZ.data.prenume_declarant){
+            dateAnaf.nume_declarant=WIZ.data.nume_declarant;
+            dateAnaf.prenume_declarant=WIZ.data.prenume_declarant;
+          }
           await wizSave(dateAnaf);
         }
       } else if(step==="regim"){

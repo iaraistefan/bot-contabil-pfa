@@ -23,7 +23,12 @@ PLASARE IN REPO:
 from dataclasses import dataclass, field
 from datetime import date
 import calendar
+import logging
 from typing import List, Optional
+
+from app.domain.nume_declarant import split_denumire
+
+logger = logging.getLogger(__name__)
 
 # Importurile generatoarelor. In repo (acelasi pachet) foloseste relativ:
 try:
@@ -100,17 +105,26 @@ def date_firma_stefan() -> DateFirma:
 def _split_nume_prenume(denumire: str, nume: str, prenume: str):
     """
     Determina nume + prenume declarant.
-    Daca profilul nu le are explicit, le deduce din denumirea PFA
-    (ex. "IARAI STEFAN PERSOANA FIZICA AUTORIZATA" -> IARAI / STEFAN).
+
+    CALE DE REZERVA. Sursa buna sunt campurile `nume_declarant` /
+    `prenume_declarant` din profil, capturate la lookup-ul ANAF unde ordinea e
+    stabila. Aici ajungem doar pentru profilele dinaintea capturarii, si atunci
+    spargem `firma_nume` — un camp LIBER, care poate purta ordinea inversa.
+
+    Taierea o face app/domain/nume_declarant.split_denumire, care potriveste
+    sufixele pe CUVANT INTREG si cu diacritice. Varianta veche de aici avea
+    doua hibe, ambele reparate acolo: lista de sufixe fara diacritice (nu se
+    potrivea niciodata cu ce scrie ANAF) si `replace("II", "")`, care mutila
+    orice nume continand „II" („ILIIESCU" -> „ILESCU").
     """
     if nume and prenume:
         return nume, prenume
-    den = (denumire or "").upper()
-    # taie sufixele de forma juridica
-    for suf in ("PERSOANA FIZICA AUTORIZATA", "PFA", "INTREPRINDERE INDIVIDUALA",
-                "II", "INTREPRINDERE FAMILIALA", "IF"):
-        den = den.replace(suf, "")
-    parts = [p for p in den.split() if p]
+    n, p = split_denumire(denumire)
+    if n and p:
+        return n, p
+    # Denumire fara sufix de persoana fizica (SRL/SA) sau prea scurta: pastram
+    # comportamentul vechi, ca sa nu ramana declaratia fara declarant.
+    parts = [x for x in (denumire or "").split() if x]
     if len(parts) >= 2:
         return parts[0], parts[1]
     if len(parts) == 1:
@@ -132,6 +146,17 @@ def date_firma_din_profil(profile: dict) -> DateFirma:
     denumire = profile.get("firma_nume") or "PFA"
     nume = profile.get("nume_declarant") or ""
     prenume = profile.get("prenume_declarant") or ""
+    if not (nume and prenume):
+        # Zgomotos DELIBERAT: derivarea dintr-un camp liber e o ghicitura care
+        # poate iesi inversata in declaratie (s-a si intamplat — vezi migrarea
+        # 028). Daca profilul a trecut prin lookup ANAF, campurile exista si
+        # linia asta nu se aprinde niciodata.
+        logger.warning(
+            "nume de declarant derivat dintr-un camp liber, poate fi inversat "
+            "(firma_nume=%r, CUI=%r) — profilul n-are nume_declarant/"
+            "prenume_declarant; se recaptureaza la urmatorul lookup ANAF",
+            denumire, profile.get("firma_cui"),
+        )
     nume, prenume = _split_nume_prenume(denumire, nume, prenume)
 
     # adresa din judet + localitate daca nu exista camp dedicat
