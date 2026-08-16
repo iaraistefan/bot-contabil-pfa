@@ -593,6 +593,25 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_doc_autorizare DATE",
         ],
     },
+    {
+        "id": "028_nume_declarant",
+        "description": (
+            "Numele titularului, spart in nume + prenume, capturat la SURSA din "
+            "`denumire` de la ANAF. Pana acum declaratiile il derivau din "
+            "firma_nume cu o euristica «primele doua cuvinte» — corecta pentru "
+            "formatul ANAF (nume de familie intai), dar firma_nume e camp LIBER "
+            "si poate purta ordinea inversa. Chiar purta: pe CUI 53067338 ANAF "
+            "intoarce «IARAI ŞTEFAN PERSOANĂ FIZICĂ AUTORIZATĂ», iar in baza "
+            "statea «ȘTEFAN IARAI PFA» → D390 iesea cu nume si prenume "
+            "INVERSATE. Aditiv si idempotent; NULL pentru profilele existente, "
+            "iar NULL inseamna «cade pe derivare, cu avertisment in log», nu "
+            "«lipsa»."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS nume_declarant VARCHAR(100)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS prenume_declarant VARCHAR(100)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

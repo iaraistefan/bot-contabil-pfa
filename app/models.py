@@ -27,6 +27,15 @@ class User(Base):
 
     # === Profil firma ===
     firma_nume = Column(String(255), nullable=True)
+    # Numele TITULARULUI, spart in doua, asa cum il cer declaratiile (D390
+    # nume_declar/prenume_declar, D212 nume_c/prenume_c use="required"). Se
+    # captureaza la sursa, din `denumire` de la ANAF, unde ordinea e stabila
+    # (nume de familie intai). NU se deduce din `firma_nume`: acela e camp liber
+    # si poate purta ordinea inversa — vezi app/domain/nume_declarant.py.
+    # NULL = necapturat inca → declaratiile cad pe derivarea din firma_nume si
+    # LOGHEAZA avertismentul (declaratii_service.date_firma_din_profil).
+    nume_declarant = Column(String(100), nullable=True)
+    prenume_declarant = Column(String(100), nullable=True)
     firma_cui = Column(String(20), nullable=True, index=True)
     firma_forma_juridica = Column(String(20), nullable=True)
     # Valori: PFA / II / IF / SRL_MICRO / SRL_NORMAL / PROFESIE_LIBERALA

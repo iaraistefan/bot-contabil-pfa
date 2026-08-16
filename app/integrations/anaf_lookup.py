@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any
 
 import httpx
 
+from app.domain.nume_declarant import split_denumire
+
 logger = logging.getLogger(__name__)
 
 ANAF_API_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
@@ -164,6 +166,8 @@ def _parse_anaf_response(item: Dict[str, Any]) -> Dict[str, Any]:
     stare_inreg = (date_gen.get("stare_inregistrare") or "").strip()
     data_inreg = (date_gen.get("data_inregistrare") or "").strip()
 
+    nume_declarant, prenume_declarant = split_denumire(denumire)
+
     is_platitor_tva = bool(tva.get("scpTVA"))
     regim_tva = "PLATITOR_21" if is_platitor_tva else "NEPLATITOR"
     forma_juridica = _map_forma_juridica(forma_juridica_anaf, denumire)
@@ -216,6 +220,10 @@ def _parse_anaf_response(item: Dict[str, Any]) -> Dict[str, Any]:
         "is_inactiv": is_inactiv,
         "stare_inregistrare": stare_inreg,
         "cod_caen": cod_caen,
+        # Numele titularului, spart la SURSA. (None, None) daca denumirea nu e a
+        # unei persoane fizice (SRL/SA) sau n-are destule cuvinte — nu ghicim.
+        "nume_declarant": nume_declarant,
+        "prenume_declarant": prenume_declarant,
         "nr_reg_com": nr_reg_com,
         "data_inregistrare": data_inreg,
         "judet": judet,

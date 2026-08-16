@@ -893,6 +893,10 @@ def cui_lookup():
         "adresa_completa": res.get("adresa_completa"),
         # Certificatul ONRC pentru D212. Numarul se salveaza automat (wizardul il
         # duce mai departe in payload); data e doar PROPUNERE — o confirma userul.
+        # Numele titularului, spart de ANAF (nume de familie intai). Wizardul le
+        # duce in payload, ca numarul de certificat — automat, fara intrebare.
+        "nume_declarant": res.get("nume_declarant"),
+        "prenume_declarant": res.get("prenume_declarant"),
         "nr_doc_autorizare": _nr_doc_autorizare_sau_none(res.get("nr_reg_com"), cui),
         "data_doc_autorizare_propusa": res.get("data_inregistrare") or None,
     })
@@ -915,6 +919,8 @@ _ONBOARDING_SAVE_FIELDS = {
     # Certificat ONRC (D212): numarul vine automat din lookup; data e scrisa DOAR
     # dupa confirmarea userului (allowlist, nu auto-completare tacuta).
     "nr_doc_autorizare", "data_doc_autorizare",
+    # Numele titularului spart la sursa (ANAF) — declaratiile il cer separat.
+    "nume_declarant", "prenume_declarant",
     "is_pensionar", "is_salariat", "incaseaza_numerar",
     # Proportionalizare mid-an (PAS 4a): date activitate (optionale). Vin ca ISO
     # str din JSON → parsate la `date` inainte de update_profile (vezi _parse_date_field).
