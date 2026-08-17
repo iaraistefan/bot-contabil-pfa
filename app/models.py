@@ -61,6 +61,13 @@ class User(Base):
     regim_nerezident_bolt = Column(String(20), nullable=True)
     regim_nerezident_uber = Column(String(20), nullable=True)
 
+    # Poarta de eligibilitate: „Ai PFA în România?" — DA / VREAU / NU, NULL =
+    # neintrebat. NU e despre nationalitate sau tara de resedinta (un strain cu
+    # PFA in Romania e eligibil), ci despre existenta entitatii de administrat.
+    # Precontitie, nu pas de wizard: se verifica INAINTEA calculului pasului
+    # curent, altfel resume-ul ar sari peste ea. Vezi app/domain/eligibilitate.py.
+    eligibilitate_pfa = Column(String(10), nullable=True)
+
     # === Activitate ===
     caen_principal = Column(String(10), nullable=True)
     activity_code = Column(String(50), nullable=True)

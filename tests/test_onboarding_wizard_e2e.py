@@ -19,7 +19,9 @@ def _web(monkeypatch, tmp_path):
     eng = create_engine(f"sqlite:///{(tmp_path / 'e2e.db').as_posix()}")
     User.metadata.create_all(eng)
     S = sessionmaker(bind=eng)
-    s = S(); u = User(telegram_id=1); s.add(u); s.commit(); uid = u.id; s.close()
+    # eligibilitate_pfa: poarta din /onboarding/save — wizardul nu ajunge aici fara ea.
+    s = S(); u = User(telegram_id=1, eligibilitate_pfa="DA")
+    s.add(u); s.commit(); uid = u.id; s.close()
     monkeypatch.setattr(webapp, "_require_user", lambda: (uid, None))
     monkeypatch.setattr(webapp, "get_session", lambda: S())
     return webapp.flask_app.test_client(), S, uid

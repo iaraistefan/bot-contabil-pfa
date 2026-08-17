@@ -33,6 +33,7 @@ from app.services import subscription as _sub  # Felia 1/4a — tier-uri (gating
 from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura scriere abonament
 from app.services import tax_engine
 from app.domain import labels_ro
+from app.domain import eligibilitate as elig
 from app.domain.doc_autorizare import (
     MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung, normalizeaza_nr_doc_autorizare,
     parseaza_data_utilizator,
@@ -849,6 +850,10 @@ def onboarding_status():
         return jsonify({
             "onboarding_completed": bool(profile.get("onboarding_completed")),
             "current_step": profile.get("onboarding_step") or 0,
+            # Poarta: UI-ul decide dupa astea DOUA, nu dupa pas. `trece` e
+            # calculat pe server ca regula sa aiba o singura sursa.
+            "eligibilitate_pfa": profile.get("eligibilitate_pfa"),
+            "eligibilitate_trece": elig.trece_poarta(profile.get("eligibilitate_pfa")),
             "data": data,
         })
     except Exception as e:
@@ -921,6 +926,8 @@ _ONBOARDING_SAVE_FIELDS = {
     "nr_doc_autorizare", "data_doc_autorizare",
     # Numele titularului spart la sursa (ANAF) — declaratiile il cer separat.
     "nume_declarant", "prenume_declarant",
+    # Raspunsul la poarta de eligibilitate (DA/VREAU/NU, "" = sterge → reintreaba).
+    "eligibilitate_pfa",
     "is_pensionar", "is_salariat", "incaseaza_numerar",
     # Proportionalizare mid-an (PAS 4a): date activitate (optionale). Vin ca ISO
     # str din JSON → parsate la `date` inainte de update_profile (vezi _parse_date_field).
@@ -1015,6 +1022,27 @@ def onboarding_save():
         return err
     body = request.get_json(silent=True) or {}
     fields = {k: v for k, v in body.items() if k in _ONBOARDING_SAVE_FIELDS}
+
+    # POARTA DE ELIGIBILITATE, pe server. Fara ea, poarta din JS e decor: oricine
+    # poate chema endpoint-ul direct. Exceptia e chiar raspunsul la poarta —
+    # altfel n-ar exista drum prin care sa treaca cineva vreodata.
+    doar_raspunsul_portii = set(fields) <= {"eligibilitate_pfa"}
+    if not doar_raspunsul_portii:
+        session_g = get_session()
+        try:
+            u = users_repo.get_by_id(session_g, user_id)
+            raspuns = u.eligibilitate_pfa if u else None
+        finally:
+            session_g.close()
+        if not elig.trece_poarta(raspuns):
+            return jsonify({
+                "error": "eligibilitate_lipsa",
+                "eligibilitate_pfa": raspuns,
+                "message": (
+                    "Întâi răspunde la întrebarea despre PFA. "
+                    "First answer the question about your PFA."
+                ),
+            }), 403
     # Datele de activitate (PAS 4a) vin ca ISO str → convertim la `date` pentru ORM.
     # String gol/invalid → None: update_profile aplica DOAR non-None, deci o data goala
     # lasa valoarea neschimbata (setarea unei date noi functioneaza; capturarea e optionala).
