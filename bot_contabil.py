@@ -108,12 +108,13 @@ MESAJ_POARTA_INGESTIE = (
     "regim de TVA. Fără astea, o poză cu un bon nu-mi spune mare lucru — n-aș "
     "ști dacă acea cheltuială e deductibilă la tine sau nu, și n-aș vrea să-ți "
     "spun o cifră greșită.\n\n"
-    "Apasă /start și îți configurez contul. Durează sub un minut: îți caut "
+    "Apasă /start, apoi butonul *🚀 Începe configurarea* care apare — se "
+    "deschide Dashboard-ul. Sunt câțiva pași, două-trei minute: îți caut "
     "singur datele firmei în registrul ANAF, tu doar confirmi. Documentul îl "
     "poți trimite imediat după.\n\n"
     "🇬🇧 _This is Coniar, a bookkeeping assistant for Romanian sole traders "
     "(PFA). I can't read your document until your tax profile is set up — "
-    "tap /start to begin, it takes under a minute._"
+    "tap /start, then the button that appears. It takes a few minutes._"
 )
 
 MAIN_MENU_BUTTONS = {

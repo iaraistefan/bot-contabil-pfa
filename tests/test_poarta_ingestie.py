@@ -177,8 +177,19 @@ def test_mesajul_spune_ce_e_coniar_ce_urmeaza_si_are_engleza():
     assert "Coniar" in m                                 # ce e
     assert "PFA" in m and "ANAF" in m                    # pentru cine
     assert "/start" in m                                 # ce sa faca
+    assert "Începe configurarea" in m                    # SI butonul de dupa
     assert "This is Coniar" in m                         # linia in engleza
     assert "tap /start" in m
+
+
+def test_mesajul_nu_promite_un_timp_pe_care_nu_il_tinem():
+    """Wizardul are 4 pasi pentru non-sofer, dar 7-8 pentru sofer (wizSteps():
+    +masina, +platforme, +nerezident, +apibolt) — iar soferul e chiar publicul
+    mesajului. „Sub un minut" nu se tine la primul contact."""
+    import bot_contabil
+    m = bot_contabil.MESAJ_POARTA_INGESTIE
+    assert "sub un minut" not in m.lower()
+    assert "under a minute" not in m.lower()
 
 
 def test_ambele_porti_folosesc_acelasi_text():
