@@ -194,6 +194,85 @@ def test_poarta_e_verificata_inaintea_calculului_pasului():
     assert poarta < calcul, "poarta e DUPĂ calculul lui WIZ.i — resume-ul o ocolește"
 
 
+# ── 6. Fallback-ul din chat: refuza, nu reimplementeaza ─────
+
+def _bot(monkeypatch, tmp_path, nume, *, raspuns):
+    import bot_contabil
+    eng = create_engine(f"sqlite:///{(tmp_path / nume).as_posix()}")
+    User.metadata.create_all(eng)
+    S = sessionmaker(bind=eng)
+    s = S()
+    s.add(User(telegram_id=777, eligibilitate_pfa=raspuns))
+    s.commit()
+    uid = s.query(User).one().id
+    s.close()
+    monkeypatch.setattr(bot_contabil, "get_session", lambda: S())
+    monkeypatch.setattr(bot_contabil, "ensure_user", lambda u: uid)
+    return bot_contabil
+
+
+class _FakeMsg:
+    def __init__(self):
+        self.replies = []
+
+    async def reply_text(self, text, **kw):
+        self.replies.append((text, kw))
+
+
+def _upd():
+    from types import SimpleNamespace
+    msg = _FakeMsg()
+    return SimpleNamespace(
+        message=msg,
+        effective_user=SimpleNamespace(id=777, full_name="T", username="t"),
+        effective_chat=SimpleNamespace(id=999),
+    ), msg
+
+
+@pytest.mark.asyncio
+async def test_setup_text_refuzat_fara_raspuns(tmp_path, monkeypatch):
+    bot = _bot(monkeypatch, tmp_path, "st_fara.db", raspuns=None)
+    pornit = {"da": False}
+
+    async def _start(*a, **kw):
+        pornit["da"] = True
+
+    monkeypatch.setattr(bot.onboarding, "start_onboarding", _start)
+    update, msg = _upd()
+    await bot.handle_setup_text(update, None)
+
+    assert pornit["da"] is False, "onboarding-ul din chat a pornit fara raspuns"
+    text, kw = msg.replies[0]
+    assert "Dashboard" in text                       # trimiterea
+    assert kw.get("reply_markup") is not None        # cu buton, nu doar instructiune
+    assert "One question first" in text              # si in engleza
+
+
+@pytest.mark.asyncio
+async def test_setup_text_merge_dupa_raspuns(tmp_path, monkeypatch):
+    bot = _bot(monkeypatch, tmp_path, "st_da.db", raspuns="DA")
+    pornit = {"da": False}
+
+    async def _start(*a, **kw):
+        pornit["da"] = True
+
+    monkeypatch.setattr(bot.onboarding, "start_onboarding", _start)
+    update, msg = _upd()
+    await bot.handle_setup_text(update, None)
+
+    assert pornit["da"] is True, "fallback-ul a ramas blocat desi userul a raspuns"
+    assert "Configurare prin chat" in msg.replies[0][0]
+
+
+def test_fallbackul_nu_reimplementeaza_poarta():
+    """Refuz scurt cu trimitere — NU o a doua copie a explicatiei din poarta."""
+    import inspect
+    src = inspect.getsource(__import__("bot_contabil").handle_setup_text)
+    assert "trece_poarta" in src                     # refoloseste regula
+    for fraza in ("cetățeniei", "nationality", "Am apăsat greșit"):
+        assert fraza not in src, f"explicatia din poarta a fost copiata aici: {fraza!r}"
+
+
 def test_textul_spune_ce_e_de_ce_si_cum_revine():
     assert "Coniar" in elig.MESAJ_BLOCAT
     assert "cetățeniei" in elig.MESAJ_BLOCAT            # nu e despre identitate

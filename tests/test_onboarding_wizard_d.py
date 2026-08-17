@@ -28,8 +28,20 @@ def _upd():
 
 # ── /setup_text pornește chat-ul vechi (start_onboarding) ──
 @pytest.mark.asyncio
-async def test_setup_text_porneste_chat(monkeypatch):
-    monkeypatch.setattr(bot_contabil, "ensure_user", lambda update: 1)
+async def test_setup_text_porneste_chat(monkeypatch, tmp_path):
+    # /setup_text trece acum prin poarta de eligibilitate (citeste profilul), deci
+    # testul are nevoie de un user REAL, eligibil. Cazul „fara raspuns → refuzat"
+    # e masurat separat, in test_poarta_eligibilitate.py.
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.models import User
+    eng = create_engine(f"sqlite:///{(tmp_path / 'd.db').as_posix()}")
+    User.metadata.create_all(eng)
+    S = sessionmaker(bind=eng)
+    s = S(); s.add(User(telegram_id=7, eligibilitate_pfa="DA")); s.commit()
+    uid = s.query(User).one().id; s.close()
+    monkeypatch.setattr(bot_contabil, "get_session", lambda: S())
+    monkeypatch.setattr(bot_contabil, "ensure_user", lambda update: uid)
     called = {"n": 0}
     async def _fake_start(update, context): called["n"] += 1
     monkeypatch.setattr(bot_contabil.onboarding, "start_onboarding", _fake_start)
