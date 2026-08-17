@@ -93,6 +93,30 @@ BTN_SETARI = "⚙️ Setări"
 BTN_AJUTOR = "🆘 Ajutor"
 BTN_GHID = "📖 Ghid"  # sub-pas Ghid 2: ghid de obligații fiscale
 
+# Ce vede cine trimite un document inainte sa-si configureze contul. O SINGURA
+# sursa pentru amandoua portile (poza si PDF) — daca cer acelasi lucru, sa ceara
+# la fel. Oamenii astia nimeresc aici din intamplare, nu din intentie: nu stiu ce
+# e Coniar si nu neaparat stiu romana, deci textul spune INTAI ce e, apoi de ce
+# nu poate citi documentul inca, si abia la final ce sa apese.
+MESAJ_POARTA_INGESTIE = (
+    "👋 *Salut! Aici e Coniar.*\n\n"
+    "Sunt un asistent contabil pentru PFA-urile din România — mai ales pentru "
+    "șoferii de Bolt și Uber. Îți citesc bonurile și facturile direct din poză, "
+    "îți țin registrul și îți spun ce ai de depus la ANAF și până când.\n\n"
+    "Ca să pot citi documentul pe care mi l-ai trimis, trebuie întâi să știu "
+    "cine ești din punct de vedere fiscal: ce formă juridică ai, ce CUI, ce "
+    "regim de TVA. Fără astea, o poză cu un bon nu-mi spune mare lucru — n-aș "
+    "ști dacă acea cheltuială e deductibilă la tine sau nu, și n-aș vrea să-ți "
+    "spun o cifră greșită.\n\n"
+    "Apasă /start, apoi butonul *🚀 Începe configurarea* care apare — se "
+    "deschide Dashboard-ul. Sunt câțiva pași, două-trei minute: îți caut "
+    "singur datele firmei în registrul ANAF, tu doar confirmi. Documentul îl "
+    "poți trimite imediat după.\n\n"
+    "🇬🇧 _This is Coniar, a bookkeeping assistant for Romanian sole traders "
+    "(PFA). I can't read your document until your tax profile is set up — "
+    "tap /start, then the button that appears. It takes a few minutes._"
+)
+
 MAIN_MENU_BUTTONS = {
     BTN_RAPORT, BTN_REGISTRU, BTN_DASHBOARD,
     BTN_CALENDAR, BTN_PLATA, BTN_PARCURS, BTN_DU, BTN_CHELTUIELI,
@@ -2749,11 +2773,11 @@ async def execute_confirmed_save(update, context, user_id):
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
 
-    if onboarding.user_is_in_onboarding(tg_id):
-        await update.message.reply_text(
-            "⚠️ Hai să terminăm întâi configurarea.\n"
-            "Folosește butoanele de mai sus, sau /start ca s-o reiei."
-        )
+    # POARTA. Pozitia e PORTANTA, nu cosmetica: sta inaintea lui get_file() si a
+    # lui register_source_file, deci cine e oprit nu costa nici banda, nici randuri
+    # in DB, nici un apel la OpenAI. Vezi test_poarta_ingestie.py.
+    if not onboarding.user_is_onboarded(tg_id):
+        await update.message.reply_text(MESAJ_POARTA_INGESTIE, parse_mode="Markdown")
         return
 
     tg_file = await update.message.photo[-1].get_file()
@@ -2890,10 +2914,9 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
     Handler izolat pe filters.Document (calea foto/text neatinsă).
     """
     tg_id = update.effective_user.id
-    if onboarding.user_is_in_onboarding(tg_id):
-        await update.message.reply_text(
-            "⚠️ Hai să terminăm întâi configurarea. Deschide /start."
-        )
+    # POARTA — aceeasi, si tot inaintea oricarei descarcari sau scrieri.
+    if not onboarding.user_is_onboarded(tg_id):
+        await update.message.reply_text(MESAJ_POARTA_INGESTIE, parse_mode="Markdown")
         return
 
     doc = update.message.document
