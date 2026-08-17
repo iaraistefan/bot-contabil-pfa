@@ -37,8 +37,12 @@ regula „commit la apelant" din tot repository-ul.
 
 ⏳ FOLLOW-UP PRE-LANSARE (decis conștient): ordinea evenimentelor nu e garantată de
 Stripe — un `.deleted` întârziat poate ajunge după un `.updated` mai nou și ar
-reactiva/anula greșit. Acum riscul e zero (niciun user în producție). De apărat
-înainte de lansarea publică (ex. compară `event.created` cu un timestamp pe user).
+reactiva/anula greșit. Acum riscul e zero, dar NU fiindcă n-ar fi useri în
+producție (sunt 9): fiindcă niciunul n-are abonament, deci webhook-ul n-are pe
+cine reactiva greșit. Condiția e falsificabilă, nu o impresie:
+    SELECT count(*) FROM users WHERE stripe_customer_id IS NOT NULL   -- 0 la 17.08.2026
+În ziua în care nu mai e 0, riscul devine real. De apărat înainte de lansarea
+publică (ex. compară `event.created` cu un timestamp pe user).
 """
 
 import logging
