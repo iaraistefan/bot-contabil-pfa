@@ -408,7 +408,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Îți țin Registrul de Încasări și Plăți 📂\n"
         "• Îți calculez profitul, TVA-ul, contribuțiile 💰\n"
         "• Te anunț de termenele ANAF ⏰\n\n"
-        "Hai să te configurez — durează *sub un minut*. Îți caut "
+        "Hai să te configurez — sunt *câțiva pași, două-trei minute*. Îți caut "
         "singur datele firmei în registrul ANAF.\n"
         "━━━━━━━━━━━━━━━━━━━━"
     )

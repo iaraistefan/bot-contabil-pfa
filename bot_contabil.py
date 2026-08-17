@@ -688,9 +688,9 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "👋 *Bun venit la Coniar!*\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Hai să-ți configurăm contul — apasă butonul de mai jos. Durează *sub un "
-            "minut*: îți caut singur datele firmei în registrul ANAF (denumire, CAEN, TVA), "
-            "tu doar confirmi.\n\n"
+            "Hai să-ți configurăm contul — apasă butonul de mai jos. Sunt *câțiva "
+            "pași, două-trei minute*: îți caut singur datele firmei în registrul ANAF "
+            "(denumire, CAEN, TVA), tu doar confirmi.\n\n"
             "_Configurarea se face în Dashboard — e mai clar acolo decât în chat._\n"
             "Nu poți deschide dashboard-ul? Scrie /setup_text și te configurez prin chat.",
             parse_mode="Markdown",
