@@ -1,6 +1,7 @@
 from config import settings
 from app.enums import DocType
 from db import init_db, get_session
+from app.domain import eligibilitate as elig
 from app.domain.doc_autorizare import (
     MESAJ_DATA_INVALIDA, formateaza_data_d212, parseaza_data_anaf,
     parseaza_data_utilizator, text_confirmare_data,
@@ -704,7 +705,35 @@ async def handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reziliență pentru userul care nu poate deschide dashboard-ul (hiccup WebApp/Render).
     Aceeași logică ca wizardul (lookup_cui + update_profile = sursă unică), doar UI diferă.
     """
-    ensure_user(update)
+    user_id = ensure_user(update)
+
+    # POARTA DE ELIGIBILITATE, ieftin: fallback-ul REFUZA sa porneasca pana cand
+    # raspunsul exista, si trimite userul sa-l dea o singura data in dashboard.
+    # NU reimplementam poarta aici. Fallback-ul ramane fallback — o a doua
+    # implementare ar insemna inca un set de texte, care pot diverge de cele din
+    # `app/domain/eligibilitate.py` fara ca nimic sa se planga. Dar nici nu poate
+    # ramane o usa deschisa in gardul tocmai pus: /setup_text scrie prin
+    # users_repo, deci ocoleste gardianul din /onboarding/save.
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+    if not elig.trece_poarta(profile.get("eligibilitate_pfa")):
+        await update.message.reply_text(
+            "Înainte să începem, am o singură întrebare de pus — și e în "
+            "Dashboard. Deschide-l cu butonul de mai jos, răspunde acolo, "
+            "apoi revino aici cu /setup_text dacă preferi configurarea prin chat.\n\n"
+            "🇬🇧 _One question first — open the Dashboard below and answer it, "
+            "then come back._",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🚀 Deschide Dashboard",
+                                     web_app=WebAppInfo(url=DASHBOARD_URL))
+            ]]),
+        )
+        return
+
     await update.message.reply_text(
         "💬 *Configurare prin chat* (alternativă)\n\n"
         "Te ghidez pas cu pas aici, în conversație. "

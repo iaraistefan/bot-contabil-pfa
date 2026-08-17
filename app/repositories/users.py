@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
+from app.domain import eligibilitate as elig
 from app.domain.doc_autorizare import normalizeaza_nr_doc_autorizare
 from app.models import User
 
@@ -91,6 +92,7 @@ def update_profile(
     firma_forma_juridica: Optional[str] = None,
     nume_declarant: Optional[str] = None,
     prenume_declarant: Optional[str] = None,
+    eligibilitate_pfa: Optional[str] = None,
     cod_special_tva: Optional[str] = None,
     cnp: Optional[str] = None,
     regim_tva: Optional[str] = None,
@@ -134,6 +136,12 @@ def update_profile(
         user.firma_cui = cui_clean if cui_clean else None
     if firma_forma_juridica is not None:
         user.firma_forma_juridica = firma_forma_juridica
+    if eligibilitate_pfa is not None:
+        # Sirul gol STERGE raspunsul (înapoi la NULL = neintrebat). Asta e calea
+        # de intors dupa un „Nu" apasat din greseala — blocarea trebuie sa fie
+        # reversibila, altfel o atingere gresita exclude un client real.
+        val = str(eligibilitate_pfa).strip().upper()
+        user.eligibilitate_pfa = val if val in elig.RASPUNSURI_VALIDE else None
     if nume_declarant is not None:
         user.nume_declarant = nume_declarant.strip()[:100] or None
     if prenume_declarant is not None:
@@ -403,6 +411,7 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "firma_nume": user.firma_nume,
         "firma_cui": user.firma_cui,
         "firma_forma_juridica": user.firma_forma_juridica,
+        "eligibilitate_pfa": user.eligibilitate_pfa,
         "nume_declarant": user.nume_declarant,
         "prenume_declarant": user.prenume_declarant,
         "cod_special_tva": user.cod_special_tva,

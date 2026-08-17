@@ -2489,10 +2489,81 @@
     if(WIZ.data.veh_consum!=null) WIZ.data.veh_consum=String(WIZ.data.veh_consum);
     if(WIZ.data.firma_cui||WIZ.data.firma_nume) WIZ.data._cuiConfirmat=true;   // deblochează CUI la resume
     WIZ.steps = wizSteps();
+    // ── POARTA DE ELIGIBILITATE ──
+    // PRECONDIȚIE, nu pas: se verifică ÎNAINTEA calculului lui WIZ.i, și NU intră
+    // în wizSteps(). Motivul e mecanic — resume-ul citește current_step din
+    // profil și sare direct acolo, deci un pas de index 0 ar fi ocolit de oricine
+    // are onboarding_step > 0, adică exact de cine a început deja configurarea.
+    // Odată răspuns „da"/„vreau", poarta nu se mai arată niciodată — de-atunci
+    // înainte saltul peste ea e corect, nu bug.
+    WIZ.data.eligibilitate_pfa = (status && status.eligibilitate_pfa) || null;
+    if(!(status && status.eligibilitate_trece)){
+      return wizPoarta();
+    }
     WIZ.i = Math.min(Math.max((status && status.current_step) || 0, 0), WIZ.steps.length-1);
     wizRender();
   }
   window.enterWizard=enterWizard;
+
+  // ── POARTA: întrebarea, și ecranul de blocare cu cale de întors ──
+  // Întrebarea e pe FAPT, nu pe identitate: un străin cu PFA în România e
+  // eligibil, un român fără PFA nu are ce administra aici.
+  function wizPoarta(){
+    if(WIZ.data.eligibilitate_pfa==="NU") return wizPoartaBlocat();
+    document.getElementById("wizard-root").innerHTML=`
+      <div style="max-width:480px;margin:0 auto;width:100%">
+        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
+          <span class="brand-badge">C</span>
+          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-lg)">Coniar</div>
+        </div>
+        <div class="panel">
+          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-xl);margin-bottom:var(--sp-2)">Ai PFA în România?</div>
+          <div class="hint" style="margin-bottom:var(--sp-4)">Te întreb o singură dată, ca să știu dacă îți sunt de folos. Nu contează cetățenia sau unde locuiești — doar dacă ai o firmă de administrat aici.</div>
+          <button class="btn btn-primary" style="width:100%;min-height:48px;margin-bottom:var(--sp-2)" onclick="wizPoartaRaspunde('DA')">Da, am PFA</button>
+          <button class="btn btn-primary" style="width:100%;min-height:48px;margin-bottom:var(--sp-2)" onclick="wizPoartaRaspunde('VREAU')">Încă nu, dar vreau să deschid</button>
+          <button class="btn btn-ghost" style="width:100%;min-height:44px" onclick="wizPoartaRaspunde('NU')">Nu</button>
+          <div id="wiz-poarta-msg" class="hint is-error" style="min-height:18px;margin-top:var(--sp-2)"></div>
+        </div>
+      </div>`;
+  }
+  function wizPoartaBlocat(){
+    document.getElementById("wizard-root").innerHTML=`
+      <div style="max-width:480px;margin:0 auto;width:100%">
+        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
+          <span class="brand-badge">C</span>
+          <div style="font-family:var(--display);font-weight:var(--w-bold);font-size:var(--text-lg)">Coniar</div>
+        </div>
+        <div class="panel">
+          <div class="hint" style="margin-bottom:var(--sp-3)">Coniar ține contabilitatea PFA-urilor din România: îți citește bonurile din poză, îți ține Registrul de Încasări și Plăți și îți spune ce ai de depus la ANAF și până când.</div>
+          <div class="hint" style="margin-bottom:var(--sp-3)">Fără un PFA în România n-am ce administra pentru tine — nu din cauza cetățeniei sau a țării în care stai (un străin cu PFA în România e binevenit aici), ci pentru că tot ce fac eu se leagă de o firmă înregistrată la ANAF.</div>
+          <div class="hint" style="margin-bottom:var(--sp-4)"><b>Dacă ai apăsat din greșeală</b>, sau dacă între timp ți-ai deschis un PFA, revino cu butonul de mai jos și răspunde din nou — nimic nu e definitiv.</div>
+          <button class="btn btn-primary" style="width:100%;min-height:48px" onclick="wizPoartaRaspunde('')">Am apăsat greșit — întreabă-mă din nou</button>
+          <div id="wiz-poarta-msg" class="hint is-error" style="min-height:18px;margin-top:var(--sp-2)"></div>
+          <div class="hint" style="margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--line)">🇬🇧 Coniar does the bookkeeping for Romanian sole traders (PFA). Without a PFA registered in Romania there is nothing for me to manage — this is about the business, not about your nationality or where you live: a foreign citizen with a Romanian PFA is very welcome here. Tapped this by mistake, or opened a PFA since? Use the button above to answer again — nothing is final.</div>
+        </div>
+      </div>`;
+  }
+  async function wizPoartaRaspunde(val){
+    const msg=document.getElementById("wiz-poarta-msg");
+    try{
+      // NU prin wizSave: acela adaugă `step` în payload și ar muta onboarding_step
+      // al userului doar fiindcă a răspuns la poartă. Poarta nu e pas, deci nu
+      // atinge indici. "" ȘTERGE răspunsul (înapoi la „neîntrebat") — calea de întors.
+      const r=await authFetch("/api/v1/onboarding/save",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({eligibilitate_pfa:val}),
+      });
+      if(!r.ok) throw new Error("save "+r.status);
+      WIZ.data.eligibilitate_pfa = val || null;
+      haptic(val==="NU"?"error":"success");
+      if(val==="NU") return wizPoartaBlocat();
+      if(!val) return wizPoarta();                 // reîntreabă
+      WIZ.i=0; wizRender();                        // trece în wizard, de la primul pas
+    }catch(e){
+      if(msg) msg.textContent="Nu am putut salva răspunsul. Încearcă din nou.";
+    }
+  }
+  window.wizPoartaRaspunde=wizPoartaRaspunde;
   function exitWizardToDashboard(){
     document.body.classList.remove("wizard-mode");
     const wr=document.getElementById("wizard-root"); if(wr) wr.innerHTML="";

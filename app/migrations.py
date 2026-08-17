@@ -612,6 +612,22 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS prenume_declarant VARCHAR(100)",
         ],
     },
+    {
+        "id": "029_eligibilitate_pfa",
+        "description": (
+            "Poarta de eligibilitate „Ai PFA in Romania?” (DA / VREAU / NU). "
+            "Botul e public si primeste intrari intamplatoare — 6 din 9 useri de "
+            "productie n-au trecut niciodata de /start. Intrebarea e pe FAPT, nu "
+            "pe identitate: un strain cu PFA in Romania e eligibil, un roman fara "
+            "PFA nu are ce administra. Aditiv si idempotent; NULL pentru toti cei "
+            "existenti = «neintrebat», deci poarta li se arata o data. NU e "
+            "NOT NULL: raspunsul se poate STERGE inapoi la NULL, fiindca blocarea "
+            "trebuie sa fie reversibila (un clic gresit nu exclude un client real)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS eligibilitate_pfa VARCHAR(10)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 
