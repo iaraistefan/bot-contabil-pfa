@@ -134,7 +134,13 @@
 ### 1.8 Model abonament pe etape → vezi §1 (integrare tehnică: Stripe subscriptions + gating funcționalități pe tier)
 - Fundația de gating (is_subscribed/user_tier/has_tier_at_least) construită în Felia 1 §1.7; aplicarea pe features = Felia 4b ✅ FĂCUTĂ.
 
-⚠️ **FOLLOW-UP LANSARE:** la deploy public, userii existenți/de la lansare cad pe FREE (trial_ends_at NULL — 4a pune trial doar la onboarding nou). Pt lansare = backfill trial pentru userii existenți (setare trial_ends_at retroactiv). Acum irelevant (fără useri în producție, doar owner-testing). De făcut ÎNAINTE de lansarea publică.
+⚠️ **FOLLOW-UP LANSARE:** la deploy public, userii existenți/de la lansare cad pe FREE (trial_ends_at NULL — 4a pune trial doar la onboarding nou). Pt lansare = backfill trial pentru userii existenți (setare trial_ends_at retroactiv). De făcut ÎNAINTE de lansarea publică.
+
+**REALITATEA DIN PRODUCȚIE (17 aug 2026, numărat, nu presupus).** Nota de mai sus spunea până azi „fără useri în producție, doar owner-testing". Nu mai e adevărat: **9 rânduri în `users`** — **doi reali** (owner + un tester, ambii cu CUI, ambii onboardați) și **șapte străini** care au găsit botul singuri, fără să treacă de primul pas. Al nouălea a apărut **între două reconuri, la câteva minute distanță**, deci ritmul real e ~**doi la 48 de ore**, nu ce sugerau datele de creare întinse pe patru luni.
+
+  **DE CE CONTEAZĂ:** fraza aia era **premisa** pe care s-au sprijinit mai multe decizii din august („e gratis să schimbăm fluxul", „nu apărăm pe nimeni" — vezi poarta de ingestie #142 și poarta de eligibilitate #145, unde reconul a arătat 0 afectați). Ce **rămâne** adevărat: nimeni nu e la jumătatea onboarding-ului, deci **reordonarea pașilor e încă gratuită**. Ce **nu** mai e adevărat: că produsul e neatins de străini.
+
+  **CONSECINȚĂ, cu dată de expirare:** fereastra în care reordonarea pașilor de onboarding e gratuită **se închide la primul user care rămâne blocat la jumătate**. De atunci înainte, orice mutare de pas trebuie să răspundă la „ce se întâmplă cu `onboarding_step` deja salvat?" — indicii de pas sunt un contract cu userii în curs, nu doar un detaliu de implementare.
 
 **✅ MODEL DE INTRARE — DECIS (research #9, freemium/trial).** REVERSE TRIAL: 30 zile PRO complet la înscriere (FĂRĂ card) → cade pe FREE "Radar" permanent. Durată 30 zile (sau până la următorul termen declarație — să prindă un ciclu fiscal complet + un "aha moment"; arma secretă are nevoie de date acumulate). Precedent: Toggl (reverse trial 30 zile → dublat venitul premium). Concurenți: SOLO = card obligatoriu, fără trial/free; cei mai buni din nișă (Indy 400k, Norman, Accountable) = tracking gratis + DEPUNERE/automatizare plătită ("gratis să urmărești, plătești să depui"). Facturarea = gratis peste tot în RO → NU monetiza vizualizarea, monetizează automatizare+reconciliere+depunere.
 
