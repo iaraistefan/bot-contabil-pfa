@@ -80,7 +80,10 @@ def _wizsteps_via_node(is_ridesharing, has_bolt=False):
 def test_wizsteps_nonsofer_fara_masina():
     pasi = _wizsteps_via_node(is_ridesharing=False)
     assert "masina" not in pasi                       # non-șofer → pasul mașină NU apare
-    assert pasi == ["nume", "cui", "regim", "situatie"]
+    # CUI-ul e prima întrebare (configurează tot restul); numele a trecut la final,
+    # opțional — nu configurează nimic. Reordonarea e sigură fiindcă punctul de
+    # reluare se derivă din date, nu din indexul salvat (PR #147).
+    assert pasi == ["cui", "regim", "situatie", "nume"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node indisponibil")

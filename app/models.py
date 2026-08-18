@@ -23,7 +23,16 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    # OGLINDA TELEGRAM: numele de afisare, capturat automat la primul mesaj si
+    # RESCRIS la fiecare mesaj urmator (get_or_create_by_telegram_id). Util la
+    # identificare in loguri. NU e ce a ales userul — vezi `nume_preferat`.
     name = Column(String(200), nullable=True)
+    # NUMELE ALES DE USER, la intrebarea „Cum te cheama?". Coloana proprie fiindca
+    # CONFLATAREA celor doua era chiar bug-ul: ce tastai in onboarding se scria in
+    # `name` si Telegram il suprascria la urmatorul mesaj — deci raspunsul userului
+    # traia pana scria el orice altceva botului. Fara rol fiscal (declaratiile
+    # citesc nume_declarant/prenume_declarant), pur conversational.
+    nume_preferat = Column(String(200), nullable=True)
 
     # === Profil firma ===
     firma_nume = Column(String(255), nullable=True)

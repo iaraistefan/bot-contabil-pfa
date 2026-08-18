@@ -88,6 +88,7 @@ def update_profile(
     *,
     name: Optional[str] = None,
     firma_nume: Optional[str] = None,
+    nume_preferat: Optional[str] = None,
     firma_cui: Optional[str] = None,
     firma_forma_juridica: Optional[str] = None,
     nume_declarant: Optional[str] = None,
@@ -129,6 +130,8 @@ def update_profile(
     """
     if name is not None:
         user.name = name.strip()[:200] if name else None
+    if nume_preferat is not None:
+        user.nume_preferat = nume_preferat.strip()[:200] or None
     if firma_nume is not None:
         user.firma_nume = firma_nume.strip() if firma_nume else None
     if firma_cui is not None:
@@ -407,7 +410,8 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
     return {
         "id": user.id,
         "telegram_id": user.telegram_id,
-        "name": user.name,
+        "name": user.name,                 # oglinda Telegram
+        "nume_preferat": user.nume_preferat,
         "firma_nume": user.firma_nume,
         "firma_cui": user.firma_cui,
         "firma_forma_juridica": user.firma_forma_juridica,
@@ -466,10 +470,22 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
 
 
 def get_pfa_display_name(session: Session, user_id: int) -> str:
+    """Denumirea PFA-ului pentru afisaje. NEATINSA de `nume_preferat`: aici
+    prioritatea e denumirea FIRMEI, iar numele persoanei e doar ultimul fallback."""
     user = get_by_id(session, user_id)
     if user is None:
         return "PFA"
-    return user.firma_nume or user.name or "PFA"
+    return user.firma_nume or user.nume_preferat or user.name or "PFA"
+
+
+def nume_de_adresare(profile: dict, implicit: str = "") -> str:
+    """Cum i te adresezi userului: ce a ALES, altfel oglinda Telegram, altfel implicit.
+
+    Sursa unica pentru toate afisajele conversationale — daca ar decide fiecare
+    singur, unele ar ramane pe `name` si raspunsul userului n-ar avea efect.
+    """
+    profile = profile or {}
+    return (profile.get("nume_preferat") or profile.get("name") or implicit)
 
 
 def get_pfa_cui(session: Session, user_id: int) -> str:

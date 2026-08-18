@@ -628,6 +628,21 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS eligibilitate_pfa VARCHAR(10)",
         ],
     },
+    {
+        "id": "030_nume_preferat",
+        "description": (
+            "Numele ALES de user, separat de oglinda Telegram. `users.name` e "
+            "capturat automat la primul mesaj SI rescris la fiecare mesaj urmator "
+            "(get_or_create_by_telegram_id) — deci ce tasta userul la onboarding "
+            "traia pana scria el orice altceva botului. Conflatarea celor doua era "
+            "bug-ul; `nume_preferat` e raspunsul lui, pastrat. Aditiv si idempotent; "
+            "NULL = n-a ales unul, afisajele cad pe `name` (comportament identic cu "
+            "cel de azi pentru toti userii existenti)."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS nume_preferat VARCHAR(200)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

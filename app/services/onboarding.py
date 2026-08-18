@@ -449,7 +449,7 @@ async def send_step_question(
         )
 
     elif step == STEP_CUI:
-        nume = profile.get("name") or "salut"
+        nume = users_repo.nume_de_adresare(profile, "salut")
         msg = (
             f"*🔍 Care e CUI-ul firmei tale?*\n\n"
             f"Bun, *{nume}*! Scrie-mi *CUI-ul* (codul fiscal) al "
@@ -809,7 +809,9 @@ async def handle_onboarding_text(
                 return True
             users_repo.advance_onboarding_step(
                 session, user, next_step=STEP_CUI,
-                profile_updates={"name": text[:200]},
+                # In `nume_preferat`, NU in `name`: acela e oglinda Telegram si
+                # e rescris la urmatorul mesaj, deci raspunsul s-ar pierde.
+                profile_updates={"nume_preferat": text[:200]},
             )
             session.commit()
             await context.bot.send_message(
@@ -1265,7 +1267,7 @@ async def _finalize(update, context, session, user, user_id):
     # Verificam activitatea pentru pasul urmator
     profile = users_repo.get_profile_dict(session, user_id) or {}
     activity = profile.get("activity_code") or ""
-    nume = profile.get("name") or "șofer"
+    nume = users_repo.nume_de_adresare(profile, "șofer")
 
     await query.edit_message_text(
         f"🎉 *Gata, {nume}, ești configurat!*\n\n"

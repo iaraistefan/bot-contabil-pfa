@@ -1036,7 +1036,7 @@ async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
         firma = profile.get("firma_nume") or "—"
         cui = profile.get("firma_cui") or "—"
         activitate = profile.get("activity_code") or "—"
-        nume = profile.get("name") or "—"
+        nume = users_repo.nume_de_adresare(profile, "—")
         onb = "✅ Da" if profile.get("onboarding_completed") else "❌ Nu"
 
         msg = (
