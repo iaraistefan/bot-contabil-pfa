@@ -799,7 +799,9 @@ def onboarding_status():
             platforme = None
         veh = vehicule_repo.get_default(session, user_id)
         data = {
-            "name": profile.get("name"),
+            "name": profile.get("name"),                       # oglinda Telegram
+            "nume_preferat": profile.get("nume_preferat"),      # ce a ales userul
+
             "firma_cui": profile.get("firma_cui"),
             "firma_nume": profile.get("firma_nume"),
             "firma_forma_juridica": profile.get("firma_forma_juridica"),
@@ -923,7 +925,7 @@ def _nr_doc_autorizare_sau_none(nr_reg_com, cui):
 
 # Câmpurile pe care wizardul le poate salva (allowlist — restul se ignoră).
 _ONBOARDING_SAVE_FIELDS = {
-    "name", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
+    "name", "nume_preferat", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
     # Certificat ONRC (D212): numarul vine automat din lookup; data e scrisa DOAR
@@ -1111,8 +1113,14 @@ def vehicul_create():
 # la finalizare (o pot adăuga oricând din Setări).
 def _onboarding_missing(profile, has_vehicul):
     missing = []
-    if not (profile.get("name") or "").strip():
-        missing.append("name")
+    # NUMELE NU E OBLIGATORIU. Nu configureaza nimic — pe declaratii merge
+    # nume_declarant/prenume_declarant, luat din ANAF (PR #141), nu ce tasteaza
+    # userul aici. Scoaterea e si NO-OP FUNCTIONAL: `name` e oglinda Telegram,
+    # completata automat la primul mesaj, deci conditia nu pica niciodata in
+    # practica — verificat pe productie, toti cei 9 useri au `name`. E scoasa
+    # pentru CLARITATE: un camp care nu poate lipsi n-are ce cauta intr-o lista
+    # de campuri lipsa, si cat statea acolo parea ca blocheaza finalizarea.
+    # DACA il pui la loc crezand ca repari o omisiune: nu repari, blochezi.
     if not ((profile.get("firma_cui") or "").strip() or (profile.get("firma_nume") or "").strip()):
         missing.append("firma")
     if not (profile.get("regim_impunere") or "").strip():

@@ -123,12 +123,15 @@ def test_complete_blocat_fara_masina(monkeypatch, tmp_path):
 
 def test_complete_blocat_lista_lipsa(monkeypatch, tmp_path):
     client, S, uid = _web(monkeypatch, tmp_path)
-    # nimic setat (non-șofer: fără activity_code) → lipsesc cele 3 de bază, NU mașina
+    # nimic setat (non-șofer: fără activity_code) → lipsesc cele 2 de bază, NU mașina
     r = client.post("/api/v1/onboarding/complete", json={})
     assert r.status_code == 400
     miss = set(r.get_json()["missing"])
-    assert {"name", "firma", "regim_impunere"} <= miss
+    assert {"firma", "regim_impunere"} <= miss
     assert "masina" not in miss                         # non-șofer → mașina nu blochează
+    # `name` NU mai e obligatoriu: nu configurează nimic (pe declarații merge
+    # nume_declarant din ANAF) și oricum e completat automat de Telegram.
+    assert "name" not in miss
 
 
 def test_complete_nonridesharing_fara_masina_trece(monkeypatch, tmp_path):

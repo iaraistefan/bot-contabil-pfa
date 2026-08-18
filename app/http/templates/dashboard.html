@@ -2472,11 +2472,17 @@
   function wizSteps(){
     // Mașina e specifică șoferilor (foaie parcurs / deductibilitate auto) → o cerem DOAR
     // la ridesharing, ca în Telegram. Non-șoferul (IT/medical) nu vede pasul, nu e blocat.
-    const s=["nume","cui","regim","situatie"];
+    // CUI-ul PRIMUL: e lucrul care configurează tot restul (denumire, CAEN, TVA,
+    // formă juridică, regim) — deci prima întrebare e cea care aduce cele mai multe
+    // răspunsuri. Numele a stat pe poziția 1 fără să configureze nimic; e ultimul,
+    // opțional. Mutarea e sigură fiindcă punctul de reluare se derivă din date
+    // (#147), nu din indexul salvat.
+    const s=["cui","regim","situatie"];
     if(WIZ.data.is_ridesharing){
       s.push("masina","platforme","nerezident");
       if(wizHasBolt()) s.push("apibolt");   // Uber n-are sync API → fără pas de conectare
     }
+    s.push("nume");   // ULTIMUL și OPȚIONAL: nu configurează nimic, doar adresarea
     return s;
   }
 
@@ -2757,9 +2763,9 @@
 
   // ── Pas NUME ──
   function wizNume(){
-    wizShell("Cum te numești?", `
-      <div class="hint" style="margin-bottom:var(--sp-3)">Numele tău (al titularului PFA).</div>
-      <input class="set-inp" id="wiz-nume" type="text" placeholder="ex. Ion Popescu" value="${WIZ.esc(WIZ.data.name||"")}" autocomplete="off">
+    wizShell("Cum să-ți spun?", `
+      <div class="hint" style="margin-bottom:var(--sp-3)">Doar ca să-ți vorbesc pe nume. Nu apare pe niciun document — pe declarații merge numele din registrul ANAF. Poți sări peste.</div>
+      <input class="set-inp" id="wiz-nume" type="text" placeholder="ex. Ion Popescu" value="${WIZ.esc(WIZ.data.nume_preferat||"")}" autocomplete="off">
       ${wizBtns(false)}`);
   }
   // ── Pas CUI + ANAF (momentul-cheie) ──
@@ -3059,8 +3065,13 @@
     try{
       if(step==="nume"){
         const v=(document.getElementById("wiz-nume")||{}).value||"";
-        if(!v.trim()){ wizMsg("Scrie numele.",true); return; }
-        WIZ.data.name=v.trim(); await wizSave({name:v.trim()});
+        // OPȚIONAL: gol → mergem mai departe fără să scriem. Un câmp care nu
+        // configurează nimic nu are ce bloca finalizarea.
+        if(v.trim()){
+          // în `nume_preferat`, nu în `name`: acela e oglinda Telegram, rescrisă
+          // la următorul mesaj în bot — răspunsul userului s-ar pierde.
+          WIZ.data.nume_preferat=v.trim(); await wizSave({nume_preferat:v.trim()});
+        }
       } else if(step==="cui"){
         if(!WIZ.data._cuiConfirmat){ wizMsg("Caută CUI-ul și confirmă (sau alege „Editez”).",true); return; }
         if(WIZ.data._cuiManual){
