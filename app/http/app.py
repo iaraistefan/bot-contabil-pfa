@@ -854,6 +854,11 @@ def onboarding_status():
             # calculat pe server ca regula sa aiba o singura sursa.
             "eligibilitate_pfa": profile.get("eligibilitate_pfa"),
             "eligibilitate_trece": elig.trece_poarta(profile.get("eligibilitate_pfa")),
+            # Ce lipseste, ca frontend-ul sa DERIVE punctul de reluare din date, nu
+            # din indexul salvat. Sursa e `_onboarding_missing` — aceeasi care
+            # decide si finalizarea, deci „ce e obligatoriu" ramane intr-un loc.
+            # Traducerea in pasi o face JS-ul, care detine ordinea pasilor.
+            "lipsa": _onboarding_missing(profile, has_vehicul=veh is not None),
             "data": data,
         })
     except Exception as e:
