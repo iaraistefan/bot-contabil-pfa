@@ -287,7 +287,7 @@ Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă �
 - **PRO** — *generează registrul și declarațiile, le depune SINGUR, cu îndrumarea noastră* (DUK Integrator + Java, pas cu pas).
 - **MAX** — *depunem noi în SPV.* Toată treaba.
 
-Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul „ALINIEREA GATING-ULUI cu scara de tiere", azi P7).
+Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul „ALINIEREA GATING-ULUI cu scara de tiere", azi P6).
 
 ### BLOCANTE — CORECTITUDINE FISCALĂ
 
@@ -310,21 +310,17 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 
 ### BLOCANTE — PRODUS
 
-- **P1** · 🔥 **D212 NU PRODUCE NICIUN ARTEFACT.** Fără XML, fără fișier — **omul citește numărul pe dashboard și îl tastează singur** în formularul ANAF. E **singura declarație fără ieșire**, și e **cea mai importantă pe care o depune un PFA**.
-   ⚠️ **PREMISA A EXPIRAT — de decis dacă blocantul se închide.** D212 **produce** XML din **PR #134**, iar din **PR #149** e apelat din bot și din web și se arhivează ca celelalte patru. Dintre cele trei variante de mai jos s-a materializat **(b)**, iar (a)/(c) au primit răspuns implicit: **estimarea NU se arhivează** — e o privire recalculată la fiecare afișare, iar un rând per deschidere de dashboard ar transforma arhiva în zgomot. Rămâne adevărat doar pentru **norma de venit**, unde se livrează cifre + ghid fără fișier, fiindcă norma se declară în capitolul II, cu altă structură.
-   **TREI VARIANTE DE DECIS:**
-   - **(a) arhivare la SCHIMBARE** — scrii doar când numărul diferă de ultimul arhivat; transformă zgomotul în **cronologia estimării**;
-   - **(b) îi dăm întâi un ARTEFACT** și arhivăm generarea, ca la celelalte;
-   - **(c) amândouă** — dar atunci tabelul ține **două feluri de fapt** („ce am generat" vs „ce ți-am arătat") și trebuie **să le distingă explicit**, altfel minte despre ce conține.
-- **P2** · **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
-- **P3** · **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
-- **P4** · **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
-- **P5** · **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
-- **P6** · **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
-- **P7** · **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
-- **P8** · **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
+> *Ieșit din listă:* **D212 NU PRODUCE NICIUN ARTEFACT** — cea mai importantă declarație a unui PFA era singura fără ieșire; omul citea numărul pe dashboard și-l tasta singur în formularul ANAF. Din **PR #134** are generator XML validat contra XSD + Schematron oficial, iar din **PR #149** e apelat din bot și din web și se arhivează ca celelalte patru. Dintre cele trei variante s-a materializat **(b)** — *îi dăm întâi un artefact și arhivăm generarea*; **(a)** și **(c)** au primit răspuns implicit prin decizia de a **nu arhiva estimarea**. Rămâne fără fișier doar **norma de venit**, unde se livrează cifre + ghid, fiindcă norma se declară în capitolul II, cu altă structură (vezi jurnalul).
 
-- **P9** · **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
+- **P1** · **Ingestia Uber** — research format raport → parser → `Document` cu `platforma="Uber"` (brut/comision/tva/net/cash/banca). **NU** prin `BankTxn` (ăla e format de tranzacție bancară, ar pierde exact câmpurile care contează fiscal).
+- **P2** · **Clasificatorul bancar recunoaște depunerile Uber** — azi caută literal `"bolt"` (`classify.py:157`), deci încasările Uber nu nimeresc niciun bucket de venit.
+- **P3** · **Reconciliere parametrizată per platformă** — bucket venit, sursă de adevăr, regula cash, praguri.
+- **P4** · **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
+- **P5** · **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
+- **P6** · **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
+- **P7** · **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
+
+- **P8** · **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
     - **VIZIBILITATE:** nu există nicăieri o listă de documente neconfirmate. După ce mesajul urcă în istoricul chat-ului, nimic nu mai amintește de el. **Userul pierde tăcut extracția și nu află niciodată.**
     - **DURABILITATE:** pending-ul trăiește în `context.user_data` (`confirmare.py:106`), dict din memoria procesului. **Niciun `PicklePersistence` configurat nicăieri** → moare la fiecare redeploy Render. Mesajul „confirmarea a expirat" descrie corect ce simte userul, dar **cauza reală e restartul, nu timpul**.
     - **FIȘIERE ORFANE:** `register_source_file` scrie și comite **înainte** de `process_entry` (`bot_contabil.py:2752` vs `:2786`), deci un abandon lasă un `SourceFile` cu baiții arhivați și niciun `Document` în spate. Cost de stocare + **întrebare de retenție**: păstrăm imagini pe care userul nu le-a confirmat niciodată.
@@ -456,7 +452,11 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 
 - **[august 2026] BLOCANT FISCAL ÎNCHIS: persistarea declarațiilor** (**#131** pentru D100/D301/D390/D207, **#149** pentru D212). Arhiva e **append-only**, fără cale de update, fără UNIQUE pe perioadă — două generări sunt două **fapte**, iar unicitatea ar face-o tabel de stare. Se salvează și generările **EȘUATE**: „am încercat și n-a ieșit" e informație fiscală.
   **D212 a cerut o schimbare de proiecție:** `RezultatD212Service` n-avea `cas_baza`, `cass_baza` și `venit_impozabil` — proiecția era prea îngustă **de la început**, iar `venit_impozabil` e chiar baza impozitului (venit net − CAS − CASS). Nu s-a adaptat serviciul la generator; s-a reparat ce se arunca degeaba.
-  **ESTIMAREA NU SE ARHIVEAZĂ, deliberat:** e o privire recalculată la fiecare afișare, iar un rând per deschidere de dashboard ar transforma arhiva în zgomot. `tax_engine` rămâne pe lista albă a gardianului AST **cu motivul ăsta, permanent, fără condiție de expirare** — nota veche de acolo avea una („se scoate când se închide blocantul P1") și trimitea la o variantă (a)/(b)/(c) pe care n-o repeta; condiția s-a împlinit fără să observe nimeni.
+  **ESTIMAREA NU SE ARHIVEAZĂ, deliberat:** e o privire recalculată la fiecare afișare, iar un rând per deschidere de dashboard ar transforma arhiva în zgomot. `tax_engine` rămâne pe lista albă a gardianului AST **cu motivul ăsta, permanent, fără condiție de expirare** — nota veche de acolo avea una („se scoate când se închide blocantul P1") și trimitea la o variantă (a)/(b)/(c) pe care n-o repeta; condiția s-a împlinit fără să observe nimeni. (Blocantul acela, D212 fără artefact, e **închis** de atunci — vezi intrarea următoare.)
+
+- **[august 2026] BLOCANT DE PRODUS ÎNCHIS: D212 avea numere, nu artefact** (**#134** generatorul, **#149** wiring-ul). Cea mai importantă declarație a unui PFA era **singura fără ieșire** — omul citea cifra pe dashboard și o tasta singur în formularul ANAF.
+  **Din cele trei variante s-a ales (b)** — *îi dăm întâi un artefact și arhivăm generarea, ca la celelalte patru*. **(a)** („arhivare la schimbare") și **(c)** („amândouă") au primit răspuns implicit: **estimarea rămâne nearhivată**, fiindcă e o privire recalculată la fiecare afișare, nu un eveniment. Cu (a) sau (c), tabelul ar fi ținut **două feluri de fapt** — „ce am generat" și „ce ți-am arătat" — și ar fi trebuit să le distingă explicit, altfel ar fi mințit despre ce conține. Alegând (b), distincția nu mai trebuie făcută: **în arhivă intră doar faptele de generare**.
+  **Rămâne fără fișier doar norma de venit** — se livrează cifre + ghid, cu explicația că norma se declară în capitolul II, cu altă structură; un fișier pe structura greșită ar fi respins de ANAF sau, mai rău, acceptat și greșit.
 
 ---
 
