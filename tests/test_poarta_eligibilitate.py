@@ -100,6 +100,10 @@ def _enterwizard_via_node(*, eligibilitate_pfa, trece, current_step):
       const document={body:{classList:{add(){},remove(){}}},getElementById:()=>null};
       function wizSteps(){ return ["nume","cui","regim","situatie"]; }
       function wizRender(){ ECRAN="wizard"; }
+      function wizDone(){ ECRAN="wizard"; }
+      // punctul de reluare e masurat in test_reluare_derivata.py; aici conteaza
+      // DOAR daca poarta se interpune inaintea lui, deci il stubuim la „pasul 0"
+      function wizPunctDeReluare(){ return 0; }
       function wizPoarta(){ ECRAN = WIZ.data.eligibilitate_pfa==="NU" ? "blocat" : "poarta"; }
     """
     script = (prelude + m.group(0)

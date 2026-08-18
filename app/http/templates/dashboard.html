@@ -2500,8 +2500,44 @@
     if(!(status && status.eligibilitate_trece)){
       return wizPoarta();
     }
-    WIZ.i = Math.min(Math.max((status && status.current_step) || 0, 0), WIZ.steps.length-1);
+    // ── PUNCTUL DE RELUARE, DERIVAT DIN DATE ──
+    // Nu din `current_step`: un index salvat e un contract cu ORDINEA de atunci,
+    // iar prima reordonare a listei l-ar face să însemne alt pas. Doi useri reali
+    // stăteau la `onboarding_step = 1` când s-a scris asta — cu CUI-ul mutat pe
+    // prima poziție, ei ar fi aterizat pe „regim" și ar fi sărit CUI-ul complet.
+    // Aici derivăm din CE LIPSEȘTE, iar `current_step` rămâne doar PLAFON: nu-l
+    // trimitem înaintea locului unde a ajuns, ca să nu sară peste o confirmare
+    // pe care n-a văzut-o.
+    const derivat = wizPunctDeReluare(status);
+    const plafon = Math.min(Math.max((status && status.current_step) || 0, 0), WIZ.steps.length-1);
+    if(derivat === null){
+      // CAZ-LIMITĂ: nu lipsește nimic obligatoriu, dar onboarding_completed e încă
+      // false — a completat tot și n-a apăsat butonul final (a închis aplicația pe
+      // ecranul de rezumat). NU-l punem pe un index arbitrar și nu-l plimbăm prin
+      // pași pe care i-a trecut deja: îi arătăm exact ecranul unde a rămas, în care
+      // singurul lucru care lipsește e chiar apăsarea care lipsește.
+      return wizDone();
+    }
+    WIZ.i = Math.min(derivat, plafon);
     wizRender();
+  }
+  // Traducere „câmp obligatoriu lipsă" → pas de wizard. SINGURA copie a hărții:
+  // o folosesc și reluarea (enterWizard) și eroarea de finalizare (wizComplete).
+  const WIZ_STEP_PT_LIPSA={name:"nume",firma:"cui",regim_impunere:"regim",masina:"masina"};
+  function wizPunctDeReluare(status){
+    // Lista câmpurilor lipsă vine de la SERVER (_onboarding_missing) — o singură
+    // sursă pentru „ce e obligatoriu". Aici traducem doar în indici, pe lista de
+    // pași a acestui wizard, și luăm pasul CEL MAI DEVREME dintre cele lipsă.
+    // De aceea reordonarea listei nu schimbă unde aterizează cineva: se caută
+    // după NUMELE pasului, nu după poziția lui.
+    const lipsa=(status && status.lipsa)||[];
+    let idx=null;
+    for(const k of lipsa){
+      const nume=WIZ_STEP_PT_LIPSA[k]; if(!nume) continue;
+      const j=WIZ.steps.indexOf(nume); if(j<0) continue;      // pas inexistent la profilul ăsta
+      if(idx===null || j<idx) idx=j;
+    }
+    return idx;                                              // null = nu lipsește nimic
   }
   window.enterWizard=enterWizard;
 
@@ -2697,7 +2733,7 @@
       // edge: lipsește un câmp obligatoriu → indică pasul lipsă + buton „mergi la pas"
       const lbl={name:"numele",firma:"firma (CUI)",regim_impunere:"regimul de impunere",masina:"mașina"};
       const miss=(d.missing||[]).map(k=>lbl[k]||k).join(", ");
-      const firstStep={name:"nume",firma:"cui",regim_impunere:"regim",masina:"masina"}[(d.missing||[])[0]]||"nume";
+      const firstStep=WIZ_STEP_PT_LIPSA[(d.missing||[])[0]]||WIZ.steps[0];
       if(msg){ msg.innerHTML=`Mai lipsește: <b>${miss||"un câmp obligatoriu"}</b>. <a href="#" onclick="wizGoto('${firstStep}');return false" style="color:var(--emerald)">Mergi la pas →</a>`; }
     }catch(e){ if(msg) msg.textContent="Conexiune pierdută. Încearcă din nou."; }
     finally{ if(btn) btn.style.opacity="1"; }
