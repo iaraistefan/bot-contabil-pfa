@@ -237,7 +237,11 @@ def genereaza_si_arhiveaza_d207(user_id, an, firma, by_brand, profile, *, d_rec=
 def genereaza_si_arhiveaza_d212(user_id, an, venit_brut_anual, cheltuieli_anuale,
                                 salariu_minim=4050, **kw):
     """
-    D212 (anuala) — calcul + ghid, FARA XML. `xml` si `nume_fisier_xml` raman NULL.
+    D212 (anuala) — calcul + ghid, si XML daca apelantul da `identitate`+`activitate`.
+
+    Fara ele (calea de estimare) `xml` ramane NULL, ca inainte. Cu ele, XML-ul se
+    genereaza in serviciu si se arhiveaza aici — o singura cale spre generator,
+    ca la celelalte patru.
 
     Inputurile sunt exact ce face reproductibil calculul: regim, norma, pensionar,
     asigurat_salariat, datele de activitate si salariul minim al anului — adica tocmai
@@ -247,12 +251,16 @@ def genereaza_si_arhiveaza_d212(user_id, an, venit_brut_anual, cheltuieli_anuale
         an, venit_brut_anual, cheltuieli_anuale, salariu_minim, **kw
     )
 
+    # `identitate`/`activitate` sunt dataclass-uri (nu JSON) SI contin date
+    # personale (CNP). Nu intra in `inputuri`: reproductibilitatea calculului nu
+    # depinde de ele — sunt datele de pe formular, nu cifrele.
     inputuri = {
         "an": an,
         "venit_brut_anual": _val(venit_brut_anual),
         "cheltuieli_anuale": _val(cheltuieli_anuale),
         "salariu_minim": salariu_minim,
-        **{k: _val(v) for k, v in kw.items()},
+        **{k: _val(v) for k, v in kw.items()
+           if k not in ("identitate", "activitate")},
     }
     rezultat = {
         "venit_brut": _val(rez.venit_brut), "cheltuieli": _val(rez.cheltuieli),
@@ -261,14 +269,19 @@ def genereaza_si_arhiveaza_d212(user_id, an, venit_brut_anual, cheltuieli_anuale
         "bonificatie": _val(rez.bonificatie),
         "total_cu_bonificatie": _val(rez.total_cu_bonificatie),
         "regim": rez.regim,
+        "cas_baza": _val(rez.cas_baza), "cass_baza": _val(rez.cass_baza),
+        "venit_impozabil": _val(rez.venit_impozabil),
         "avertismente": _val(list(rez.avertismente or [])),
         "ghid_plain": rez.ghid_plain,
+        "motiv_fara_xml": rez.motiv_fara_xml,
     }
     _arhiveaza(
         user_id=user_id, tip="D212", an=an, luna=None,
         d_rec=int(kw.get("d_rec", 0) or 0),
         inputuri=inputuri, rezultat=rezultat,
-        xml=None, nume_fisier_xml=None, generat=True, motiv_negenerat=None,
+        xml=rez.xml, nume_fisier_xml=rez.nume_fisier_xml,
+        generat=rez.generat, motiv_negenerat=(
+            "norma_venit" if (rez.motiv_fara_xml and not rez.xml) else None),
     )
     return rez
 

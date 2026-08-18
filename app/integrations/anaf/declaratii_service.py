@@ -730,10 +730,42 @@ class RezultatD212Service:
     total_plata: float
     bonificatie: float
     total_cu_bonificatie: float
-    ghid_telegram: str
-    ghid_plain: str
+    # Cele trei de mai jos NU sunt „adaptare la generator": proiectia era prea
+    # INGUSTA. `venit_impozabil` e chiar baza impozitului (venit net − CAS − CASS),
+    # adica cifra pe care userul o cauta cand vrea sa inteleaga de unde vine
+    # impozitul; `cas_baza`/`cass_baza` sunt bazele de contributii, singurele care
+    # explica de ce CAS-ul e cat e. Le calculam de la inceput in d212_calc si le
+    # aruncam la iesire — asta era greseala, nu lipsa lor din generator.
+    cas_baza: float = 0.0
+    cass_baza: float = 0.0
+    venit_impozabil: float = 0.0
+
+    ghid_telegram: str = ""
+    ghid_plain: str = ""
     avertismente: List[str] = field(default_factory=list)
     regim: str = "SISTEM_REAL"  # SISTEM_REAL / NORMA_VENIT (pentru afisare)
+
+    # XML-ul D212, cand a fost cerut SI se poate genera. None = nu s-a cerut sau
+    # nu se poate — `motiv_fara_xml` spune care din doua, in cuvintele userului.
+    xml: Optional[str] = None
+    nume_fisier_xml: Optional[str] = None
+    motiv_fara_xml: Optional[str] = None
+
+    @property
+    def generat(self) -> bool:
+        """Oglindeste `RezultatDeclaratie.generat` (D100/D301/D390/D207)."""
+        return bool(self.xml)
+
+
+# Ce vede userul pe NORMA DE VENIT. NU un refuz sec: primeste cifrele si ghidul,
+# ii spunem de ce nu vine si un fisier, si ce face in schimb. Norma se declara in
+# alt capitol al formularului, cu alta structura — a o imbraca in cap. I ar
+# insemna sa trimitem la ANAF o declaratie care arata a sistem real.
+MESAJ_D212_NORMA = """Pe *normă de venit* îți dau cifrele și ghidul, dar nu și fișierul XML.
+
+Motivul: norma se declară în *capitolul II* al Declarației Unice, care are altă structură decât cel pentru sistemul real. Un fișier generat pe structura greșită ar fi respins de ANAF — sau, mai rău, acceptat și greșit.
+
+Ce faci în schimb: deschide Declarația Unică în SPV și *tastează* cifrele de mai jos. Sunt exact aceleași pe care le-ar fi purtat fișierul — le ai aici, calculate, nu trebuie să le refaci."""
 
 
 def genereaza_d212(
@@ -752,6 +784,9 @@ def genereaza_d212(
     data_adaugare=None,
     venit_brut_post: float = 0.0,
     cheltuieli_post: float = 0.0,
+    identitate=None,
+    activitate=None,
+    d_rec: int = 0,
 ) -> RezultatD212Service:
     """
     Calculeaza Declaratia Unica (D212) pe baza venitului si cheltuielilor anuale.
@@ -782,17 +817,82 @@ def genereaza_d212(
         venit_brut_post=venit_brut_post,
         cheltuieli_post=cheltuieli_post,
     )
+    # XML-ul se produce DOAR daca apelantul a cerut-o (a dat identitate+activitate).
+    # Calea de estimare (tax_engine, dashboard) nu-l cere → nimic nu se schimba
+    # pentru ea. Ordinea conteaza: verificam regimul INAINTE de generator, ca
+    # norma sa primeasca o explicatie, nu o exceptie.
+    xml = nume_fisier = motiv = None
+    ghid_tg = d212.genereaza_ghid_d212(r, plain=False)
+    ghid_pl = d212.genereaza_ghid_d212(r, plain=True)
+    if identitate is not None and activitate is not None:
+        if r.regim != "SISTEM_REAL":
+            motiv = MESAJ_D212_NORMA
+        else:
+            from app.integrations.anaf import d212_generator as _gen
+            # Orice ValueError de aici (an neacoperit, CNP, certificat lipsa) URCA
+            # la apelant: sunt mesaje scrise pentru user, nu erori tehnice.
+            xml = _gen.genereaza_d212(an, identitate, activitate, r, d_rec=d_rec)
+            nume_fisier = f"D212_{an}.xml"
+            # Ghidul care insoteste FISIERUL e cel scris pentru el (pasul obligatoriu
+            # al bazei CAS + verificarea de la final), nu ghidul de estimare.
+            ghid_tg = _gen.genereaza_ghid_d212(an, r, plain=False)
+            ghid_pl = _gen.genereaza_ghid_d212(an, r, plain=True)
+
     return RezultatD212Service(
         an=r.an,
         venit_brut=r.venit_brut, cheltuieli=r.cheltuieli, venit_net=r.venit_net,
         cas=r.cas, cass=r.cass, impozit=r.impozit,
+        cas_baza=r.cas_baza, cass_baza=r.cass_baza, venit_impozabil=r.venit_impozabil,
         total_plata=r.total_plata, bonificatie=r.bonificatie,
         total_cu_bonificatie=r.total_cu_bonificatie,
-        ghid_telegram=d212.genereaza_ghid_d212(r, plain=False),
-        ghid_plain=d212.genereaza_ghid_d212(r, plain=True),
+        ghid_telegram=ghid_tg,
+        ghid_plain=ghid_pl,
         avertismente=r.avertismente,
         regim=r.regim,
+        xml=xml, nume_fisier_xml=nume_fisier, motiv_fara_xml=motiv,
     )
+
+
+def identitate_d212_din_profil(profile: dict):
+    """Profil → IdentitateD212. Numele vin din nume_declarant/prenume_declarant
+    (capturate din ANAF, PR #141), NU din `name` sau din firma_nume."""
+    from app.integrations.anaf.d212_generator import IdentitateD212
+    profile = profile or {}
+    adresa = profile.get("adresa") or " ".join(
+        p for p in [profile.get("judet") or "", profile.get("localitate") or ""] if p
+    )
+    return IdentitateD212(
+        cnp=profile.get("cnp") or "",
+        nume=profile.get("nume_declarant") or "",
+        prenume=profile.get("prenume_declarant") or "",
+        sediu=adresa or "[completeaza adresa]",
+        email=profile.get("email") or "",
+        telefon=profile.get("telefon") or "",
+        iban=profile.get("iban") or "",
+    )
+
+
+def activitate_d212_din_profil(profile: dict):
+    """Profil → ActivitateD212. Certificatul ONRC vine din nr_doc_autorizare /
+    data_doc_autorizare (PR #138). Data lipsa → generatorul refuza cu mesajul lui."""
+    from app.integrations.anaf.d212_generator import ActivitateD212
+    from app.domain.doc_autorizare import parseaza_data_anaf
+    profile = profile or {}
+    caen = (profile.get("caen_principal") or "").strip()
+    return ActivitateD212(
+        caen=caen,
+        den_caen=DEN_CAEN.get(caen, ""),
+        nr_doc_autorizare=profile.get("nr_doc_autorizare") or "",
+        data_doc_autorizare=parseaza_data_anaf(profile.get("data_doc_autorizare")),
+    )
+
+
+# Denumirile CAEN de care avem nevoie azi. `den_caen` e OPTIONAL in XSD
+# (_attr_opt), deci un cod necunoscut da sir gol, nu o denumire inventata.
+DEN_CAEN = {
+    "4933": "Transporturi cu taxiuri",
+    "4932": "Transporturi cu taxiuri",
+}
 
 
 # ============================================================

@@ -6,8 +6,9 @@ F1 pas 2 — WIRING: cele patru call-site-uri cu artefact scriu in arhiva.
   app/http/app.py  /api/v1/declaratie/...    (D100/D301/D390)
   app/http/app.py  /api/v1/d207/...          (D207)
 
-D212 NU e legat aici — n-are artefact, deci n-are moment de generare (vezi
-blocantul de PRODUS „D212 nu produce niciun artefact").
+D212 E legat aici de la wiring: genereaza XML prin declaratii_arhiva, ca
+celelalte patru. In afara arhivei ramane doar ESTIMAREA din tax_engine — o
+privire recalculata la fiecare afisare, nu un eveniment de generare.
 
 CE APARA TESTELE
   1. fiecare din cele patru produce un RAND;
@@ -257,11 +258,20 @@ _APELANTI_PERMISI = {
     # Wrapper-ul insusi: singura cale legitima catre generator in productie.
     "app/services/declaratii_arhiva.py":
         "wrapper-ul de arhiva — asta E calea prin care trec ceilalti",
-    # D212 nu produce artefact, deci n-are moment de generare si NU e legat la
-    # arhiva (vezi blocantul de PRODUS „D212 nu produce niciun artefact").
-    # Cand se decide varianta (a)/(b)/(c), intrarea asta trebuie SA DISPARA.
+    # tax_engine cheama generatorul pentru ESTIMAREA de pe dashboard — o privire
+    # recalculata la fiecare afisare, nu un eveniment de generare. Arhiva e
+    # APPEND-ONLY: daca ar trece pe acolo, fiecare deschidere de dashboard ar
+    # scrie un rand si istoricul ar deveni zgomot.
+    #
+    # Nota veche de aici spunea ca D212 nu produce artefact si trimitea la o
+    # varianta (a)/(b)/(c) care nu era scrisa NICAIERI. Ambele au picat: D212
+    # produce XML din PR #134, iar generarea reala trece prin declaratii_arhiva
+    # din PR-ul de wiring. Un pointer catre o decizie nescrisa e inutil — deci
+    # intrarea RAMANE, dar cu motivul ei adevarat si PERMANENT, repetat aici, nu
+    # cu o conditie de expirare care s-a implinit fara sa observe nimeni.
     "app/services/tax_engine.py":
-        "D212 — nelegat inca la arhiva; se scoate cand se inchide blocantul P1",
+        "estimarea de pe dashboard — o privire, nu un eveniment de generare; "
+        "arhiva e append-only si n-are ce inregistra la o simpla afisare",
 }
 
 

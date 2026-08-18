@@ -44,6 +44,9 @@ _SEMNATURI_CUNOSCUTE = {
         "data_inceput", "data_sfarsit",
         "are_activitate_neeligibila", "data_adaugare",
         "venit_brut_post", "cheltuieli_post",
+        # Wiring-ul XML: identitatea persoanei + activitatea declarata. Optionale —
+        # fara ele functia ramane exact calea de estimare de dinainte.
+        "identitate", "activitate", "d_rec",
     },
 }
 
@@ -94,8 +97,10 @@ def test_datele_bancare_si_de_contact_nu_se_arhiveaza():
 
 def test_d212_nu_primeste_firma():
     """
-    D212 nu produce fisier, deci n-are nevoie de date de identificare. Daca ajunge
-    sa primeasca `firma`, arhiva trebuie sa decida explicit ce serializeaza.
+    D212 produce fisier (din PR #134), dar contribuabilul lui e o PERSOANA, nu o
+    firma: primeste `identitate` (CNP, nume, prenume) si `activitate` (CAEN +
+    certificat ONRC), NU `firma` ca celelalte. Distinctia e portanta — `firma`
+    aici ar insemna ca cineva a copiat tiparul D390 fara sa se uite la formular.
     """
     assert "firma" not in inspect.signature(decl.genereaza_d212).parameters
     assert "firma" in inspect.signature(decl.genereaza).parameters

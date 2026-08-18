@@ -50,6 +50,8 @@ def _extract_callbacks():
 # +ghid|view / ghid|list / ghid|all = ghid de obligații navigabil + toggle personalizat/toate (Ghid 2+3);
 # +vehicul|regim|{r} / regim|{REGIM_UTILIZARE_MIXT} / regimok / ef|regim = gardian UI regim utilizare
 #   (MIXT/EXCLUSIV) pe vehicul, editare + gardian confirmare uz exclusiv;
+# +d212|{year - 1} = Declaratia Unica ANUALA (wiring D212). Anul e cel al
+#   VENITURILOR, adica anul incheiat — de aici `- 1`. Buton NOU, `missing` gol;
 # +confirm|capex|{idx}|da / |nu = gardian achiziție vehicul — peste pragul de sumă botul
 #   ÎNTREABĂ ce e documentul în loc să-l clasifice automat. Butoane NOI, nu redenumiri:
 #   niciun callback_data existent nu s-a schimbat (`missing` a rămas gol);
@@ -69,6 +71,7 @@ EXPECTED_CALLBACKS = {
     "banktax|cancel", "banktax|confirm", "banktax|start",
     "boltsync|cancel", "boltsync|confirm|{year}|{month}",
     "coduri|del_cnp", "coduri|del_tva", "coduri|set_certdata", "coduri|set_cnp",
+    "d212|{year - 1}",
     "coduri|set_tva",
     "coduri|skip",
     "confirm|back", "confirm|cancel", "confirm|capex|{idx}|da", "confirm|capex|{idx}|nu",
