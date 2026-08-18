@@ -315,7 +315,7 @@ def test_anul_se_citeste_din_regula_anaf_nu_e_hardcodat():
 
 def test_refuza_anul_pe_care_schemele_nu_l_pot_valida():
     """Nu promitem un domeniu pe care nu-l putem onora."""
-    with pytest.raises(ValueError, match="valideaza doar declaratia"):
+    with pytest.raises(ValueError, match="doar pentru veniturile din"):
         d212.genereaza_d212(an_venituri=2026, identitate=_identitate(),
                             activitate=_activitate(), rezultat=_rezultat_real())
 

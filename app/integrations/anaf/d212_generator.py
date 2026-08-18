@@ -332,9 +332,11 @@ def genereaza_d212(
     an_r = an_venituri + 1
     if an_r != an_r_acoperit:
         raise ValueError(
-            f"Pachetul de scheme din scheme/d212/ valideaza doar declaratia cu "
-            f"an_r={an_r_acoperit}, adica veniturile din {an_r_acoperit - 1}. "
-            f"Ai cerut veniturile din {an_venituri} (ar da an_r={an_r}). "
+            f"Pot genera fisierul D212 doar pentru veniturile din "
+            f"{an_r_acoperit - 1} — pachetul de scheme oficiale ANAF pe care il "
+            f"avem vendorizat (scheme/d212/) valideaza exclusiv declaratia cu "
+            f"an_r={an_r_acoperit}. Ai cerut veniturile din {an_venituri} "
+            f"(ar da an_r={an_r}), pentru care n-am schema. "
             f"Pentru alt an descarca pachetul corespunzator de la ANAF "
             f"(www.anaf.ro/declaratii/doc/d212.zip) — vezi PROVENIENTA.md."
         )

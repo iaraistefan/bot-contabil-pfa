@@ -1636,6 +1636,103 @@ def genereaza_declaratie_d207(year: int):
     })
 
 
+@flask_app.route("/api/v1/declaratie-d212/<int:year>")
+def genereaza_declaratie_d212(year: int):
+    """
+    D212 — Declaratia Unica, ANUALA (fara luna). Oglinda rutei D207.
+
+    `year` = anul VENITURILOR (declari anul incheiat), nu anul depunerii.
+
+    Query params optionale:
+      - format=ghid (default) -> JSON cu ghid + cifre
+      - format=xml            -> descarca fisierul XML
+
+    Pe NORMA DE VENIT nu se livreaza fisier: norma se declara in capitolul II, cu
+    alta structura. Raspunsul contine atunci cifrele + explicatia (`motiv_fara_xml`),
+    NU o eroare — userul are ce tasta in formular.
+    """
+    if not (2018 <= year <= 2099):
+        return jsonify({"error": "invalid year"}), 400
+
+    user_id, err = _require_user()
+    if err:
+        return err
+    # Felia 4b: D212 = depunere → PRO, ca D207/D100.
+    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
+    if err:
+        return err
+
+    fmt = (request.args.get("format") or "ghid").lower()
+
+    from app.integrations.anaf import declaratii_service as decl
+    from app.services import declaratii_arhiva as arhiva
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        args, warn = tax_engine.d212_inputs(session, user_id=user_id, an=year)
+    except Exception as e:
+        logger.error(f"API D212 profil error {year} user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    try:
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza.
+        rez = arhiva.genereaza_si_arhiveaza_d212(
+            user_id,
+            identitate=decl.identitate_d212_din_profil(profile),
+            activitate=decl.activitate_d212_din_profil(profile),
+            **args,
+        )
+    except ValueError as e:
+        # Certificat ONRC fara data, CNP lipsa, an fara scheme: mesaje scrise
+        # pentru USER in generator → 400 cu textul lor, NU 500.
+        return jsonify({"error": "d212_indisponibil", "message": str(e)}), 400
+    except Exception as e:
+        logger.error(f"API D212 gen error {year} user={user_id}: {e}")
+        return jsonify({"error": "internal error", "message": str(e)}), 500
+
+    avertismente = ([warn] if warn else []) + list(rez.avertismente or [])
+
+    if fmt == "xml":
+        if not rez.generat:
+            # Norma de venit: nu e eroare de sistem, e o limita explicata.
+            return jsonify({
+                "error": "fara_xml", "motiv": rez.motiv_fara_xml,
+                "regim": rez.regim,
+            }), 400
+        return Response(
+            rez.xml,
+            mimetype="application/xml; charset=utf-8",
+            headers={"Content-Disposition":
+                     f"attachment; filename={rez.nume_fisier_xml}"},
+        )
+
+    return jsonify({
+        "tip": "D212",
+        "year": rez.an,
+        "ghid": rez.ghid_telegram,
+        "ghid_plain": rez.ghid_plain,
+        "regim": rez.regim,
+        "venit_brut": rez.venit_brut,
+        "cheltuieli": rez.cheltuieli,
+        "venit_net": rez.venit_net,
+        "cas": rez.cas, "cas_baza": rez.cas_baza,
+        "cass": rez.cass, "cass_baza": rez.cass_baza,
+        "venit_impozabil": rez.venit_impozabil,
+        "impozit": rez.impozit,
+        "total_plata": rez.total_plata,
+        "bonificatie": rez.bonificatie,
+        "total_cu_bonificatie": rez.total_cu_bonificatie,
+        "avertismente": avertismente,
+        "are_xml": rez.generat,
+        "motiv_fara_xml": rez.motiv_fara_xml,
+        "xml_url": (f"/api/v1/declaratie-d212/{year}?format=xml" if rez.generat else None),
+        "nume_fisier_xml": rez.nume_fisier_xml,
+    })
+
+
 @flask_app.route("/api/v1/setari", methods=["GET"])
 def setari_get():
     """Citeste setarile editabile de user (date bancare pentru declaratii)."""

@@ -570,9 +570,9 @@ def _d212_fingerprint(session: Session, user_id: int, an: int):
             user_ts, veh_ts)
 
 
-def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
+def _d212_args_si_avertisment(session: Session, *, user_id: int, an: int):
     """
-    Estimare D212 anuala (impozit + CAS + CASS) pe baza venitului REALIZAT
+    Culege inputurile D212 anuale (impozit + CAS + CASS) pe baza venitului REALIZAT
     pana acum in anul `an` (suma lunilor cu date — lunile fara date dau 0).
 
     SURSA UNICA pentru numarul D212: exact aceeasi cale ca declaratia reala
@@ -659,13 +659,38 @@ def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
                 venit_brut_post += inc
                 cheltuieli_post += exp
 
-    res = _decl.genereaza_d212(
-        an, round(venit_brut, 2), round(cheltuieli, 2),
+    args = dict(
+        an=an,
+        venit_brut_anual=round(venit_brut, 2),
+        cheltuieli_anuale=round(cheltuieli, 2),
         regim=regim, norma_anuala=norma,
         pensionar=pensionar, asigurat_salariat=asigurat_salariat,
         data_inceput=data_inceput, data_sfarsit=data_sfarsit,
         are_activitate_neeligibila=are_neeligibila, data_adaugare=data_adaugare,
         venit_brut_post=round(venit_brut_post, 2), cheltuieli_post=round(cheltuieli_post, 2),
+    )
+    return args, warn_tranzitie
+
+
+def d212_inputs(session: Session, *, user_id: int, an: int):
+    """Inputurile D212 pentru anul `an` — SURSA UNICA pentru cine vrea sa GENEREZE.
+
+    Estimarea (compute_d212_anual) si generarea reala (declaratii_arhiva) pleaca
+    de la aceleasi cifre si acelasi regim. Fara asta, drumul de generare si-ar
+    reciti singur profilul si cele doua ar putea diverge tacut.
+    """
+    return _d212_args_si_avertisment(session, user_id=user_id, an=an)
+
+
+def _compute_d212_anual_uncached(session: Session, *, user_id: int, an: int):
+    """Estimarea D212 (vezi wrapper-ul cu cache). NU arhiveaza: e o privire, nu un
+    eveniment de generare — de aceea cheama serviciul direct, nu prin arhiva."""
+    from app.integrations.anaf import declaratii_service as _decl
+    args, warn_tranzitie = _d212_args_si_avertisment(session, user_id=user_id, an=an)
+    res = _decl.genereaza_d212(
+        args["an"], args["venit_brut_anual"], args["cheltuieli_anuale"],
+        **{k: v for k, v in args.items()
+           if k not in ("an", "venit_brut_anual", "cheltuieli_anuale")},
     )
     if warn_tranzitie:
         res.avertismente = [warn_tranzitie] + list(res.avertismente or [])

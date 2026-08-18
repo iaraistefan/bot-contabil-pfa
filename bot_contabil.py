@@ -1429,6 +1429,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await execute_fisa_d207(query, context, user_id, year)
             return
 
+        # Declaratia Unica D212 (ANUALA, fara luna) — oglinda lui D207
+        if namespace == "d212":
+            year = int(parts[1])
+            await execute_declaratie_d212(query, context, user_id, year)
+            return
+
         # Buton-poartă: ecran TVA & Declarații (banner + fisele D301/D390/D100)
         if namespace == "tvadecl":
             year = int(parts[1])
@@ -1827,6 +1833,11 @@ async def execute_tva_declaratii(query, context, user_id, year, month):
         # exista comision intracom; foloseste anul curent (fara luna).
         buttons.append([InlineKeyboardButton(
             f"📄 Fișă D207 (anual nerezidenți) — {year}", callback_data=f"d207|{year}")])
+        # D212 — Declarația Unică, ANUALĂ, pentru veniturile anului ÎNCHEIAT.
+        # Anul e `year - 1` fiindcă declari ce ai realizat, nu ce realizezi acum.
+        buttons.append([InlineKeyboardButton(
+            f"🧮 Declarația Unică D212 — venituri {year - 1}",
+            callback_data=f"d212|{year - 1}")])
 
         data = {
             "title": "De depus",
@@ -2056,6 +2067,85 @@ async def execute_fisa_d207(query, context, user_id, year):
         )
     except Exception as e:
         logger.error(f"execute_fisa_d207 xml error: {e}")
+
+
+async def execute_declaratie_d212(query, context, user_id, year):
+    """
+    Declaratia Unica D212 (ANUALA) — cifre + ghid + XML.
+
+    Oglinda lui execute_fisa_d207 (anual, fara luna). Doua diferente, ambele
+    din formular, nu din capriciu: contribuabilul e o PERSOANA (identitate cu
+    CNP, nu date de firma), iar pe NORMA DE VENIT nu se livreaza fisier — se
+    livreaza cifrele si explicatia (norma se declara in alt capitol).
+    """
+    chat_id = query.message.chat_id
+    ok, text, markup = gating.require_tier_bot(
+        user_id, gating.feature_tier("declaratii"), feature="declaratii"
+    )
+    if not ok:
+        await context.bot.send_message(chat_id=chat_id, text=text,
+                                       parse_mode="Markdown", reply_markup=markup)
+        return
+
+    session = get_session()
+    try:
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+        args, warn = tax_engine.d212_inputs(session, user_id=user_id, an=year)
+    except Exception as e:
+        logger.error(f"execute_declaratie_d212 compute error: {e}")
+        await context.bot.send_message(chat_id=chat_id,
+                                       text="⚠️ N-am putut calcula D212. Încearcă din nou.")
+        return
+    finally:
+        session.close()
+
+    try:
+        # F1 pas 2 — genereaza → ARHIVEAZA → livreaza.
+        rez = arhiva.genereaza_si_arhiveaza_d212(
+            user_id,
+            identitate=decl_nou.identitate_d212_din_profil(profile),
+            activitate=decl_nou.activitate_d212_din_profil(profile),
+            **args,
+        )
+    except ValueError as e:
+        # Certificat ONRC fara data, CNP lipsa, an neacoperit de scheme: mesaje
+        # scrise pentru USER in generator — le livram ca atare, nu ca eroare.
+        await context.bot.send_message(chat_id=chat_id, text=f"ℹ️ {e}")
+        return
+    except Exception as e:
+        logger.error(f"execute_declaratie_d212 gen error: {e}")
+        await context.bot.send_message(chat_id=chat_id,
+                                       text="⚠️ N-am putut genera D212. Încearcă din nou.")
+        return
+
+    # 1. Ghidul (cel scris pentru fisier daca exista fisier, altfel cel de calcul)
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=rez.ghid_telegram,
+                                       parse_mode="Markdown")
+    except Exception:
+        await context.bot.send_message(chat_id=chat_id, text=rez.ghid_plain)
+
+    # 2. Avertismente (inclusiv tranzitia normă→real, daca e cazul)
+    warns = [f"ℹ️ {a}" for a in ([warn] if warn else []) + list(rez.avertismente or [])]
+    if warns:
+        await context.bot.send_message(chat_id=chat_id, text="\n\n".join(warns))
+
+    # 3. XML — sau explicatia pentru care nu vine niciunul (normă de venit)
+    if not rez.generat:
+        if rez.motiv_fara_xml:
+            await context.bot.send_message(chat_id=chat_id, text=rez.motiv_fara_xml,
+                                           parse_mode="Markdown")
+        return
+    try:
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=_io.BytesIO(rez.xml.encode("utf-8")),
+            filename=rez.nume_fisier_xml,
+            caption=f"🧮 *D212 — venituri {year}* (Declarația Unică, XML de importat în formularul ANAF)",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"execute_declaratie_d212 xml error: {e}")
 
 
 async def execute_registru(query, context, user_id, year, month=None):
