@@ -122,7 +122,6 @@ class DefinitieObligatie:
     conditie_extra: Optional[str] = None        # text descriptiv
 
     urgenta_default: UrgentaObligatie = UrgentaObligatie.INALTA
-    bonus_info: Optional[str] = None
     penalty_info: Optional[str] = None
     portal_anaf: str = "https://anaf.ro"
     nomenclator_anaf: Optional[str] = None      # ex: "634" pt D100 nerezidenți
@@ -1041,9 +1040,6 @@ def _format_obligatie_telegram(o: ObligatieCalculate) -> List[str]:
         lines.append(f"   🏦 IBAN: `{o.iban_cont.iban}`")
         lines.append(f"   📋 Cod buget: `{o.iban_cont.cod_buget}`")
 
-    if o.definitie.bonus_info:
-        lines.append(f"   💡 {o.definitie.bonus_info}")
-
     lines.append("")
     return lines
 
@@ -1418,8 +1414,6 @@ def format_fiscal_message(
             )
             lines.append(f"{icon} *{a['code']}* — {a['name']} {days_str}")
             lines.append(f"   📅 Termen: `{a['deadline']}`")
-            if a.get("bonus_tip"):
-                lines.append(f"   💡 {a['bonus_tip']}")
             lines.append("")
 
     lines += [

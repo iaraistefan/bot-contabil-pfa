@@ -492,11 +492,6 @@ def build_payment_detail_message(
             f"`~{majorari:.2f} RON` (0.02%/zi)"
         )
 
-    # Bonus info
-    if definitie.bonus_info:
-        lines.append("")
-        lines.append(f"💡 _{definitie.bonus_info}_")
-
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     # „Copiază IBAN-ul" DOAR când chiar am afișat un IBAN tipăribil. Pentru contul unic

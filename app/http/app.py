@@ -651,7 +651,6 @@ def obligatii_fiscale(year: int, month: int):
             "baza_calcul": o.baza_calcul,
             "iban": (o.iban_cont.iban if o.iban_cont else None),
             "cod_buget": (o.iban_cont.cod_buget if o.iban_cont else None),
-            "bonus_info": o.definitie.bonus_info,
             "estimare_in_curs": False,
             "estimare_an": None,
         } for o in obligatii]
