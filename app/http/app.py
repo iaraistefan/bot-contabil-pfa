@@ -29,7 +29,7 @@ from config import settings
 from db import get_session
 from app.repositories import transactions as tx_repo
 from app.repositories import users as users_repo
-from app.services import subscription as _sub  # Felia 1/4a — tier-uri (gating 4b)
+from app.services import gating  # Felia 4b — sursa unica feature→tier
 from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura scriere abonament
 from app.services import tax_engine
 from app.domain import labels_ro
@@ -257,14 +257,14 @@ def _require_tier(user_id: int, min_tier: str, feature: str = None):
     Întoarce error_response sau None:
         user_id, err = _require_user()
         if err: return err
-        err = _require_tier(user_id, sub.PRO, feature="declaratii")
+        err = _require_tier(user_id, gating.feature_tier("declaratii"),
+                            feature="declaratii")
         if err: return err
 
     403 `upgrade_required` (nu 401 — userul E autentificat, doar n-are planul), cu
     tier-ul cerut/curent și mesajul gata formatat, ca frontend-ul să poată afișa
     invitația fără să-și scrie propriul copy.
     """
-    from app.services import gating
     from app.services import subscription as sub
 
     session = get_session()
@@ -1452,8 +1452,9 @@ def genereaza_declaratie(tip: str, year: int, month: int):
     user_id, err = _require_user()
     if err:
         return err
-    # Felia 4b: depunerea (ghid + XML gata de urcat în SPV) e din planul PRO.
-    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
+    # Declarațiile LUNARE — tier-ul se citește din hartă, nu se declară aici.
+    err = _require_tier(user_id, gating.feature_tier("declaratii"),
+                        feature="declaratii")
     if err:
         return err
 
@@ -1565,8 +1566,10 @@ def genereaza_declaratie_d207(year: int):
     user_id, err = _require_user()
     if err:
         return err
-    # Felia 4b: D207 = tot depunere → PRO (perechea anuală a lui D100).
-    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
+    # D207 = tot declarație lunară/nerezidenți (perechea anuală a lui D100) → aceeași
+    # poartă ca D301/D390/D100. Tier-ul din hartă.
+    err = _require_tier(user_id, gating.feature_tier("declaratii"),
+                        feature="declaratii")
     if err:
         return err
 
@@ -1654,8 +1657,12 @@ def genereaza_declaratie_d212(year: int):
     user_id, err = _require_user()
     if err:
         return err
-    # Felia 4b: D212 = depunere → PRO, ca D207/D100.
-    err = _require_tier(user_id, _sub.PRO, feature="declaratii")
+    # D212 NU e „ca D207/D100". E livrabilul planului START: START vinde declarația
+    # ANUALĂ gata de depus, iar PRO adaugă declarațiile LUNARE (D301/D390/D100/D207)
+    # plus reconcilierea și feed-ul bancar. Fără D212, START e nevandabil față de FREE.
+    # Raționamentul complet, la sursă: gating.FEATURES["d212_fisier"].
+    err = _require_tier(user_id, gating.feature_tier("d212_fisier"),
+                        feature="d212_fisier")
     if err:
         return err
 

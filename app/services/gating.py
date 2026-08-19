@@ -34,10 +34,15 @@ DASHBOARD_URL = "https://bot-contabil-pfa.onrender.com/dashboard"
 # ══════════════════════════════════════════════════════════════
 # `label` = cum numim feature-ul în mesaj; `beneficiu` = ce face Coniar concret în
 # planul ăla (nu „deblochezi funcția X", ci ce câștigi tu).
+#
+# `label` NU enumeră coduri de declarație — lista se DERIVĂ din NAMESPACE_FEATURE
+# (vezi `coduri_declaratii`). Enumerarea literală de dinainte („D301 / D390 / D100 /
+# D207") a rămas în urmă când D212 a intrat pe aceeași poartă: userul care cerea
+# D212 primea un mesaj care enumera patru declarații, niciuna fiind a lui.
 FEATURES = {
     "declaratii": {
         "tier": sub.PRO,
-        "label": "Depunerea declarațiilor (D301 / D390 / D100 / D207)",
+        "label": "Depunerea declarațiilor lunare",
         "beneficiu": (
             "îți pregătește declarația completă, cu ghid de completare și fișierul "
             "XML gata de urcat în SPV"
@@ -51,12 +56,32 @@ FEATURES = {
             "fără să le mai treci de mână"
         ),
     },
-    "d212": {
+    # ── D212: DOUĂ lucruri, nu unul ────────────────────────────
+    # Estimarea (cifrele pe ecran) și fișierul (XML-ul gata de depus) sunt livrabile
+    # diferite și au nevoie de copy diferit. Cât timp erau o singură intrare, un user
+    # care cerea FIȘIERUL citea despre estimare.
+    #
+    # DE CE START, nu PRO — decizia de produs, aici e sursa ei:
+    #   START vinde DECLARAȚIA ANUALĂ GATA DE DEPUS. Ăsta e livrabilul lui.
+    #   PRO adaugă declarațiile LUNARE (D301/D390/D100/D207), plus reconcilierea
+    #   completă și feed-ul bancar.
+    #   Fără D212, START e nevandabil față de FREE: FREE vede deja alertele, registrul
+    #   și estimarea aproximativă, deci START n-ar mai avea ce vinde.
+    # Cele două porți (bot + web) CITESC de aici — nu-și mai declară tier-ul singure.
+    "d212_estimare": {
         "tier": sub.START,
-        "label": "Declarația Unică (D212) calculată pe datele tale",
+        "label": "Declarația Unică calculată pe datele tale",
         "beneficiu": (
             "îți calculează impozitul, CAS-ul și CASS-ul pe veniturile tale reale, "
             "actualizat pe măsură ce înregistrezi"
+        ),
+    },
+    "d212_fisier": {
+        "tier": sub.START,
+        "label": "Declarația Unică gata de depus",
+        "beneficiu": (
+            "îți pregătește fișierul XML al Declarației Unice, cu ghidul de "
+            "completare, gata de urcat în SPV"
         ),
     },
     "reconciliere": {
@@ -76,13 +101,41 @@ NAMESPACE_FEATURE = {
     "d390": "declaratii",
     "d100": "declaratii",
     "d207": "declaratii",
-    "du": "d212",
+    "du": "d212_estimare",
+    "d212": "d212_fisier",
 }
 
 
 def feature_tier(feature: str) -> str:
     """Tier-ul minim cerut de un feature. Feature necunoscut → FREE (nu blocăm orbește)."""
     return FEATURES.get(feature, {}).get("tier", sub.FREE)
+
+
+def coduri_declaratii(feature: str) -> list:
+    """
+    Codurile de declarație acoperite de `feature`, DERIVATE din NAMESPACE_FEATURE.
+
+    Un namespace e cod de declarație dacă arată ca „d" + cifre (d301, d212) — așa
+    `du` (estimarea) nu se strecoară în enumerare. Sortate, ca mesajul să fie stabil.
+    """
+    return sorted(
+        ns.upper() for ns, f in NAMESPACE_FEATURE.items()
+        if f == feature and len(ns) > 1 and ns[0] == "d" and ns[1:].isdigit()
+    )
+
+
+def feature_label(feature: str) -> str:
+    """
+    Eticheta feature-ului pentru mesajul de upgrade, cu codurile derivate din hartă.
+
+    Sursă unică: dacă o declarație intră sau iese de pe o poartă, enumerarea din
+    mesaj se mută singură. Nu mai există un șir literal de întreținut în paralel.
+    """
+    f = FEATURES.get(feature)
+    if not f:
+        return "Funcția asta"
+    coduri = coduri_declaratii(feature)
+    return f"{f['label']} ({' / '.join(coduri)})" if coduri else f["label"]
 
 
 # ══════════════════════════════════════════════════════════════
@@ -183,10 +236,9 @@ def upgrade_text(feature: str, user=None, now=None, min_tier: str = None) -> str
     """
     f = FEATURES.get(feature)
     tier = _tier_de_activat(feature, min_tier)
-    if not f:
-        label, beneficiu = "Funcția asta", "îți automatizează partea de contabilitate"
-    else:
-        label, beneficiu = f["label"], f["beneficiu"]
+    label = feature_label(feature)
+    beneficiu = (f["beneficiu"] if f
+                 else "îți automatizează partea de contabilitate")
 
     eticheta = cta_label(tier)
     if checkout_disponibil(tier):

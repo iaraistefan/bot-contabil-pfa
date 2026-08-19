@@ -881,7 +881,8 @@ async def handle_bolt_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 brut_declarat = bolt_reconcile.declared_bolt_brut(sess, user_id, year, month)
                 # Felia 4b: verdictul COMPLET (cauze + pași) e „arma secretă" = PRO.
                 # FREE vede doar mărimea nepotrivirii (teaser). Trial activ = PRO.
-                detailed = gating.has_feature(sess, user_id, _sub.PRO)
+                detailed = gating.has_feature(
+                    sess, user_id, gating.feature_tier("reconciliere"))
             finally:
                 sess.close()
             line = bolt_reconcile.bolt_amount_confirm_line(
