@@ -8,9 +8,16 @@ Felia 4b; până atunci: inert, comportament neschimbat pt toți userii.
 
 Tier-uri (aliniate decizia #4 din PLAN-CONIAR.md §1, jurnal research):
   FREE  — neabonat, fără trial activ (stripe_tier NULL + trial expirat/absent)
-  START — ~99-149 lei (Bolt + D212 + estimare live + bot + rezervă taxe)
-  PRO   — ~179-199 lei (+ depunere auto + feed bancar AI + reconciliere + garanție)
-  MAX   — ~289-349 lei (+ plătitori TVA + optimizare predictivă + review uman)
+  START — ~99-149 lei (Bolt sync + Declaratia Unica: calcul + fisier)
+  PRO   — ~179-199 lei (+ declaratiile LUNARE D301/D390/D100/D207 + reconciliere
+          completa + garantie)
+  MAX   — ~289-349 lei (+ platitori TVA D300/D394 + optimizare + review uman)
+
+⚠️ Listele de mai sus sunt DESCRIPTIVE, nu normative — nu le citeste niciun cod.
+Ce inchide efectiv un feature e `gating.FEATURES`, singura sursa executabila; scara
+narativa e in PLAN-CONIAR.md §5. Cand cele trei au divergat, un user pe START a
+platit pentru D212 si a primit upsell PRO (PR #153). Estimarea curenta, botul si
+registrul sunt GRATUITE si nu au ce cauta in lista unui tier platit.
 
 Reverse trial (§1.8): la onboarding, userul nou primește 30 zile PRO complet (fără
 card, trial_ends_at = now+30). Cât timp trial_ends_at > acum ȘI nu e abonat activ →

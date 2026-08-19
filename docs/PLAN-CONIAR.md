@@ -43,7 +43,7 @@
 - AI-driven: categorizare inteligentă cheltuieli, extracție din extrase/foto
 - Automatizare completă: ingerează → categorizează → calculează → generează → depune → reamintește plata
 
-**Model business pe tiere (triangulat):** Start ~99-149 lei (❓preț intrare de testat A/B: 99 armă agresivă vs 129-149 vinde-ROI) = Bolt+D212+estimare live+bot+rezervă taxe. Pro ~179-199 lei (peste SOLO, sub PFA Ride 299) = + depunere auto D390/D301/D100 + feed bancar AI + reconciliere + asistent + garanție. Max ~289-349 lei (sub Stradex 490) = + plătitori TVA D300/D394 (segment SOLO REFUZĂ) + optimizare predictivă + review uman anual. Poziționare: CATEGORIE NOUĂ "AI care automatizează" vs "digital cu oameni", NU "SOLO mai scump".
+**Model business pe tiere (triangulat)** — *propunerea de research, păstrată ca atare; forma care OBLIGĂ e „MAPARE FREE→PLĂTIT" de mai jos + scara din §5, iar sursa executabilă e `gating.FEATURES`:* Start ~99-149 lei (❓preț intrare de testat A/B: 99 armă agresivă vs 129-149 vinde-ROI) = Bolt+D212+estimare live+bot+rezervă taxe. Pro ~179-199 lei (peste SOLO, sub PFA Ride 299) = + depunere auto D390/D301/D100 + feed bancar AI + reconciliere + asistent + garanție. Max ~289-349 lei (sub Stradex 490) = + plătitori TVA D300/D394 (segment SOLO REFUZĂ) + optimizare predictivă + review uman anual. Poziționare: CATEGORIE NOUĂ "AI care automatizează" vs "digital cu oameni", NU "SOLO mai scump".
 
 ---
 
@@ -147,10 +147,14 @@
 **✅ MODEL DE INTRARE — DECIS (research #9, freemium/trial).** REVERSE TRIAL: 30 zile PRO complet la înscriere (FĂRĂ card) → cade pe FREE "Radar" permanent. Durată 30 zile (sau până la următorul termen declarație — să prindă un ciclu fiscal complet + un "aha moment"; arma secretă are nevoie de date acumulate). Precedent: Toggl (reverse trial 30 zile → dublat venitul premium). Concurenți: SOLO = card obligatoriu, fără trial/free; cei mai buni din nișă (Indy 400k, Norman, Accountable) = tracking gratis + DEPUNERE/automatizare plătită ("gratis să urmărești, plătești să depui"). Facturarea = gratis peste tot în RO → NU monetiza vizualizarea, monetizează automatizare+reconciliere+depunere.
 
 **MAPARE FREE→PLĂTIT:**
-- FREE "Radar" (permanent post-trial): vizualizare read-only (Bolt/bancă/declarat) + ALERTE termene cu sume + TEASER discrepanță ("există nepotrivire X lei" — arată CĂ, blochează detaliile+rezolvarea) + provocări ("sync Bolt", "importă BT") + estimare aproximativă (detalii blocate).
-- START (99-149): Bolt sync + D212 + estimare live + bot + rezervă taxe.
-- PRO (179-199, FLAGSHIP "recomandat"): + auto-depunere D390/D301/D100 + feed bancar AI + ARMA SECRETĂ COMPLETĂ (aici se rezolvă teaser-ul) + asistent + garanție.
-- MAX (289-349): + plătitori TVA D300/D394 + optimizare + review uman.
+- FREE "Radar" (permanent post-trial): vizualizare read-only (Bolt/bancă/declarat) + ALERTE termene cu sume + TEASER discrepanță ("există nepotrivire X lei" — arată CĂ, blochează detaliile+rezolvarea) + provocări ("sync Bolt", "importă BT") + estimare curentă (detalii blocate).
+- **START (99-149): Bolt sync + Declarația Unică (calcul + fișier gata de depus).** Atât. Două lucruri, amândouă construite și amândouă închise azi în `gating.FEATURES`.
+- PRO (179-199, FLAGSHIP "recomandat"): + declarațiile LUNARE D301/D390/D100/**D207** (generare + ghid de depunere; *depunerea în locul tău* e MAX, vezi scara din §5) + ARMA SECRETĂ COMPLETĂ (aici se rezolvă teaser-ul) + garanție. 🔜 *nelivrate încă:* feed bancar AI, asistent.
+- MAX (289-349): 🔜 *nelivrate încă, toate:* plătitori TVA D300/D394 (azi există doar intrările de calendar, și alea FREE) + optimizare + review uman.
+
+> **DE CE lista START e SCURTĂ — și de ce nu rezolvăm invers.** Versiunea de dinainte promitea cinci lucruri, din care trei n-aveau ce căuta acolo: *estimare live* și *bot* sunt gratuite în cod, iar *rezervă taxe* nu e scrisă nicăieri — nici gratis, nici plătit. Tentația e să „repari" mutându-le la START. **Nu.** Vizualizarea gratuită e chiar cârligul strategiei — *„gratis să urmărești, plătești să depui"* (research #9, linia de mai sus): dacă închizi estimarea și botul, omorî exact mecanismul care aduce oamenii înăuntru și prin care ajung să aibă date acumulate când le ceri banii. Și, comercial: **o listă scurtă și adevărată convinge mai mult decât una lungă și umflată.** Două promisiuni pe care le poți dovedi bat cinci din care trei se dezumflă la prima apăsare de buton — cum s-a și întâmplat, cu D212.
+>
+> Regula care rămâne: **în lista unui tier plătit intră doar ce e (a) construit și (b) închis efectiv în `gating.FEATURES`.** Ce e construit dar liber stă la FREE; ce nu e construit poartă 🔜.
 
 **CÂRLIGUL DE AUR:** arma secretă = TEASER BLOCAT (nu black-box, nu gratis) — anunță discrepanța (frica ANAF + loss aversion 2.25x), blochează rezolvarea în PRO. Copy LINIȘTITOR ("te ajutăm s-o rezolvi în PRO") ca să nu creeze anxietate.
 **CONVERSIE:** țintă 5-10% (peste norma freemium 2-5%, datorită reverse trial + urgență termene + frica ANAF). CHEIA = activare (% care conectează Bolt+bancă în săpt. 1). Împinge ANUAL (retenție 92% vs 68% lunar), discount 15-20% la termen fiscal. FĂRĂ card la înscriere (challenger → volum+încredere; SOLO cere card dar noi optimizăm volum întâi).
@@ -287,7 +291,7 @@ Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă �
 - **PRO** — *generează registrul și declarațiile LUNARE, le depune SINGUR, cu îndrumarea noastră* (D301/D390/D100/D207; DUK Integrator + Java, pas cu pas), plus reconcilierea completă Bolt și feed-ul bancar.
 - **MAX** — *depunem noi în SPV.* Toată treaba.
 
-**De ce D212 e în START, nu în PRO.** Fiindcă altfel START e nevandabil față de FREE: FREE vede deja alertele cu sume, registrul și estimarea aproximativă, deci un START care doar „înregistrează și vede" n-ar avea ce vinde. Livrabilul lui START e **declarația anuală gata de depus** — singura de care are nevoie un PFA fără nerezidenți. PFA-ul cu comisioane Bolt/Uber are nevoie și de cele **lunare**, și aia e treapta PRO.
+**De ce D212 e în START, nu în PRO.** Fiindcă altfel START e nevandabil față de FREE: FREE vede deja alertele cu sume, registrul și **estimarea curentă**, deci un START care doar „înregistrează și vede" n-ar avea ce vinde. Livrabilul lui START e **declarația anuală gata de depus** — singura de care are nevoie un PFA fără nerezidenți. PFA-ul cu comisioane Bolt/Uber are nevoie și de cele **lunare**, și aia e treapta PRO.
 
 > ⚠️ **Formularea de dinainte** („START … **NU** generează declarațiile — doar le vede") a fost **a treia sursă de adevăr** despre același lucru, alături de harta din `gating.FEATURES` și de porțile din cod. Cele trei au divergat, iar rezultatul a fost un bug plătit: un user pe START a apăsat „Declarația Unică D212" și a primit upsell PRO. Aliniat la decizia din PR #153, unde stă și raționamentul, la sursă (`gating.FEATURES["d212_fisier"]`). **Scara asta e narativă — sursa executabilă e harta din `gating.py`.** Dacă cele două se despart din nou, harta are dreptate și textul ăsta se repară după ea.
 
