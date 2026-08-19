@@ -30,8 +30,9 @@ CE COMPLETAM (partea de CALCUL, cea pe care o avem):
   - Sectiunea 3.1 CAS: baza + CAS datorat
   - Sectiunea 3.2 CASS: total venituri, baza, CASS anuala/datorata
   - Sectiunea 4: CAS/CASS deductibile, venit net impozabil, impozit datorat
-  - Obligatii: impozit, bonificatie, diferenta de plata
-  - Bifele: DERIVATE din starea reala (CAS > 0 → bifa131=1 etc.), niciodata fixe.
+  - Obligatii: impozit, diferenta de plata
+  - Bifele: DERIVATE din starea reala (CAS > 0 → bifa131=1 etc.). Singura
+    exceptie e bifa18, fixa pe 0 — motivul e in NOTA-BONIFICATIE (d212_calc.py).
 
 CE LASAM GOL, DELIBERAT — si de ce:
   Formularul web ANAF e EDITABIL dupa import. Ce nu putem sti cu certitudine
@@ -387,7 +388,6 @@ def genereaza_d212(
     cass_baza = _lei(rezultat.cass_baza)
     venit_impozabil = _lei(rezultat.venit_impozabil)
     impozit = _lei(rezultat.impozit)
-    bonificatie = _lei(rezultat.bonificatie)
 
     # ---- bifele: DERIVATE din starea reala, nu fixate ----
     # (in fisierul de test initial erau hardcodate pe 0, ceea ce pentru un venit
@@ -395,7 +395,6 @@ def genereaza_d212(
     bifa131 = 1 if cas > 0 else 0                    # Sectiunea 3.1 — CAS
     bifa132 = 1 if cass > 0 else 0                   # Sectiunea 3.2 — CASS
     bifa14 = 1 if impozit > 0 else 0                 # Sectiunea 4 — impozit anual
-    bifa18 = 1 if bonificatie > 0 else 0             # bonificatie
 
     # bifa_cas_real: 1 = venit intre 12 si 24 salarii minime, 2 = peste 24.
     # BR-D212-0047 leaga bifa de pragul bazei; derivam din baza aleasa de motor.
@@ -432,7 +431,12 @@ def genereaza_d212(
         _attr("bifa132", bifa132),
         _attr("bifa14", bifa14),
         _attr("bifa15", 0),
-        _attr("bifa18", bifa18),
+        # FIX 0, deliberat — nu derivata ca bifa131/132/14. XSD cere atributul
+        # (use="required"), dar sectiunea pe care o comanda nu are temei legal
+        # pentru niciun an pe care il servim: vezi NOTA-BONIFICATIE in
+        # d212_calc.py. Starea reala e "nu se datoreaza nimic aici", pe orice an,
+        # deci 0 NU e o valoare implicita lenesa — e cifra corecta.
+        _attr("bifa18", 0),
         _attr("bifa19", 0),
         _attr("bifa23", 0),
         _attr("nume_c", _curata_text(identitate.nume)),
@@ -530,8 +534,8 @@ def genereaza_d212(
             # Obligatii de plata
             _attr("oblimpoz_real_total", impozit),
         ]
-    if bifa18:
-        atribute_oblig.append(_attr("oblimpozit_real_bonif", bonificatie))
+    # oblimpozit_real_bonif NU se emite niciodata (XSD: use="optional", deci
+    # absenta lui e valida). Declaratia spune ce se datoreaza.
 
     if atribute_oblig:
         linii.append("  <oblig_realizat " + " ".join(a for a in atribute_oblig if a) + "/>")
@@ -598,8 +602,6 @@ def genereaza_ghid_d212(
         L.append(f"  • CASS (sanatate): {_lei(rezultat.cass)} lei, "
                  f"pe baza de {_lei(rezultat.cass_baza)} lei")
     L.append(f"  • Impozit: {_lei(rezultat.impozit)} lei")
-    if _lei(rezultat.bonificatie) > 0:
-        L.append(f"  • Bonificatie daca platesti la timp: {_lei(rezultat.bonificatie)} lei")
     L.append("")
 
     if cas > 0:

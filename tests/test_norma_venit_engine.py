@@ -59,9 +59,9 @@ def test_real_neschimbat_default_egal_sistem_real_explicit():
     explicit = calculeaza_d212(90_000, 30_000, an=AN, salariu_minim=SMB, regim="SISTEM_REAL")
     assert implicit.regim == "SISTEM_REAL"
     assert (implicit.venit_net, implicit.cas, implicit.cass, implicit.impozit,
-            implicit.total_plata, implicit.bonificatie) == \
+            implicit.total_plata) == \
            (explicit.venit_net, explicit.cas, explicit.cass, explicit.impozit,
-            explicit.total_plata, explicit.bonificatie)
+            explicit.total_plata)
 
 
 def test_real_cifre_cunoscute():

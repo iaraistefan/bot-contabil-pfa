@@ -165,8 +165,8 @@ def test_incetare_semnal_prudenta_nu_formula():
 # ════════════════════════════════════════════════════════════
 
 def _egal(a, b):
-    return (a.venit_net, a.cas, a.cass, a.impozit, a.total_plata, a.bonificatie) == \
-           (b.venit_net, b.cas, b.cass, b.impozit, b.total_plata, b.bonificatie)
+    return (a.venit_net, a.cas, a.cass, a.impozit, a.total_plata) == \
+           (b.venit_net, b.cas, b.cass, b.impozit, b.total_plata)
 
 
 def test_regresie_fara_date_neschimbat_real():

@@ -41,11 +41,15 @@ def test_d100_ambele_platforme_si_de_ce_tu():
     assert "CUI" in d.cum_depun and "special" in d.cum_depun.lower()  # capcana reală (NU codul special)
 
 
-def test_d212_bonificatie_si_cas_cass():
+def test_d212_cas_cass_si_cont_unic():
     d = DEFINITII_OBLIGATII["D212"]
-    assert "15 aprilie" in d.de_ce and "3%" in d.de_ce
     assert "CAS" in d.de_ce and "CASS" in d.de_ce
+    assert "12 salarii minime" in d.de_ce                # pragul CAS, mecanismul
     assert "cont" in d.cum_depun.lower() and "CNP" in d.cum_depun  # cont unic pe CNP
+    # 15 aprilie era termenul bonificației (OUG 8/2026, expirat). Termenul D212
+    # e 25 mai — dacă „15 aprilie" reapare aici, textul a reînviat o cifră moartă.
+    assert "15 aprilie" not in d.de_ce and "15 aprilie" not in d.cand
+    assert "25 mai" in d.cand
 
 
 def test_d207_uber_scutit_se_declara():

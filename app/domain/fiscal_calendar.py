@@ -122,7 +122,6 @@ class DefinitieObligatie:
     conditie_extra: Optional[str] = None        # text descriptiv
 
     urgenta_default: UrgentaObligatie = UrgentaObligatie.INALTA
-    bonus_info: Optional[str] = None
     penalty_info: Optional[str] = None
     portal_anaf: str = "https://anaf.ro"
     nomenclator_anaf: Optional[str] = None      # ex: "634" pt D100 nerezidenți
@@ -452,15 +451,11 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         forme_juridice=["PFA", "II", "IF"],
         activitati=["*"],
         urgenta_default=UrgentaObligatie.CRITICA,
-        bonus_info=(
-            "Achiți INTEGRAL (impozit + CAS + CASS) până pe 15 aprilie → "
-            "bonificație 3% DOAR din impozitul pe venit (CAS și CASS nu se reduc)."
-        ),
         formula_suma="10% × venit_net + CAS(dacă > 12 sal.min.) + CASS(plafon)",
         portal_anaf="https://anaf.ro/duf",
         penalty_info=(
             "Nedepunerea/întârzierea atrage majorări 0.02%/zi + penalități pe sumele "
-            "datorate, plus riscul pierderii bonificației de 3%."
+            "datorate."
         ),
         ce_e=(
             "Declarația ta ANUALĂ majoră ca PFA: într-un singur formular pui impozitul "
@@ -471,8 +466,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "câștigi față de praguri (multipli de salariu minim brut)."
         ),
         cand=(
-            "O dată pe an, până pe 25 mai, pentru anul încheiat. Termenul de 15 aprilie "
-            "(achită integral) e separat — e pragul pentru bonificația de 3%."
+            "O dată pe an, până pe 25 mai, pentru anul încheiat. Același termen e și "
+            "pentru depunere, și pentru plată — nu sunt două date diferite."
         ),
         cum_depun=(
             "Prin SPV sau anaf.ro/duf. Plata merge în CONTUL UNIC (5504) pe CNP-ul tău "
@@ -481,9 +476,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         de_ce=(
             "De ce „unică”? Regularizezi anul TRECUT (cât ai câștigat real) ȘI declari "
             "anticipat anul curent, totul într-un loc. CAS (pensie) se plătește doar dacă "
-            "venitul net trece 12 salarii minime; CASS (sănătate) are propriul plafon. "
-            "Bonificația de 3% se aplică DOAR pe impozit, nu pe CAS/CASS — deci plătește "
-            "TOT (nu doar impozitul) până pe 15 aprilie ca s-o prinzi."
+            "venitul net trece 12 salarii minime; CASS (sănătate) are propriul plafon — "
+            "sunt trei sume separate, cu reguli separate, pe același formular."
         ),
     ),
 
@@ -1046,9 +1040,6 @@ def _format_obligatie_telegram(o: ObligatieCalculate) -> List[str]:
         lines.append(f"   🏦 IBAN: `{o.iban_cont.iban}`")
         lines.append(f"   📋 Cod buget: `{o.iban_cont.cod_buget}`")
 
-    if o.definitie.bonus_info:
-        lines.append(f"   💡 {o.definitie.bonus_info}")
-
     lines.append("")
     return lines
 
@@ -1116,16 +1107,10 @@ ANNUAL_DEADLINES = [
         "day": 25,
         "description": (
             "Declari veniturile și cheltuielile PFA din anul anterior. "
-            "Se calculează automat: impozit venit (10%), CAS (25%), CASS (10%). "
-            "Dacă achiți integral (impozit + CAS + CASS) până pe 15 aprilie → "
-            "bonificație 3% din impozit."
+            "Se calculează automat: impozit venit (10%), CAS (25%), CASS (10%)."
         ),
         "where": "ANAF ePortal → Declarația Unică (D212) sau anaf.ro/duf",
         "urgency": "high",
-        "bonus_tip": (
-            "Achiți INTEGRAL (impozit + CAS + CASS) până pe 15 aprilie → "
-            "economisești 3% din impozitul pe venit (CAS/CASS nu se reduc)!"
-        ),
     },
     # ⭐ ADĂUGAT v2: D207 (FIX bug critic din v1)
     {
@@ -1429,8 +1414,6 @@ def format_fiscal_message(
             )
             lines.append(f"{icon} *{a['code']}* — {a['name']} {days_str}")
             lines.append(f"   📅 Termen: `{a['deadline']}`")
-            if a.get("bonus_tip"):
-                lines.append(f"   💡 {a['bonus_tip']}")
             lines.append("")
 
     lines += [

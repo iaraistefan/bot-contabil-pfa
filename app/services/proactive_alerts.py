@@ -412,10 +412,6 @@ def _format_alert_message(obligation, alert_type: str, ctx: Dict) -> str:
             f"⚠️ Majorări estimate: *{majorari:.2f} RON* (0.02%/zi)"
         )
 
-    if obligation.definitie.bonus_info:
-        lines.append("")
-        lines.append(f"💡 _{obligation.definitie.bonus_info}_")
-
     lines.extend([
         "",
         "━━━━━━━━━━━━━━━━━━━━",
