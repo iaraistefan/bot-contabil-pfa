@@ -376,9 +376,14 @@ def test_alertele_de_termene_nu_sunt_gated():
 
 def test_namespace_urile_gratuite_trec_neatinse():
     """Doar declarațiile + D212 sunt în hartă; restul (raport, registru, ghid,
-    alerte, export, plată, vehicul, bancă) rămân libere."""
+    alerte, export, plată, vehicul, bancă) rămân libere.
+
+    `d212` (fișierul XML) a intrat în hartă când poarta lui a fost mutată de la
+    PRO la START: până atunci își declara tier-ul singură, în handler, și de-aia
+    a putut diverge de hartă fără să observe nimeni.
+    """
     gated = set(gating.NAMESPACE_FEATURE)
-    assert gated == {"d301", "d390", "d100", "d207", "du"}
+    assert gated == {"d301", "d390", "d100", "d207", "du", "d212"}
     for liber in ("report", "registru", "registru_annual", "registru_monthly",
                   "alerts", "ghid", "export", "plata", "reminder", "vehicul",
                   "parcurs", "nav", "settings", "fiscal", "tvadecl", "confirm",

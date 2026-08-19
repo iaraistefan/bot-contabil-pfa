@@ -2079,8 +2079,11 @@ async def execute_declaratie_d212(query, context, user_id, year):
     livreaza cifrele si explicatia (norma se declara in alt capitol).
     """
     chat_id = query.message.chat_id
+    # D212 = livrabilul planului START, NU al lui PRO (raționamentul complet e la
+    # sursă, in gating.FEATURES["d212_fisier"]). Poarta asta cerea „declaratii" (PRO),
+    # copiata de la fratele lunar — un user START platea si primea upsell.
     ok, text, markup = gating.require_tier_bot(
-        user_id, gating.feature_tier("declaratii"), feature="declaratii"
+        user_id, gating.feature_tier("d212_fisier"), feature="d212_fisier"
     )
     if not ok:
         await context.bot.send_message(chat_id=chat_id, text=text,
@@ -3114,7 +3117,8 @@ async def handle_bank_statement_wrapper(update: Update, context: ContextTypes.DE
         # Felia 4b: reconcilierea COMPLETĂ (ce anume nu se potrivește + cum se rezolvă)
         # e „arma secretă" = PRO. FREE primește teaser-ul (vede CĂ e o nepotrivire și
         # cât de mare, nu și rezolvarea). Trial activ = PRO → verdict complet.
-        detailed = gating.has_feature(session, user_id, subscription.PRO)
+        detailed = gating.has_feature(
+            session, user_id, gating.feature_tier("reconciliere"))
         preview_text = bolt_reconcile.append_nudge(
             preview_text, session, user_id, clasificate, detailed=detailed
         )
