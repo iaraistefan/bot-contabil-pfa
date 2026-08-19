@@ -145,25 +145,46 @@ def test_d212_fisier_e_din_start_nu_din_pro():
     depus. Dacă cineva o mută înapoi pe PRO, START redevine nevandabil față de
     FREE și testul ăsta spune de ce."""
     assert gating.feature_tier("d212_fisier") == sub.START
-    assert gating.feature_tier("d212_estimare") == sub.START
+    assert gating.feature_tier("d212_calcul") == sub.START
     assert gating.feature_tier("declaratii") == sub.PRO
 
 
-def test_estimarea_si_fisierul_sunt_doua_feature_uri_distincte():
+def test_calculul_si_fisierul_sunt_doua_feature_uri_distincte():
     assert "d212" not in gating.FEATURES, "intrarea unica a fost re-introdusa"
-    est = gating.FEATURES["d212_estimare"]
+    calc = gating.FEATURES["d212_calcul"]
     fis = gating.FEATURES["d212_fisier"]
-    assert est["label"] != fis["label"]
-    assert est["beneficiu"] != fis["beneficiu"]
-    # Fișierul vorbește despre fișier, estimarea despre calcul — altfel un user
-    # care cere XML-ul citește despre estimare.
+    assert calc["label"] != fis["label"]
+    assert calc["beneficiu"] != fis["beneficiu"]
+    # Fișierul vorbește despre fișier, calculul despre calcul — altfel un user
+    # care cere XML-ul citește despre cifre.
     assert "XML" in fis["beneficiu"]
-    assert "XML" not in est["beneficiu"]
+    assert "XML" not in calc["beneficiu"]
+
+
+def test_denumirile_nu_se_pot_confunda_cu_estimarea_curenta_gratuita():
+    """Antetul modulului spune că „estimarea curentă" rămâne FREE. Aia e cifra de pe
+    dashboard, NU calculul D212 anual (`d212_calcul`, START) — două lucruri.
+
+    Confuzia dintre ele făcea antetul să pară că se contrazice cu harta, iar o
+    contradicție aparentă e la fel de periculoasă ca una reală: cineva o „repară"
+    mutând poarta. Blocăm aici ca denumirile să nu recadă una peste alta.
+    """
+    antet = gating.__doc__
+    assert "ESTIMAREA CURENTĂ" in antet
+    assert "CALCULUL D212 ANUAL" in antet
+    # Antetul trebuie să spună explicit care e care.
+    assert "d212_calcul" in antet and "d212_fisier" in antet
+
+    # Niciun feature din hartă nu are voie să se numească „estimare" — cuvântul e
+    # rezervat lucrului gratuit.
+    for nume, f in gating.FEATURES.items():
+        assert "estimare" not in nume.lower(), f"cheia {nume!r} refoloseste cuvantul"
+        assert "estimar" not in f["label"].lower(), f"label-ul {nume!r} zice estimare"
 
 
 def test_namespace_urile_trimit_la_feature_ul_potrivit():
     assert gating.NAMESPACE_FEATURE["d212"] == "d212_fisier"
-    assert gating.NAMESPACE_FEATURE["du"] == "d212_estimare"
+    assert gating.NAMESPACE_FEATURE["du"] == "d212_calcul"
     for ns in ("d301", "d390", "d100", "d207"):
         assert gating.NAMESPACE_FEATURE[ns] == "declaratii"
 
@@ -176,7 +197,7 @@ def test_eticheta_enumera_declaratiile_derivate_din_harta():
     assert gating.coduri_declaratii("declaratii") == ["D100", "D207", "D301", "D390"]
     assert gating.coduri_declaratii("d212_fisier") == ["D212"]
     # `du` NU e cod de declarație — nu are voie să intre în enumerare
-    assert gating.coduri_declaratii("d212_estimare") == []
+    assert gating.coduri_declaratii("d212_calcul") == []
 
 
 def test_enumerarea_se_muta_singura_cand_harta_se_schimba(monkeypatch):

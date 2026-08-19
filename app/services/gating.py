@@ -9,8 +9,18 @@ făcut-o trial-aware. Aici o CONSUMĂM: sursă unică pentru
      dar nu ce anume și nici cum se rezolvă).
 
 CE RĂMÂNE GRATIS (FREE „Radar", decizia din research #9): alertele de termene cu
-sume, vizualizarea, estimarea aproximativă. Nu monetizăm vizualizarea — monetizăm
+sume, vizualizarea, ESTIMAREA CURENTĂ. Nu monetizăm vizualizarea — monetizăm
 automatizarea, reconcilierea și depunerea.
+
+⚠️ „ESTIMAREA CURENTĂ" ≠ „CALCULUL D212 ANUAL". Sunt două lucruri, și confuzia
+dintre ele face ca linia de mai sus să pară că se contrazice cu harta:
+  · ESTIMAREA CURENTĂ — cifra de taxe de pe dashboard/raport/banner, calculată pe
+    ce ai înregistrat până acum. Orientativă, mereu la vedere, NEGATED (FREE).
+    Nu are cheie în FEATURES tocmai fiindcă nu e o poartă.
+  · CALCULUL D212 ANUAL (`d212_calcul`) — ecranul dedicat: impozit + CAS + CASS pe
+    anul încheiat, cu pragurile aplicate, avertismentele și ghidul de completare.
+    E un livrabil, nu un indicator. START.
+  · FIȘIERUL D212 (`d212_fisier`) — XML-ul gata de urcat în SPV. START.
 
 NU atinge subscription.py (user_tier/is_in_trial/trial_days_left doar se citesc de
 aici) și nici motoarele de reconciliere — doar AFIȘAREA lor ramifică.
@@ -57,23 +67,26 @@ FEATURES = {
         ),
     },
     # ── D212: DOUĂ lucruri, nu unul ────────────────────────────
-    # Estimarea (cifrele pe ecran) și fișierul (XML-ul gata de depus) sunt livrabile
-    # diferite și au nevoie de copy diferit. Cât timp erau o singură intrare, un user
-    # care cerea FIȘIERUL citea despre estimare.
+    # Calculul anual (ecranul dedicat) și fișierul (XML-ul gata de depus) sunt
+    # livrabile diferite și au nevoie de copy diferit. Cât timp erau o singură
+    # intrare, un user care cerea FIȘIERUL citea despre calcul.
+    #
+    # NICIUNA nu e „estimarea curentă" din antetul modulului — aia e cifra de pe
+    # dashboard, orientativă și FREE, fără cheie aici. Vezi antetul.
     #
     # DE CE START, nu PRO — decizia de produs, aici e sursa ei:
     #   START vinde DECLARAȚIA ANUALĂ GATA DE DEPUS. Ăsta e livrabilul lui.
     #   PRO adaugă declarațiile LUNARE (D301/D390/D100/D207), plus reconcilierea
     #   completă și feed-ul bancar.
     #   Fără D212, START e nevandabil față de FREE: FREE vede deja alertele, registrul
-    #   și estimarea aproximativă, deci START n-ar mai avea ce vinde.
+    #   și estimarea curentă, deci START n-ar mai avea ce vinde.
     # Cele două porți (bot + web) CITESC de aici — nu-și mai declară tier-ul singure.
-    "d212_estimare": {
+    "d212_calcul": {
         "tier": sub.START,
-        "label": "Declarația Unică calculată pe datele tale",
+        "label": "Calculul anual al Declarației Unice",
         "beneficiu": (
-            "îți calculează impozitul, CAS-ul și CASS-ul pe veniturile tale reale, "
-            "actualizat pe măsură ce înregistrezi"
+            "îți calculează impozitul, CAS-ul și CASS-ul pe anul încheiat, cu "
+            "pragurile aplicate și ghidul de completare — nu doar cifra orientativă"
         ),
     },
     "d212_fisier": {
@@ -101,7 +114,7 @@ NAMESPACE_FEATURE = {
     "d390": "declaratii",
     "d100": "declaratii",
     "d207": "declaratii",
-    "du": "d212_estimare",
+    "du": "d212_calcul",
     "d212": "d212_fisier",
 }
 
