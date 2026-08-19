@@ -283,9 +283,13 @@
 
 Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă îi luăm de pe umeri**:
 
-- **START** — *înregistrează și vede.* Bonuri, facturi, venituri prin poză; afișare vizuală. **NU** generează registrul, **NU** generează declarațiile — doar le vede.
-- **PRO** — *generează registrul și declarațiile, le depune SINGUR, cu îndrumarea noastră* (DUK Integrator + Java, pas cu pas).
+- **START** — *înregistrează, vede și își depune DECLARAȚIA ANUALĂ.* Bonuri, facturi, venituri prin poză; afișare vizuală; sincronizare Bolt; **Declarația Unică (D212) — calculul ȘI fișierul XML gata de urcat în SPV.** **NU** generează registrul, **NU** generează declarațiile **lunare**.
+- **PRO** — *generează registrul și declarațiile LUNARE, le depune SINGUR, cu îndrumarea noastră* (D301/D390/D100/D207; DUK Integrator + Java, pas cu pas), plus reconcilierea completă Bolt și feed-ul bancar.
 - **MAX** — *depunem noi în SPV.* Toată treaba.
+
+**De ce D212 e în START, nu în PRO.** Fiindcă altfel START e nevandabil față de FREE: FREE vede deja alertele cu sume, registrul și estimarea aproximativă, deci un START care doar „înregistrează și vede" n-ar avea ce vinde. Livrabilul lui START e **declarația anuală gata de depus** — singura de care are nevoie un PFA fără nerezidenți. PFA-ul cu comisioane Bolt/Uber are nevoie și de cele **lunare**, și aia e treapta PRO.
+
+> ⚠️ **Formularea de dinainte** („START … **NU** generează declarațiile — doar le vede") a fost **a treia sursă de adevăr** despre același lucru, alături de harta din `gating.FEATURES` și de porțile din cod. Cele trei au divergat, iar rezultatul a fost un bug plătit: un user pe START a apăsat „Declarația Unică D212" și a primit upsell PRO. Aliniat la decizia din PR #153, unde stă și raționamentul, la sursă (`gating.FEATURES["d212_fisier"]`). **Scara asta e narativă — sursa executabilă e harta din `gating.py`.** Dacă cele două se despart din nou, harta are dreptate și textul ăsta se repară după ea.
 
 Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi trebuie aliniat la scara asta (vezi blocantul „ALINIEREA GATING-ULUI cu scara de tiere", azi P6).
 
@@ -318,6 +322,7 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 - **P4** · **Oblio 3b + 3c** (emiterea propriu-zisă + e-Factura) — *blocat pe:* cont Oblio + serie facturare + datele I-SHTEF ca furnizor.
 - **P5** · **Loturile de voce aprobate și neaplicate** + cele 3 locuri rămase cu „Contai".
 - **P6** · **ALINIEREA GATING-ULUI cu scara de tiere** — azi registrul, exporturile CSV, foaia de parcurs și certificatul sunt FREE, dar registrul trebuie la PRO. **De făcut ACUM, cât nu ai useri cărora să le iei ceva.**
+   *Parțial făcut:* felia **D212** e închisă (PR #153 — fișierul a trecut pe START, toate porțile citesc din hartă, un gardian AST interzice tier-urile literale). Rămâne restul: registrul, exporturile CSV, foaia de parcurs, certificatul.
 - **P7** · **Modulul casă de marcat + declarația F4109** (neutilizare lunară) — azi doar semnalăm „ai nevoie de AMEF", fără să acoperim obligația care urmează. **SOLO REFUZĂ explicit segmentul numerar/casă de marcat** (vezi §3.0) — deci nu e doar un gol de conformitate, e un segment liber, cu concurență zero. *Perechea lui de corectitudine e „Casă de marcat — verificarea sfatului" din blocantele FISCALE: acolo verificăm că nu mințim, aici construim ce urmează după sfat.*
 
 - **P8** · **CICLUL DE VIAȚĂ AL CONFIRMĂRII — trei goluri legate.** Descoperite la reconul gardianului capex (PR #123). Un document extras dar neconfirmat nu e „suspendat" — **nu există deloc**, fiindcă nimic nu se scrie în DB înainte de `confirm|save` (`bot_contabil.py:2604-2614`). Asta e sigur fiscal, dar mută problema în trei locuri:
