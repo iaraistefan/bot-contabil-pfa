@@ -130,8 +130,8 @@ def test_interactiune_4a_start_midan_plus_mixt():
 # ════════════════════════════════════════════════════════════
 
 def _egal(a, b):
-    return (a.venit_net, a.cas, a.cass, a.impozit, a.total_plata, a.bonificatie) == \
-           (b.venit_net, b.cas, b.cass, b.impozit, b.total_plata, b.bonificatie)
+    return (a.venit_net, a.cas, a.cass, a.impozit, a.total_plata) == \
+           (b.venit_net, b.cas, b.cass, b.impozit, b.total_plata)
 
 
 def test_regresie_fara_flag_norma_neschimbat():

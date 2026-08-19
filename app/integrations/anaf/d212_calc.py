@@ -5,7 +5,7 @@ Calculeaza, pentru veniturile dintr-un an:
   - impozit pe venit (10%)
   - CAS (contributia la pensie, 25%) cu praguri
   - CASS (contributia la sanatate, 10%) cu praguri
-  - total de plata + bonificatie
+  - total de plata
 
 ⚠️ IMPORTANT — ORIENTATIV, NU DEFINITIV:
   Regulile D212 sunt complexe si se schimba des (praguri, OUG-uri, exceptii).
@@ -31,9 +31,9 @@ REGULI IMPLEMENTATE (venituri 2025, salariu minim 4050 lei):
   Impozit (10%):
     - venit impozabil = max(0, venit net - CAS - CASS)
     - impozit = venit impozabil * 10%
-  Bonificatie (OUG 8/2026): 3% din impozit la plata integrala pana la termen.
+  Reduceri: NICIUNA. Vezi NOTA-BONIFICATIE de mai jos — nu e o omisiune.
 
-Surse: HG 1506/2024 (salariu minim), OUG 156/2024, OUG 8/2026.
+Surse: HG 1506/2024 (salariu minim), OUG 156/2024.
 """
 
 from dataclasses import dataclass, field
@@ -51,9 +51,44 @@ from app.domain import norma_venit
 SALARIU_MINIM_2025 = 4050  # HG 1506/2024 — valabil tot 2025
 
 COTA_IMPOZIT = 0.10
-COTA_BONIFICATIE = 0.03
 
 # CAS/CASS (cote + praguri) NU se mai definesc aici — sursa unica: app.domain.contributii.
+
+
+# ==== NOTA-BONIFICATIE — START ==============================
+# NU exista aici o cota de bonificatie, si NU e o omisiune. Daca ai venit
+# sa adaugi una, citeste tot blocul intai.
+#
+# Art. 121 Cod fiscal e CADRU INERT: nu acorda nimic prin el insusi. Spune
+# doar ca nivelul, termenele si conditiile "se stabilesc prin legea anuala
+# a bugetului de stat". Fara un act care sa-l activeze PE ANUL RESPECTIV,
+# art. 121 nu produce niciun drept. Activarile de pana acum:
+#
+#   venituri 2018-2019 : OUG 18/2018 — 5% pe impozitul ESTIMAT, plata
+#                        anticipata (atribuire din surse secundare,
+#                        neverificata pe forma consolidata; nu sustine
+#                        niciun calcul, e doar istoric pentru context)
+#   venituri 2021-2024 : NIMIC — legile anuale ale bugetului nu au stabilit-o
+#   venituri 2025      : OUG 8/2026 art. 8 (MO 147 / 25.02.2026) — 3%, PRIN
+#                        DEROGARE de la art. 121, cu termen 15 aprilie 2026
+#                        (verificat pe legislatie.just.ro, august 2026)
+#   venituri 2026      : NIMIC, la data scrierii (august 2026)
+#
+# CAND REAPARE (posibil februarie 2027, prin OUG anuala), forma corecta NU
+# e o cifra in declaratie. Bonificatia e un DREPT CONDITIONAT de doua fapte
+# pe care aplicatia NU le are si nu le poate afla:
+#   (a) data efectiva a depunerii D212 (noi generam fisierul, nu-l depunem);
+#   (b) plata INTEGRALA — impozit SI CAS SI CASS — pana la termen.
+# Deci forma corecta e o PROIECTIE CONDITIONATA in afisaj ("daca depui si
+# platesti integral pana la X, platesti Y"), niciodata un camp in XML si
+# niciodata o scadere din total_plata.
+#
+# CE S-A SPART CAND ERA CALCULATA (scoasa in august 2026): 3% se scadeau
+# neconditionat, pentru ORICE an, si intrau in XML-ul depus (bifa18=1 +
+# oblimpozit_real_bonif) — adica declarau mai putin decat se datoreaza.
+# Usa e tinuta inchisa de tests/test_bonificatie_d212.py (gardian prin
+# injectare pe generator + gardian repo-wide de vocabular).
+# ==== NOTA-BONIFICATIE — STOP ===============================
 
 
 # ============================================================
@@ -81,8 +116,6 @@ class RezultatD212:
     impozit: float
 
     total_plata: float
-    bonificatie: float          # cat economisesti daca platesti la timp
-    total_cu_bonificatie: float
 
     avertismente: List[str] = field(default_factory=list)
     regim: str = "SISTEM_REAL"  # SISTEM_REAL / NORMA_VENIT (transparenta calcul)
@@ -258,8 +291,6 @@ def calculeaza_d212(
     impozit = round(venit_impozabil * COTA_IMPOZIT, 2)
 
     total = round(cas + cass + impozit, 2)
-    bonificatie = round(impozit * COTA_BONIFICATIE, 2)
-    total_cu_bonif = round(total - bonificatie, 2)
 
     if mixt:
         avert.append(
@@ -314,8 +345,7 @@ def calculeaza_d212(
         cas=cas, cas_baza=cas_baza, cas_explicatie=cas_expl,
         cass=cass, cass_baza=cass_baza, cass_explicatie=cass_expl,
         venit_impozabil=venit_impozabil, impozit=impozit,
-        total_plata=total, bonificatie=bonificatie,
-        total_cu_bonificatie=total_cu_bonif,
+        total_plata=total,
         avertismente=avert,
         regim=("NORMA_VENIT" if pe_norma else "SISTEM_REAL"),
     )
@@ -349,15 +379,6 @@ def genereaza_ghid_d212(r: RezultatD212, plain: bool = False) -> str:
     L.append("")
     L.append(sep)
     L.append(f"{'' if plain else '💰 '}{b(f'TOTAL DE PLATA: {r.total_plata:,.0f} lei')}".replace(",", "."))
-    if r.bonificatie > 0:
-        L.append(
-            f"   _Dacă depui și achiți INTEGRAL (impozit + CAS + CASS) până pe "
-            f"15 aprilie → plătești {r.total_cu_bonificatie:,.0f} lei._".replace(",", ".")
-        )
-        L.append(
-            f"   _Reducerea de 3% e DOAR pe impozit (−{r.bonificatie:,.0f} lei); "
-            f"CAS și CASS nu se reduc._".replace(",", ".")
-        )
     L.append("")
     for a in r.avertismente:
         L.append(("⚠️ " if not plain else "ATENTIE: ") + a)

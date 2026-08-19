@@ -728,8 +728,6 @@ class RezultatD212Service:
     cass: float
     impozit: float
     total_plata: float
-    bonificatie: float
-    total_cu_bonificatie: float
     # Cele trei de mai jos NU sunt „adaptare la generator": proiectia era prea
     # INGUSTA. `venit_impozabil` e chiar baza impozitului (venit net − CAS − CASS),
     # adica cifra pe care userul o cauta cand vrea sa inteleaga de unde vine
@@ -843,8 +841,7 @@ def genereaza_d212(
         venit_brut=r.venit_brut, cheltuieli=r.cheltuieli, venit_net=r.venit_net,
         cas=r.cas, cass=r.cass, impozit=r.impozit,
         cas_baza=r.cas_baza, cass_baza=r.cass_baza, venit_impozabil=r.venit_impozabil,
-        total_plata=r.total_plata, bonificatie=r.bonificatie,
-        total_cu_bonificatie=r.total_cu_bonificatie,
+        total_plata=r.total_plata,
         ghid_telegram=ghid_tg,
         ghid_plain=ghid_pl,
         avertismente=r.avertismente,

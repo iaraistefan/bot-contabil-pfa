@@ -184,7 +184,7 @@ def test_cifrele_ajung_in_xml():
     assert oblig["baza_cass_datorat_ai"] == "75000" and oblig["cass_datorat_ai"] == "7500"
     assert oblig["real_venit_net_impozabil_ai"] == "55350"
     assert oblig["real_impozit_datorat_ai"] == "5535"
-    assert oblig["oblimpozit_real_bonif"] == "166"
+    assert "oblimpozit_real_bonif" not in oblig
 
 
 # ════════════════════════════════════════════════════════
@@ -197,7 +197,8 @@ def test_bifele_pornesc_cand_exista_obligatia():
     assert radacina["bifa131"] == "1"      # CAS > 0
     assert radacina["bifa132"] == "1"      # CASS > 0
     assert radacina["bifa14"] == "1"       # impozit > 0
-    assert radacina["bifa18"] == "1"       # bonificatie > 0
+    # bifa18 NU e in lista: e fixa pe 0 prin decizie, nu derivata din stare.
+    # Gardianul ei sta in test_bonificatie_d212.py.
 
 
 def test_fara_cas_bifa131_e_zero_si_sectiunea_lipseste():

@@ -266,8 +266,6 @@ def genereaza_si_arhiveaza_d212(user_id, an, venit_brut_anual, cheltuieli_anuale
         "venit_brut": _val(rez.venit_brut), "cheltuieli": _val(rez.cheltuieli),
         "venit_net": _val(rez.venit_net), "cas": _val(rez.cas), "cass": _val(rez.cass),
         "impozit": _val(rez.impozit), "total_plata": _val(rez.total_plata),
-        "bonificatie": _val(rez.bonificatie),
-        "total_cu_bonificatie": _val(rez.total_cu_bonificatie),
         "regim": rez.regim,
         "cas_baza": _val(rez.cas_baza), "cass_baza": _val(rez.cass_baza),
         "venit_impozabil": _val(rez.venit_impozabil),

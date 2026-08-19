@@ -44,10 +44,10 @@ def test_echivalenta_helper_vs_old_path(monkeypatch):
     r = tax_engine._compute_d212_anual_uncached(None, user_id=1, an=2026)
 
     assert (r.venit_brut, r.cheltuieli, r.venit_net, r.cas, r.cass,
-            r.impozit, r.total_plata, r.bonificatie) == \
+            r.impozit, r.total_plata) == \
            (baseline.venit_brut, baseline.cheltuieli, baseline.venit_net,
             baseline.cas, baseline.cass, baseline.impozit,
-            baseline.total_plata, baseline.bonificatie)
+            baseline.total_plata)
 
 
 # ────────────────────────────────────────────────────────────
