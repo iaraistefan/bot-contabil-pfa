@@ -147,7 +147,7 @@
 **✅ MODEL DE INTRARE — DECIS (research #9, freemium/trial).** REVERSE TRIAL: 30 zile PRO complet la înscriere (FĂRĂ card) → cade pe FREE "Radar" permanent. Durată 30 zile (sau până la următorul termen declarație — să prindă un ciclu fiscal complet + un "aha moment"; arma secretă are nevoie de date acumulate). Precedent: Toggl (reverse trial 30 zile → dublat venitul premium). Concurenți: SOLO = card obligatoriu, fără trial/free; cei mai buni din nișă (Indy 400k, Norman, Accountable) = tracking gratis + DEPUNERE/automatizare plătită ("gratis să urmărești, plătești să depui"). Facturarea = gratis peste tot în RO → NU monetiza vizualizarea, monetizează automatizare+reconciliere+depunere.
 
 **MAPARE FREE→PLĂTIT:**
-- FREE "Radar" (permanent post-trial): vizualizare read-only (Bolt/bancă/declarat) + ALERTE termene cu sume + TEASER discrepanță ("există nepotrivire X lei" — arată CĂ, blochează detaliile+rezolvarea) + provocări ("sync Bolt", "importă BT") + estimare aproximativă (detalii blocate).
+- FREE "Radar" (permanent post-trial): vizualizare read-only (Bolt/bancă/declarat) + ALERTE termene cu sume + TEASER discrepanță ("există nepotrivire X lei" — arată CĂ, blochează detaliile+rezolvarea) + provocări ("sync Bolt", "importă BT") + estimare curentă (detalii blocate).
 - START (99-149): Bolt sync + D212 + estimare live + bot + rezervă taxe.
 - PRO (179-199, FLAGSHIP "recomandat"): + auto-depunere D390/D301/D100 + feed bancar AI + ARMA SECRETĂ COMPLETĂ (aici se rezolvă teaser-ul) + asistent + garanție.
 - MAX (289-349): + plătitori TVA D300/D394 + optimizare + review uman.
@@ -287,7 +287,7 @@ Logica treptelor nu e „câte funcții primești", ci **cât de multă muncă �
 - **PRO** — *generează registrul și declarațiile LUNARE, le depune SINGUR, cu îndrumarea noastră* (D301/D390/D100/D207; DUK Integrator + Java, pas cu pas), plus reconcilierea completă Bolt și feed-ul bancar.
 - **MAX** — *depunem noi în SPV.* Toată treaba.
 
-**De ce D212 e în START, nu în PRO.** Fiindcă altfel START e nevandabil față de FREE: FREE vede deja alertele cu sume, registrul și estimarea aproximativă, deci un START care doar „înregistrează și vede" n-ar avea ce vinde. Livrabilul lui START e **declarația anuală gata de depus** — singura de care are nevoie un PFA fără nerezidenți. PFA-ul cu comisioane Bolt/Uber are nevoie și de cele **lunare**, și aia e treapta PRO.
+**De ce D212 e în START, nu în PRO.** Fiindcă altfel START e nevandabil față de FREE: FREE vede deja alertele cu sume, registrul și **estimarea curentă**, deci un START care doar „înregistrează și vede" n-ar avea ce vinde. Livrabilul lui START e **declarația anuală gata de depus** — singura de care are nevoie un PFA fără nerezidenți. PFA-ul cu comisioane Bolt/Uber are nevoie și de cele **lunare**, și aia e treapta PRO.
 
 > ⚠️ **Formularea de dinainte** („START … **NU** generează declarațiile — doar le vede") a fost **a treia sursă de adevăr** despre același lucru, alături de harta din `gating.FEATURES` și de porțile din cod. Cele trei au divergat, iar rezultatul a fost un bug plătit: un user pe START a apăsat „Declarația Unică D212" și a primit upsell PRO. Aliniat la decizia din PR #153, unde stă și raționamentul, la sursă (`gating.FEATURES["d212_fisier"]`). **Scara asta e narativă — sursa executabilă e harta din `gating.py`.** Dacă cele două se despart din nou, harta are dreptate și textul ăsta se repară după ea.
 
