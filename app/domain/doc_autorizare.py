@@ -10,8 +10,17 @@ lor fiscal (doc_autorizare), nu dupa sursa (reg_com).
 
 Doua asimetrii deliberate intre numar si data:
 
-  NUMARUL se ia automat, fara sa intrebam. Verificat pe un CUI real: ANAF a
-  intors „J2018000137062", identic caracter cu caracter cu certificatul.
+  NUMARUL se ia automat CAND ANAF IL ARE, si se poate tasta cand nu-l are.
+  Aici a stat scris, pana in august 2026, ca numarul „se ia automat, fara sa
+  intrebam — verificat pe un CUI real: ANAF a intors «J2018000137062», identic
+  caracter cu caracter cu certificatul". Fraza era adevarata despre acel CUI si
+  FALSA ca regula. Din ea a crescut o asumptie care a mers mai departe in cod
+  („singurul camp al perechii care poate lipsi e data") si a lasat numarul fara
+  cale de intrare manuala. Pe productie, CUI-ul userului 1 a intors nr_reg_com
+  GOL: campul a ramas gol, D212 a refuzat sa se genereze, si niciun ecran din
+  produs nu putea repara — pentru un user care platise planul care include D212.
+  Un esantion nu e o regula. Automatizarea a ramas; langa ea exista acum si o
+  cale de mana, si o stare care spune DE CE lipseste (vezi motivele mai jos).
 
   DATA se pre-completeaza, dar o confirma userul. ANAF se contrazice singur pe
   PFA — pe acelasi CUI, `data_inregistrare` = 2025-12-05, iar
@@ -42,6 +51,49 @@ class NrDocAutorizarePreaLung(ValueError):
     """
 
 
+# ============================================================
+#     DE CE LIPSESTE NUMARUL — starea, nu doar absenta
+# ============================================================
+# Un camp gol nu spune nimic: „n-a intrebat nimeni niciodata" arata identic cu
+# „am intrebat ANAF si n-a avut ce sa-mi dea". Distinctia nu e academica — pe
+# productie, userul 1 avea nr_doc_autorizare NULL desi lookup-ul ANAF ii scrisese
+# numele in ACEEASI rulare (onboarding.py, acelasi dict `updates`). Cauza s-a
+# pierdut intr-un logger.warning, si nimeni n-a aflat pana la generarea D212, luni
+# mai tarziu, cand userul a primit un refuz fara iesire.
+#
+# De aceea esecul se STOCHEAZA. Cele doua cauze cer raspunsuri DIFERITE de la user:
+# pe ANAF_GOL numarul trebuie tastat de pe certificat (reimprospatarea nu ajuta,
+# ANAF chiar n-are ce da); pe PREA_LUNG avem un numar, dar nu incape in formatul
+# ANAF si trebuie sa ne uitam impreuna la el. Un singur „nesetat" le-ar confunda.
+#
+# NULL = n-am incercat niciodata (sau numarul e completat — vezi campul insusi).
+MOTIV_NR_ANAF_GOL = "ANAF_GOL"
+MOTIV_NR_PREA_LUNG = "PREA_LUNG"
+
+# Lungimea coloanei din migrarea 031. Codurile sunt scurte si stabile.
+MAX_LEN_MOTIV_NR_DOC = 30
+
+
+def motiv_nr_doc_text(motiv: Optional[str]) -> Optional[str]:
+    """Codul de motiv → ce citeste OMUL. Cod necunoscut / None → None.
+
+    Sursa UNICA pentru toate cele patru suprafete (coduri fiscale in bot, Setari
+    web, rezultatul reimprospatarii, sumarul de configurare). Un motiv explicat
+    diferit in doua locuri e acelasi bug ca un motiv neexplicat deloc.
+    """
+    return {
+        MOTIV_NR_ANAF_GOL: (
+            "ANAF nu are numărul certificatului pentru CUI-ul tău — "
+            "l-am cerut și a venit gol. Scrie-l tu de pe certificat."
+        ),
+        MOTIV_NR_PREA_LUNG: (
+            f"ANAF a întors un număr mai lung de {MAX_LEN_NR_DOC_AUTORIZARE} "
+            "caractere, cât acceptă Declarația Unică. Nu-l tai — un număr de "
+            "certificat trunchiat e un număr fals. Scrie-l tu de pe certificat."
+        ),
+    }.get(motiv or "")
+
+
 def normalizeaza_nr_doc_autorizare(val: Optional[str]) -> Optional[str]:
     """Curata numarul si REFUZA ce nu incape in 15 caractere.
 
@@ -62,6 +114,30 @@ def normalizeaza_nr_doc_autorizare(val: Optional[str]) -> Optional[str]:
             f"Nu il trunchiem — un numar de certificat taiat e un numar fals."
         )
     return curat
+
+
+def nr_doc_din_anaf(val: Optional[str]) -> tuple:
+    """Raspunsul ANAF → `(numar, motiv)`. NICIODATA nu arunca, niciodata nu tace.
+
+    Inlocuieste tiparul care a produs bug-ul: apelantii chemau
+    `normalizeaza_nr_doc_autorizare` intr-un try/except care inghitea exceptia cu
+    un logger.warning, iar valoarea goala trecea prin `if nr_doc:` fara urma.
+    Aici cele doua esecuri sunt VALORI de intors, nu evenimente de pierdut:
+
+        („J2018000137062", None)   -> avem numarul
+        (None, MOTIV_NR_ANAF_GOL)  -> ANAF n-a dat nimic
+        (None, MOTIV_NR_PREA_LUNG) -> a dat, dar nu incape
+
+    Apelantul nu mai poate ignora cauza din greseala: ca s-o piarda, trebuie sa
+    arunce explicit al doilea element.
+    """
+    try:
+        nr = normalizeaza_nr_doc_autorizare(val)
+    except NrDocAutorizarePreaLung:
+        return None, MOTIV_NR_PREA_LUNG
+    if not nr:
+        return None, MOTIV_NR_ANAF_GOL
+    return nr, None
 
 
 def parseaza_data_anaf(val: Optional[str]) -> Optional[date]:

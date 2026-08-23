@@ -227,7 +227,11 @@ def _suprafete():
         # botul (configurare SI Setari — acelasi text, o singura sursa)
         "bot": text_confirmare_data(date(2025, 12, 5), nr_doc="F2025049962009"),
         "web_wizard": _bloc("📜 Data certificatului de la Registrul", "wiz-cert-msg"),
-        "web_setari": _bloc("Data certificatului de la Registrul", "set-cert-msg"),
+        # Sectiunea din Setari s-a numit „Data certificatului…" cat timp DOAR data
+        # era editabila acolo. De cand numarul are si el camp (era gol pe productie
+        # si n-avea cale de intrare), sectiunea acopera PERECHEA — de aici titlul.
+        # Promisiunile masurate mai jos sunt aceleasi; s-a mutat doar ancora.
+        "web_setari": _bloc("Certificatul de la Registrul Comerțului", "set-cert-msg"),
     }
 
 

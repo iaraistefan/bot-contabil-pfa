@@ -643,6 +643,27 @@ MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS nume_preferat VARCHAR(200)",
         ],
     },
+    {
+        "id": "031_nr_doc_autorizare_motiv",
+        "description": (
+            "DE CE lipseste numarul certificatului ONRC, nu doar CA lipseste. "
+            "nr_doc_autorizare era NULL in doua situatii care cer raspunsuri "
+            "diferite de la user, dar aratau identic: «nimeni n-a intrebat "
+            "vreodata» (cont dinaintea migrarii 027) si «am intrebat ANAF si a "
+            "venit gol». Pe productie userul 1 era in a doua situatie — lookup-ul "
+            "ii scrisese numele in aceeasi rulare — dar cauza s-a pierdut intr-un "
+            "logger.warning si nimeni n-a aflat pana la generarea D212. "
+            "Valori: ANAF_GOL / PREA_LUNG (vezi app/domain/doc_autorizare.py). "
+            "Aditiv si idempotent; NULL = n-am incercat, SAU numarul e completat "
+            "— campul insusi decide care din doua. Se STERGE inapoi la NULL cand "
+            "numarul se completeaza, ca sa nu ramana o explicatie pentru o lipsa "
+            "care nu mai exista."
+        ),
+        "sql": [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "nr_doc_autorizare_motiv VARCHAR(30)",
+        ],
+    },
     # Aici vom adauga migrari noi in viitor
 ]
 

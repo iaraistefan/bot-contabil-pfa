@@ -3,7 +3,9 @@ from app.enums import DocType
 from db import init_db, get_session
 from app.domain import eligibilitate as elig
 from app.domain.doc_autorizare import (
-    MESAJ_DATA_INVALIDA, formateaza_data_d212, parseaza_data_anaf,
+    MAX_LEN_NR_DOC_AUTORIZARE, MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung,
+    formateaza_data_d212, motiv_nr_doc_text, normalizeaza_nr_doc_autorizare,
+    parseaza_data_anaf,
     parseaza_data_utilizator, text_confirmare_data,
 )
 from app.repositories import users as users_repo
@@ -3214,14 +3216,19 @@ async def _coduri_text(profile: dict) -> str:
     cnp = profile.get("cnp")
     cod_tva_txt = f"RO {cod_tva}" if cod_tva else "— nesetat"
     cnp_txt = "setat (ascuns)" if cnp else "— nesetat"
-    # Certificatul ONRC: numarul vine automat din ANAF la configurare, data se
-    # confirma. Aratam starea reala a perechii — D212 le cere impreuna.
+    # Certificatul ONRC. Aratam starea reala a perechii — D212 le cere impreuna.
+    # Cand numarul lipseste SI stim de ce (ANAF l-a dat gol / prea lung), spunem
+    # motivul: un „— nesetat" sec nu deosebeste „nimeni n-a intrebat" de „am
+    # intrebat si n-a fost", desi cele doua cer lucruri diferite de la user.
     nr_cert = profile.get("nr_doc_autorizare")
     data_cert = parseaza_data_anaf(profile.get("data_doc_autorizare"))
+    motiv_txt = motiv_nr_doc_text(profile.get("nr_doc_autorizare_motiv"))
     if nr_cert and data_cert:
         cert_txt = f"`{nr_cert}` din {formateaza_data_d212(data_cert)}"
     elif nr_cert:
         cert_txt = f"`{nr_cert}` — data nesetată"
+    elif motiv_txt:
+        cert_txt = f"— numărul lipsește\n_{motiv_txt}_"
     else:
         cert_txt = "— nesetat"
     return (
@@ -3260,16 +3267,35 @@ def _kb_coduri(profile: dict):
     else:
         rows.append([InlineKeyboardButton(
             "🆔 Setează CNP", callback_data="coduri|set_cnp")])
-    # Data certificatului ONRC: singurul camp al perechii care poate lipsi
-    # (numarul se ia automat din ANAF). Fara butonul asta, cine a amanat-o la
-    # configurare n-avea pe unde s-o mai completeze — vezi mesajul de refuz al
-    # generatorului D212, care trimite exact aici.
+    # Certificatul ONRC — AMANDOUA campurile au buton.
+    #
+    # Aici statea scris ca numarul „se ia automat din ANAF", deci n-are nevoie de
+    # buton. Asumptia a fost dezmintita pe productie: userul 1 avea numarul NULL
+    # (ANAF nu-l intorsese), D212 refuza sa se genereze, iar singurul ecran care
+    # ar fi putut repara asta oferea doar data. Fundatura completa, pentru
+    # feature-ul pe care userul tocmai il platise.
+    #
+    # Automatizarea ramane — se ia din ANAF cand ANAF il are, iar butonul de
+    # reimprospatare mai incearca o data. Dar cand ANAF chiar n-are ce da,
+    # trebuie sa existe o cale de mana. Un camp obligatoriu fara cale de intrare
+    # nu e „automat", e blocat.
+    if profile.get("nr_doc_autorizare"):
+        rows.append([InlineKeyboardButton(
+            "✏️ Schimbă numărul certificatului", callback_data="coduri|set_certnr")])
+    else:
+        rows.append([InlineKeyboardButton(
+            "📜 Setează numărul certificatului", callback_data="coduri|set_certnr")])
     if profile.get("data_doc_autorizare"):
         rows.append([InlineKeyboardButton(
             "✏️ Schimbă data certificatului", callback_data="coduri|set_certdata")])
     else:
         rows.append([InlineKeyboardButton(
             "📜 Setează data certificatului", callback_data="coduri|set_certdata")])
+    # A doua sansa de captare: umple orice camp ramas gol dupa configurare —
+    # inclusiv cele adaugate de migrari ULTERIOARE contului. Vezi
+    # app/services/anaf_refresh.py pentru regula (umple golurile, nu rescrie).
+    rows.append([InlineKeyboardButton(
+        "🔄 Reîmprospătează datele de la ANAF", callback_data="coduri|anaf_refresh")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -3364,6 +3390,47 @@ async def handle_coduri_callback(update, context, parts, user_id):
             parse_mode="Markdown",
         )
         return
+    if action == "set_certnr":
+        context.user_data["coduri_wizard"] = "certnr"
+        await query.edit_message_text(
+            "📜 *Numărul certificatului de la Registrul Comerțului*\n\n"
+            "Declarația Unică îl cere împreună cu data — număr fără dată nu se "
+            "poate, și invers.\n\n"
+            "Scrie-mi-l exact cum e tipărit pe certificat.\n"
+            "_Exemplu: J2018000137062 sau F06/123456/2018_\n\n"
+            "Apasa `/coduri_fiscale` ca sa renunti.",
+            parse_mode="Markdown",
+        )
+        return
+    if action == "anaf_refresh":
+        # A doua sansa de captare (vezi app/services/anaf_refresh.py). Raspunsul
+        # e acelasi text ca in Setari web — un singur serviciu, doua suprafete.
+        from app.services import anaf_refresh
+        await query.edit_message_text("🔄 Întreb ANAF...")
+        session = get_session()
+        try:
+            rez = anaf_refresh.reimprospateaza(session, user_id)
+            if rez.ok:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception as e:
+            session.rollback()
+            logger.error(f"coduri anaf_refresh error user={user_id}: {e}")
+            rez = None
+        finally:
+            session.close()
+        text = (anaf_refresh.text_rezultat(rez) if rez is not None else
+                "⚠️ Nu am putut întreba ANAF chiar acum. Mai încearcă — "
+                "datele tale rămân neatinse.")
+        try:
+            await query.edit_message_text(text, parse_mode="Markdown")
+        except Exception:
+            # Numele de firma din ANAF pot purta caractere pe care Markdown le
+            # ia drept accente. Textul conteaza, formatarea nu.
+            await query.edit_message_text(text)
+        await _reafiseaza_coduri(update, context, user_id, via_query=query)
+        return
     if action == "del_tva":
         session = get_session()
         try:
@@ -3444,6 +3511,39 @@ async def handle_coduri_wizard_text(update: Update, context: ContextTypes.DEFAUL
         await _reafiseaza_coduri(update, context, user_id)
         return
 
+    if kind == "certnr":
+        # Numarul, nu cifre: „cifre" ar rupe „J2018000137062" si „F06/123456/2018".
+        # Gardianul C15Type e in users_repo (o singura granita de scriere) — aici
+        # doar traducem refuzul lui in text de om.
+        try:
+            nr = normalizeaza_nr_doc_autorizare(text)
+        except NrDocAutorizarePreaLung:
+            await update.message.reply_text(
+                f"Numărul ăsta are mai mult de {MAX_LEN_NR_DOC_AUTORIZARE} "
+                "caractere, cât acceptă Declarația Unică. Uită-te încă o dată pe "
+                "certificat — nu-l tai eu, un număr trunchiat e un număr fals."
+            )
+            return
+        if not nr:
+            await update.message.reply_text(
+                "N-am înțeles numărul. Scrie-l exact cum e tipărit pe certificat "
+                "— de exemplu J2018000137062."
+            )
+            return
+        session = get_session()
+        try:
+            users_repo.update_profile_by_id(session, user_id, nr_doc_autorizare=nr)
+            session.commit()
+        finally:
+            session.close()
+        context.user_data.pop("coduri_wizard", None)
+        await update.message.reply_text(
+            f"✅ Am notat numărul certificatului: `{nr}`.\n"
+            "Se foloseste pe *Declaratia Unica D212*, impreuna cu data lui.",
+            parse_mode="Markdown",
+        )
+        await _reafiseaza_coduri(update, context, user_id)
+        return
     if kind == "certdata":
         # Data, nu cifre: „cifre" de mai sus ar lipi 05122025. Acelasi parser ca
         # la configurare, deci acelasi mesaj de eroare pe amandoua drumurile.

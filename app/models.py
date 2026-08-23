@@ -90,6 +90,10 @@ class User(Base):
     # userului — ANAF se contrazice singur pe PFA si „Data eliberarii" de pe
     # certificat nu apare in raspuns. NULL = neconfirmata inca.
     nr_doc_autorizare = Column(String(15), nullable=True)
+    # DE CE lipseste numarul, cand lipseste (migrarea 031). NULL = n-am
+    # incercat niciodata SAU e completat; ANAF_GOL / PREA_LUNG = am incercat
+    # si stiu de ce n-a mers. Vezi app/domain/doc_autorizare.py.
+    nr_doc_autorizare_motiv = Column(String(30), nullable=True)
     data_doc_autorizare = Column(Date, nullable=True)
 
     # === Locatie ===

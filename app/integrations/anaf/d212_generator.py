@@ -362,9 +362,16 @@ def genereaza_d212(
             "Nu le derivam din denumirea PFA — le cerem explicit."
         )
     if not _curata_text(activitate.nr_doc_autorizare):
+        # Un refuz care NUMESTE lipsa fara sa dea drumul e o fundatura. Perechea
+        # lui (data, mai jos) trimitea de mult in profil; asta nu — si userul de
+        # productie a ramas blocat exact aici, fara sa afle unde se completeaza.
+        # Nu numim o comanda anume: acelasi text pleaca si din bot, si din web.
         raise ValueError(
             "Nr. certificatului de inregistrare ONRC e obligatoriu pentru "
-            "activitati independente (BR-D212-0095). Nu inventam un numar."
+            "activitati independente (BR-D212-0095). Nu inventam un numar. "
+            "Il completezi in profil, la codurile fiscale, langa data "
+            "certificatului — sau apesi «Reimprospateaza datele de la ANAF» "
+            "si il aduc eu, daca ANAF il are."
         )
     if activitate.data_doc_autorizare is None:
         # Lipsa asta e ASTEPTATA: data certificatului se confirma de user la

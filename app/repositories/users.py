@@ -11,7 +11,9 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.domain import eligibilitate as elig
-from app.domain.doc_autorizare import normalizeaza_nr_doc_autorizare
+from app.domain.doc_autorizare import (
+    MAX_LEN_MOTIV_NR_DOC, normalizeaza_nr_doc_autorizare,
+)
 from app.models import User
 
 
@@ -105,6 +107,7 @@ def update_profile(
     activity_code: Optional[str] = None,
     nr_doc_autorizare: Optional[str] = None,
     data_doc_autorizare: Optional[date] = None,
+    nr_doc_autorizare_motiv: Optional[str] = None,
     judet: Optional[str] = None,
     localitate: Optional[str] = None,
     norma_venit_anuala: Optional[float] = None,
@@ -170,12 +173,24 @@ def update_profile(
         user.caen_principal = caen_principal
     if activity_code is not None:
         user.activity_code = activity_code
+    # ORDINEA CONTEAZA: motivul se scrie INAINTE de numar, ca invariantul de mai
+    # jos sa tina indiferent ce primeste functia. Daca s-ar scrie dupa, un apelant
+    # care da si numar si motiv ar lasa in baza o explicatie pentru o lipsa care
+    # nu mai exista — exact minciuna pe care campul asta trebuie s-o previna.
+    if nr_doc_autorizare_motiv is not None:
+        val = str(nr_doc_autorizare_motiv).strip()[:MAX_LEN_MOTIV_NR_DOC]
+        user.nr_doc_autorizare_motiv = val or None
     if nr_doc_autorizare is not None:
         # Gardianul C15Type traieste AICI, la granita de scriere, ca sa fie unul
         # singur pentru amandoua drumurile (bot si web). Ridica
         # NrDocAutorizarePreaLung peste 15 caractere — apelantii care capteaza
         # automat il prind si lasa campul gol; nimeni nu trunchiaza.
         user.nr_doc_autorizare = normalizeaza_nr_doc_autorizare(nr_doc_autorizare)
+        # INVARIANT: motivul explica o LIPSA. Cand numarul exista, n-are ce
+        # explica — se sterge in ACEEASI scriere. Altfel Setarile ar arata la
+        # nesfarsit „ANAF n-a avut numarul" langa numarul pe care tocmai l-ai pus.
+        if user.nr_doc_autorizare:
+            user.nr_doc_autorizare_motiv = None
     if data_doc_autorizare is not None:
         user.data_doc_autorizare = data_doc_autorizare
     if judet is not None:
@@ -428,6 +443,9 @@ def get_profile_dict(session: Session, user_id: int) -> Optional[Dict[str, Any]]
         "caen_principal": user.caen_principal,
         "activity_code": user.activity_code,
         "nr_doc_autorizare": user.nr_doc_autorizare,
+        # DE CE lipseste, cand lipseste (031). Consumatorii il traduc prin
+        # doc_autorizare.motiv_nr_doc_text — nu-si scriu propriul text.
+        "nr_doc_autorizare_motiv": user.nr_doc_autorizare_motiv,
         "data_doc_autorizare": (
             user.data_doc_autorizare.isoformat()
             if user.data_doc_autorizare else None

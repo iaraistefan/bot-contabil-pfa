@@ -30,9 +30,8 @@ from app.repositories import users as users_repo
 from app.integrations.anaf_lookup import lookup_cui
 from app.domain.fiscal_profile import VAT_THRESHOLD_RON  # sursă unică prag TVA (B8)
 from app.domain.doc_autorizare import (
-    MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung, formateaza_data_d212,
-    normalizeaza_nr_doc_autorizare, parseaza_data_anaf, parseaza_data_utilizator,
-    text_confirmare_data,
+    MESAJ_DATA_INVALIDA, formateaza_data_d212, nr_doc_din_anaf,
+    parseaza_data_anaf, parseaza_data_utilizator, text_confirmare_data,
 )
 
 logger = logging.getLogger(__name__)
@@ -862,18 +861,26 @@ async def handle_onboarding_text(
                     updates["nume_declarant"] = anaf["nume_declarant"]
                     updates["prenume_declarant"] = anaf["prenume_declarant"]
 
-                # Certificatul ONRC: NUMARUL se ia automat, fara sa intrebam —
-                # verificat pe CUI real, ANAF intoarce exact ce scrie pe hartie.
+                # Certificatul ONRC: NUMARUL se ia automat CAND ANAF IL ARE — nu
+                # intotdeauna il are (vezi antetul din app/domain/doc_autorizare.py).
+                # Cand nu, se completeaza de mana din /coduri_fiscale sau din Setari.
                 # DATA nu se scrie aici: o confirma userul (ANAF se contrazice
-                # singur pe PFA), vezi app/domain/doc_autorizare.py.
-                try:
-                    nr_doc = normalizeaza_nr_doc_autorizare(anaf.get("nr_reg_com"))
-                    if nr_doc:
-                        updates["nr_doc_autorizare"] = nr_doc
-                except NrDocAutorizarePreaLung as e:
-                    # Nu blocam onboarding-ul pentru atat, dar nici nu taiem
-                    # numarul: ramane gol si se cere la generarea D212.
-                    logger.warning(f"nr_doc_autorizare nesalvat pentru CUI {cui_text}: {e}")
+                # singur pe PFA), vezi acelasi antet.
+                #
+                # ESECUL SE SCRIE. Inainte, un numar lipsa (ANAF gol) sau prea lung
+                # disparea intr-un logger.warning si campul ramanea gol, nedeosebit
+                # de „nimeni n-a intrebat vreodata". Userul afla luni mai tarziu,
+                # cand D212 refuza sa se genereze. Acum motivul intra in profil si
+                # e vizibil in Setari inainte sa aiba nevoie de el.
+                nr_doc, motiv_nr = nr_doc_din_anaf(anaf.get("nr_reg_com"))
+                if nr_doc:
+                    updates["nr_doc_autorizare"] = nr_doc
+                else:
+                    updates["nr_doc_autorizare_motiv"] = motiv_nr
+                    logger.warning(
+                        f"nr_doc_autorizare nesalvat pentru CUI {cui_text}: "
+                        f"motiv={motiv_nr} brut={anaf.get('nr_reg_com')!r}"
+                    )
 
                 users_repo.update_profile(session, user, **updates)
                 users_repo.set_onboarding_step(session, user, STEP_CONFIRMARE)
