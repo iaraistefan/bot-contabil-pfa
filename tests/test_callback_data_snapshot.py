@@ -63,6 +63,13 @@ def _extract_callbacks():
 #   /coduri_fiscale (ecranul care ține deja CNP-ul „folosit pe D212"). Fără el,
 #   cine amâna data la configurare rămânea fără drum înapoi, deși mesajul de
 #   refuz al generatorului D212 îl trimite „în profil". Buton NOU: `missing` gol.
+# +coduri|set_certnr = NUMĂRUL certificatului, tastat de mână. Butonul lipsea
+#   fiindcă numărul „se ia automat din ANAF" — asumpție dezmințită în producție:
+#   userul 1 îl avea gol (ANAF nu-l întorsese), D212 refuza, și niciun ecran nu
+#   putea repara. Automatizarea rămâne; asta e calea de mână de lângă ea.
+# +coduri|anaf_refresh = re-cheamă lookup-ul ANAF și umple GOLURILE din profil
+#   (inclusiv câmpuri apărute din migrări ulterioare contului). Nu rescrie ce e
+#   completat — diferențele se raportează. Ambele butoane NOI: `missing` gol.
 EXPECTED_CALLBACKS = {
     "alerts|history", "alerts|run",
     "bankpost|cancel", "bankpost|cat|{idx}|{key}", "bankpost|dec|{idx}|biz",
@@ -70,7 +77,9 @@ EXPECTED_CALLBACKS = {
     "bankpost|verif",
     "banktax|cancel", "banktax|confirm", "banktax|start",
     "boltsync|cancel", "boltsync|confirm|{year}|{month}",
-    "coduri|del_cnp", "coduri|del_tva", "coduri|set_certdata", "coduri|set_cnp",
+    "coduri|anaf_refresh",
+    "coduri|del_cnp", "coduri|del_tva", "coduri|set_certdata", "coduri|set_certnr",
+    "coduri|set_cnp",
     "d212|{year - 1}",
     "coduri|set_tva",
     "coduri|skip",

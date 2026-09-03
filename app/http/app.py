@@ -35,7 +35,8 @@ from app.services import tax_engine
 from app.domain import labels_ro
 from app.domain import eligibilitate as elig
 from app.domain.doc_autorizare import (
-    MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung, normalizeaza_nr_doc_autorizare,
+    MAX_LEN_NR_DOC_AUTORIZARE, MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung,
+    motiv_nr_doc_text, normalizeaza_nr_doc_autorizare, nr_doc_din_anaf,
     parseaza_data_utilizator,
 )
 from app import storage
@@ -886,6 +887,20 @@ def cui_lookup():
         return jsonify({"found": False, "error": res.get("error") or "Firmă negăsită"})
     activity = activity_from_caen(res.get("cod_caen") or "")
     act_label = ACTIVITIES_BY_CODE.get(activity, {}).get("label") if activity else None
+    # Numarul de certificat si CAUZA lipsei lui, dintr-o singura functie care nu
+    # arunca si nu tace (vezi doc_autorizare.nr_doc_din_anaf). Inainte, cauza se
+    # pierdea intr-un logger.warning si campul ramanea gol fara explicatie.
+    _nr, _motiv_nr = nr_doc_din_anaf(res.get("nr_reg_com"))
+    if _motiv_nr:
+        # `logger`, nu `app.logger`: in modulul asta `app` e PACHETUL (from app
+        # import storage), nu aplicatia Flask — aia e `flask_app`. Helperul de
+        # dinainte scria `app.logger` si ar fi dat NameError, dar numai pe calea
+        # rara (numar peste 15 caractere), deci n-a cazut niciodata. Acum
+        # logam si pe calea comuna (ANAF gol) si bug-ul a iesit la suprafata.
+        logger.warning(
+            f"nr_doc_autorizare nesalvat pentru CUI {cui}: "
+            f"motiv={_motiv_nr} brut={res.get('nr_reg_com')!r}"
+        )
     return jsonify({
         "found": True,
         "cui": res.get("cui"),
@@ -908,18 +923,13 @@ def cui_lookup():
         # duce in payload, ca numarul de certificat — automat, fara intrebare.
         "nume_declarant": res.get("nume_declarant"),
         "prenume_declarant": res.get("prenume_declarant"),
-        "nr_doc_autorizare": _nr_doc_autorizare_sau_none(res.get("nr_reg_com"), cui),
+        "nr_doc_autorizare": _nr,
+        # DE CE lipseste, cand lipseste. Wizardul il duce mai departe in payload
+        # exact ca numarul — asa profilul retine cauza in loc s-o piarda, si
+        # Setarile o pot arata inainte ca userul sa aiba nevoie de camp.
+        "nr_doc_autorizare_motiv": _motiv_nr,
         "data_doc_autorizare_propusa": res.get("data_inregistrare") or None,
     })
-
-
-def _nr_doc_autorizare_sau_none(nr_reg_com, cui):
-    """Numarul ONRC daca incape in C15Type, altfel None + log (niciodata taiat)."""
-    try:
-        return normalizeaza_nr_doc_autorizare(nr_reg_com)
-    except NrDocAutorizarePreaLung as e:
-        app.logger.warning(f"nr_doc_autorizare nesalvat pentru CUI {cui}: {e}")
-        return None
 
 
 # Câmpurile pe care wizardul le poate salva (allowlist — restul se ignoră).
@@ -927,9 +937,10 @@ _ONBOARDING_SAVE_FIELDS = {
     "name", "nume_preferat", "firma_nume", "firma_cui", "firma_forma_juridica", "cod_special_tva",
     "regim_tva", "regim_impunere", "regim_nerezident_bolt", "regim_nerezident_uber",
     "caen_principal", "activity_code", "judet", "localitate", "norma_venit_anuala",
-    # Certificat ONRC (D212): numarul vine automat din lookup; data e scrisa DOAR
-    # dupa confirmarea userului (allowlist, nu auto-completare tacuta).
-    "nr_doc_autorizare", "data_doc_autorizare",
+    # Certificat ONRC (D212): numarul vine din lookup CAND ANAF il are, iar cand
+    # nu-l are vine motivul in locul lui (nu tacere); data e scrisa DOAR dupa
+    # confirmarea userului (allowlist, nu auto-completare tacuta).
+    "nr_doc_autorizare", "data_doc_autorizare", "nr_doc_autorizare_motiv",
     # Numele titularului spart la sursa (ANAF) — declaratiile il cer separat.
     "nume_declarant", "prenume_declarant",
     # Raspunsul la poarta de eligibilitate (DA/VREAU/NU, "" = sterge → reintreaba).
@@ -1782,10 +1793,15 @@ def setari_get():
             "are_activitate_neeligibila_norma": bool(profile.get("are_activitate_neeligibila_norma")),
             "data_activitate_neeligibila": profile.get("data_activitate_neeligibila"),
             "cod_special_tva": profile.get("cod_special_tva") or "",
-            # Certificat ONRC (D212): numarul e read-only (vine automat din ANAF),
-            # data e EDITABILA — e singura din pereche care poate lipsi, iar
-            # mesajul de refuz al D212 trimite aici.
+            # Certificat ONRC (D212): AMANDOUA sunt editabile. Numarul era
+            # read-only fiindca „vine automat din ANAF" — asumptie dezmintita pe
+            # productie, unde userul 1 il avea gol si n-avea pe unde sa-l puna.
+            # `_motiv_text` spune DE CE e gol, cand stim (ANAF gol / prea lung).
             "nr_doc_autorizare": profile.get("nr_doc_autorizare") or "",
+            "nr_doc_autorizare_motiv": profile.get("nr_doc_autorizare_motiv") or "",
+            "nr_doc_autorizare_motiv_text": (
+                motiv_nr_doc_text(profile.get("nr_doc_autorizare_motiv")) or ""
+            ),
             "data_doc_autorizare": profile.get("data_doc_autorizare") or "",
             # Regim nerezident D100 PER-PLATFORMĂ (#3 + Uber sub-pas C): "" = neconfigurat
             # → fără preselecție. Bolt cu fallback la deprecatul `regim_nerezident`.
@@ -1861,6 +1877,26 @@ def setari_post():
                 "message": MESAJ_DATA_INVALIDA,
             }), 400
 
+    # NUMARUL certificatului: acum se poate tasta. Gardianul C15Type e la granita
+    # de scriere (users_repo.update_profile) — aici doar traducem refuzul lui in
+    # 400 cu text de om, ca la data. Sirul gol = „nu schimba", nu „sterge":
+    # stergerea unui numar corect n-are nicio utilizare, iar un input golit din
+    # greseala n-are voie sa duca la pierderea lui.
+    nr_cert = (body.get("nr_doc_autorizare") or "").strip() or None
+    if nr_cert:
+        try:
+            normalizeaza_nr_doc_autorizare(nr_cert)
+        except NrDocAutorizarePreaLung as e:
+            return jsonify({
+                "error": "invalid_nr_doc_autorizare",
+                "message": (
+                    f"Numărul are mai mult de {MAX_LEN_NR_DOC_AUTORIZARE} "
+                    "caractere, cât acceptă Declarația Unică. Verifică-l pe "
+                    "certificat — nu-l tai eu, un număr trunchiat e un număr fals."
+                ),
+                "detaliu": str(e),
+            }), 400
+
     session = get_session()
     try:
         user = users_repo.get_by_id(session, user_id)
@@ -1873,6 +1909,7 @@ def setari_post():
             regim_nerezident_bolt=regim_bolt,  # None → neschimbat (vezi update_profile)
             regim_nerezident_uber=regim_uber,
             data_doc_autorizare=data_cert,     # None → neschimbat
+            nr_doc_autorizare=nr_cert,         # None → neschimbat; sterge motivul
         )
         session.commit()
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -1885,6 +1922,10 @@ def setari_post():
             ),
             "regim_nerezident_uber": profile.get("regim_nerezident_uber") or "",
             "data_doc_autorizare": profile.get("data_doc_autorizare") or "",
+            "nr_doc_autorizare": profile.get("nr_doc_autorizare") or "",
+            "nr_doc_autorizare_motiv_text": (
+                motiv_nr_doc_text(profile.get("nr_doc_autorizare_motiv")) or ""
+            ),
         })
     except Exception as e:
         session.rollback()
@@ -1892,6 +1933,46 @@ def setari_post():
         return jsonify({"error": "internal error"}), 500
     finally:
         session.close()
+
+
+@flask_app.route("/api/v1/anaf/reimprospateaza", methods=["POST"])
+def anaf_reimprospateaza():
+    """Re-cheama ANAF pe CUI-ul userului si completeaza GOLURILE din profil.
+
+    Perechea butonului din bot (`coduri|anaf_refresh`) — acelasi serviciu, acelasi
+    text. NU e gated pe tier: e o reparare de date proprii, nu un livrabil. Un user
+    caruia ii lipseste un camp din vina noastra n-are ce plati ca sa-l recupereze.
+    """
+    user_id, err = _require_user()
+    if err:
+        return err
+
+    from app.services import anaf_refresh
+
+    session = get_session()
+    try:
+        rez = anaf_refresh.reimprospateaza(session, user_id)
+        if rez.ok:
+            session.commit()
+        else:
+            session.rollback()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"API reimprospatare ANAF error user={user_id}: {e}")
+        return jsonify({"error": "internal error"}), 500
+    finally:
+        session.close()
+
+    return jsonify({
+        "ok": rez.ok,
+        "message": anaf_refresh.text_rezultat(rez, markdown=False),
+        "completate": [{"camp": et, "valoare": v} for et, v in rez.completate],
+        "diferente": [
+            {"camp": et, "al_meu": a, "anaf": b} for et, a, b in rez.diferente
+        ],
+        "nr_doc_autorizare": rez.nr_completat or "",
+        "nr_doc_autorizare_motiv": rez.nr_motiv or "",
+    }), (200 if rez.ok else 400)
 
 
 @flask_app.route("/api/v1/documents")

@@ -901,14 +901,26 @@
               </button>
             </div>
             <div class="set-section">
-              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Data certificatului de la Registrul Comerțului</div>
-              <div class="hint" style="margin-bottom:var(--sp-3)">Declarația Unică cere numărul certificatului tău și data lui — ANAF le vrea pereche, număr fără dată nu se poate. Numărul îl luăm automat din ANAF; data o confirmi tu, pentru că „Data eliberării” tipărită pe certificat nu apare în răspunsul ANAF. <b>Uită-te pe certificat</b> — documentul tău are dreptate, nu registrul meu.</div>
-              <label class="set-lbl">Data certificatului</label>
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Certificatul de la Registrul Comerțului</div>
+              <div class="hint" style="margin-bottom:var(--sp-3)">Declarația Unică cere numărul certificatului tău și data lui — ANAF le vrea pereche, număr fără dată nu se poate. Numărul îl luăm din ANAF când îl are; data o confirmi tu, pentru că „Data eliberării” tipărită pe certificat nu apare în răspunsul ANAF. <b>Uită-te pe certificat</b> — documentul tău are dreptate, nu registrul meu.</div>
+              <label class="set-lbl">Numărul certificatului</label>
+              <input class="set-inp" id="set-cert-nr" type="text" placeholder="ex. J2018000137062" autocomplete="off" spellcheck="false">
+              <div id="set-cert-nr-motiv" class="hint" style="margin-top:var(--sp-1)"></div>
+              <label class="set-lbl" style="margin-top:var(--sp-3)">Data certificatului</label>
               <input class="set-inp" id="set-cert-data" type="text" inputmode="numeric" placeholder="zz.ll.aaaa" autocomplete="off">
               <div id="set-cert-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
-              <button class="btn btn-primary" id="set-cert-save" style="margin-top:var(--sp-1)" onclick="salveazaDataCertificat()">
+              <button class="btn btn-primary" id="set-cert-save" style="margin-top:var(--sp-1)" onclick="salveazaCertificat()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Salvează
+              </button>
+            </div>
+            <div class="set-section">
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Reîmprospătează datele de la ANAF</div>
+              <div class="hint" style="margin-bottom:var(--sp-3)">Întreb din nou ANAF pe CUI-ul tău și <b>completez ce e gol</b> în profil — inclusiv câmpuri apărute după ce ți-ai făcut contul. Ce ai completat deja nu se atinge: dacă ANAF spune altceva, îți arăt diferența și decizi tu. Utilă și când ți-ai mutat sediul sau ți-ai schimbat CAEN-ul.</div>
+              <div id="set-anaf-msg" class="hint" style="margin-bottom:var(--sp-2);min-height:18px;white-space:pre-line"></div>
+              <button class="btn" id="set-anaf-btn" onclick="reimprospateazaAnaf()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6M20 9A8 8 0 006 5.3M4 15a8 8 0 0014 3.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Reîmprospătează datele de la ANAF
               </button>
             </div>
             <div class="set-section">
@@ -2249,8 +2261,19 @@
       if(nz) nz.value = s.regim_nerezident_bolt||"";   // "" = neconfigurat → fără preselecție
       const nzu=document.getElementById("set-nerezident-uber");
       if(nzu) nzu.value = s.regim_nerezident_uber||"";
-      // Certificat ONRC: numărul e read-only (vine automat din ANAF), data e editabilă.
+      // Certificat ONRC: AMÂNDOUĂ câmpurile sunt editabile. Numărul era read-only
+      // fiindcă „vine automat din ANAF" — asumpție dezmințită în producție, unde
+      // un user îl avea gol și D212 refuza să se genereze, fără cale de reparare.
       setTxt("set-nr-cert", s.nr_doc_autorizare||"—");
+      const cn=document.getElementById("set-cert-nr");
+      if(cn) cn.value = s.nr_doc_autorizare||"";
+      // DE CE e gol, când știm. Un câmp gol fără explicație nu deosebește
+      // „nimeni n-a întrebat" de „am întrebat și ANAF n-a avut ce da".
+      const cm=document.getElementById("set-cert-nr-motiv");
+      if(cm){
+        cm.textContent = (!s.nr_doc_autorizare && s.nr_doc_autorizare_motiv_text)
+          ? s.nr_doc_autorizare_motiv_text : "";
+      }
       const cd=document.getElementById("set-cert-data");
       if(cd) cd.value = wizDataRo(s.data_doc_autorizare)||"";
       renderIntegrari(s.integrari);
@@ -2387,13 +2410,18 @@
   }
   window.salveazaSetari=salveazaSetari;
 
-  // Data certificatului ONRC din Setări — închide bucla pentru cine a amânat-o
-  // la configurare (mesajul de refuz al D212 trimite aici). Validarea o face
-  // SERVERUL, cu același parser ca botul: refuzul e identic pe ambele drumuri,
-  // nu două texte care seamănă.
-  async function salveazaDataCertificat(){
+  // Certificatul ONRC din Setări — închide bucla pentru cine n-are numărul sau
+  // data (mesajele de refuz ale D212 trimit aici, amândouă). Validarea o fac
+  // SERVERUL și users_repo, cu aceiași parseri ca botul: refuzul e identic pe
+  // ambele drumuri, nu două texte care seamănă.
+  //
+  // Trimitem AMBELE câmpuri într-un singur POST: sunt o pereche pe formular
+  // (număr fără dată nu se poate), deci se salvează ca o pereche. Câmpul gol
+  // înseamnă „nu schimba" — serverul aplică doar non-None.
+  async function salveazaCertificat(){
     const msg=document.getElementById("set-cert-msg"), btn=document.getElementById("set-cert-save");
     const val=(document.getElementById("set-cert-data")||{}).value||"";
+    const nr=(document.getElementById("set-cert-nr")||{}).value||"";
     if(!msg) return;
     msg.style.color="var(--muted)"; msg.textContent="Se salvează…";
     if(btn) btn.style.opacity=".6";
@@ -2401,14 +2429,20 @@
       const r=await authFetch("/api/v1/setari",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({data_doc_autorizare:val}),
+        body:JSON.stringify({data_doc_autorizare:val, nr_doc_autorizare:nr}),
       });
       const d=await r.json().catch(()=>({}));
       if(r.ok && d.ok){
         msg.style.color="var(--pos-br)";
-        msg.textContent="✓ Salvat. Data intră pe Declarația Unică, lângă numărul certificatului.";
+        msg.textContent="✓ Salvat. Numărul și data intră pe Declarația Unică.";
         const inp=document.getElementById("set-cert-data");
         if(inp && d.data_doc_autorizare) inp.value=wizDataRo(d.data_doc_autorizare);
+        const inr=document.getElementById("set-cert-nr");
+        if(inr && d.nr_doc_autorizare) inr.value=d.nr_doc_autorizare;
+        setTxt("set-nr-cert", d.nr_doc_autorizare||"—");
+        // Numărul completat ⇒ explicația lipsei nu mai are ce explica.
+        const cm=document.getElementById("set-cert-nr-motiv");
+        if(cm) cm.textContent = d.nr_doc_autorizare ? "" : (d.nr_doc_autorizare_motiv_text||"");
         cache.setari=null;
         haptic("success");
       }else{
@@ -2424,7 +2458,34 @@
       if(btn) btn.style.opacity="1";
     }
   }
-  window.salveazaDataCertificat=salveazaDataCertificat;
+  window.salveazaCertificat=salveazaCertificat;
+
+  // A doua șansă de captare a datelor de la ANAF. Perechea butonului din bot
+  // (coduri|anaf_refresh) — același serviciu, același text, două suprafețe.
+  async function reimprospateazaAnaf(){
+    const msg=document.getElementById("set-anaf-msg"), btn=document.getElementById("set-anaf-btn");
+    if(!msg) return;
+    msg.style.color="var(--muted)"; msg.textContent="Întreb ANAF…";
+    if(btn){ btn.disabled=true; btn.style.opacity=".6"; }
+    try{
+      const r=await authFetch("/api/v1/anaf/reimprospateaza",{method:"POST"});
+      const d=await r.json().catch(()=>({}));
+      msg.style.color = (r.ok && d.ok) ? "var(--pos-br)" : "var(--red)";
+      msg.textContent = d.message || "Nu am putut întreba ANAF. Încearcă din nou.";
+      if(r.ok && d.ok){
+        cache.setari=null;
+        await loadSetari();          // câmpurile completate se văd pe loc
+        haptic("success");
+      }else{ haptic("error"); }
+    }catch(e){
+      msg.style.color="var(--red)";
+      msg.textContent="Conexiune pierdută. Încearcă din nou.";
+      haptic("error");
+    }finally{
+      if(btn){ btn.disabled=false; btn.style.opacity="1"; }
+    }
+  }
+  window.reimprospateazaAnaf=reimprospateazaAnaf;
 
   // ---- MODAL PLATA ----
   function openPlata(tip, suma, cont, identif){
@@ -2824,6 +2885,9 @@
     WIZ.data.nume_declarant=d.nume_declarant||null;
     WIZ.data.prenume_declarant=d.prenume_declarant||null;
     WIZ.data.nr_doc_autorizare=d.nr_doc_autorizare||null;
+    // ...și DE CE lipsește, dacă lipsește. Fără asta, cauza se pierdea aici, în
+    // JS, iar profilul rămânea cu un câmp gol fără explicație.
+    WIZ.data.nr_doc_autorizare_motiv=d.nr_doc_autorizare_motiv||null;
     WIZ.data._dataDocPropusa=d.data_doc_autorizare_propusa||null;
     WIZ.data._cuiConfirmat=true;
     const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=false; nb.style.opacity="1"; }
@@ -3088,7 +3152,10 @@
             caen_principal:WIZ.data.caen_principal, activity_code:WIZ.data.activity_code,
             judet:WIZ.data.judet, localitate:WIZ.data.localitate};
           // Numărul de la Registrul Comerțului, dacă ANAF l-a dat și încape în C15Type.
+          // Dacă NU l-a dat, salvăm motivul: un câmp gol care știe de ce e gol se
+          // poate explica în Setări, unul care nu știe arată ca o simplă omisiune.
           if(WIZ.data.nr_doc_autorizare){ dateAnaf.nr_doc_autorizare=WIZ.data.nr_doc_autorizare; }
+          else if(WIZ.data.nr_doc_autorizare_motiv){ dateAnaf.nr_doc_autorizare_motiv=WIZ.data.nr_doc_autorizare_motiv; }
           if(WIZ.data.nume_declarant && WIZ.data.prenume_declarant){
             dateAnaf.nume_declarant=WIZ.data.nume_declarant;
             dateAnaf.prenume_declarant=WIZ.data.prenume_declarant;
