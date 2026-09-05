@@ -53,6 +53,8 @@ def genereaza_ghid_d700(*, plain: bool = False) -> str:
     L.append("6. Confirma ca apare codul RO in VIES (verificare online).")
     L.append("7. Introdu codul in Coniar → activeaza automat D301/D390.")
     L.append("")
-    L.append(b("Termen:") + " inainte de prima cursa/comision. Cat mai devreme — e "
-             "primul pas din tot lantul intracomunitar.")
+    L.append(b("Termen:") + " inainte de PRIMA CURSA. Obligatia se leaga de primirea "
+             "serviciului de intermediere — art. 317 alin. (1) lit. c), aceeasi bifa 3 de "
+             "la pasul 2 — nu de factura de comision, care vine DUPA prestare. "
+             "Cat mai devreme: e primul pas din tot lantul intracomunitar.")
     return "\n".join(L)

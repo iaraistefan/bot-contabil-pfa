@@ -515,6 +515,20 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
 
     # ─────────────────────────────────────────────────────────
     # D700 — Înregistrare cod special TVA (o singură dată)
+    #
+    # TEMEIUL DECLANȘATORULUI — de ce „prima cursă", nu „prima factură"
+    # Art. 317 alin. (1) lit. c) Cod fiscal: persoana impozabilă neînregistrată
+    # trebuie să solicite înregistrarea „ÎNAINTEA PRIMIRII SERVICIILOR
+    # RESPECTIVE" — forma consolidată legislatie.just.ro valabilă la 08.08.2026,
+    # verificat 18.08.2026.
+    #
+    # Obligația se leagă deci de PRIMIREA SERVICIULUI, nu de facturarea lui.
+    # Pentru un șofer, serviciul de intermediere se primește CÂND CONDUCE —
+    # momentul real e prima cursă. Factura de comision vine DUPĂ prestare, deci
+    # un text care trimite la ea dă userului un semnal pe care nu-l controlează
+    # și pe care îl află prea târziu, cu înregistrarea deja restantă.
+    # Temeiul stă AICI, o dată, nu copiat în fiecare câmp: trei copii ale unei
+    # date de verificare se desincronizează, exact tiparul din §ONRC.
     # ─────────────────────────────────────────────────────────
     "D700": DefinitieObligatie(
         cod="D700",
@@ -522,7 +536,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         descriere=(
             "Obligatorie pentru PFA/SRL neplătitor TVA care fac achiziții "
             "intracomunitare de servicii (Bolt EE). Se depune O SINGURĂ DATĂ, "
-            "înainte de prima factură intracom. Fără D700 nu poți depune D301."
+            "înainte de PRIMA CURSĂ — art. 317 alin. (1) lit. c). Fără D700 nu "
+            "poți depune D301."
         ),
         tip_iban=None,  # doar declarativă, fără plată
         frecventa=FrecventaObligatie.UNICA,
@@ -540,10 +555,17 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "intracomunitare (art. 317) — chiar dacă rămâi neplătitor de TVA pe activitatea ta."
         ),
         cui_se_aplica=(
-            "Ție, ca PFA/SRL neplătitor de TVA, ÎNAINTE de prima factură de comision "
-            "de la o platformă UE (Bolt EE / Uber NL)."
+            "Ție, ca PFA/SRL neplătitor de TVA, ÎNAINTE de prima cursă pe o platformă "
+            "UE (Bolt EE / Uber NL) — adică înainte să începi să primești serviciul "
+            "de intermediere, nu înainte să-l vezi facturat."
         ),
-        cand="O SINGURĂ DATĂ, cât mai devreme — înainte de prima factură intracomunitară.",
+        cand=(
+            "O SINGURĂ DATĂ, înainte de PRIMA CURSĂ. Obligația se leagă de primirea "
+            "serviciului de intermediere, nu de factură — factura vine după prestare, "
+            "deci ai afla prea târziu (art. 317 alin. (1) lit. c) Cod fiscal: "
+            "«înaintea primirii serviciilor respective»; forma consolidată 08.08.2026, "
+            "verificat 18.08.2026)."
+        ),
         cum_depun="Prin SPV. Fără plată — doar te înregistrezi și primești codul special.",
         de_ce=(
             "De ce un cod special dacă nu ești plătitor de TVA? Pentru servicii din UE, "
@@ -1159,42 +1181,6 @@ ANNUAL_DEADLINES = [
     },
 ]
 
-# ⭐ FIX v2: Înlocuit text-ul GREȘIT despre withholding 2%
-SPECIAL_NOTES = [
-    {
-        "code": "IMPOZIT_NEREZIDENTI",
-        "name": "Impozit nerezidenți 2% — clarificare critică",
-        "description": (
-            "ATENȚIE: Versiunea anterioară a botului afirma greșit că Bolt "
-            "virează automat 2% la Trezorerie. CORECȚIE: Conform CDI "
-            "România-Estonia, TU (PFA-ul) ești obligat să reții și să "
-            "virezi 2% lunar prin D100 poz. 634. Pe factură scrie: "
-            "'sumă care ar trebui virată de către beneficiarul serviciului'."
-        ),
-        "urgency": "info",
-    },
-    {
-        "code": "D700",
-        "name": "Cod special TVA intracom (D700)",
-        "description": (
-            "Înainte de prima factură Bolt EE, trebuie depusă D700 "
-            "pentru a obține cod special TVA. Fără D700 NU poți depune D301. "
-            "Se depune O SINGURĂ DATĂ la ANAF."
-        ),
-        "urgency": "info",
-    },
-    {
-        "code": "REGISTRU_JURNAL",
-        "name": "Registru jurnal de încasări și plăți",
-        "description": (
-            "Ca PFA sistem real, ești obligat să ții un registru jurnal "
-            "conform OMFP 170/2015. Bot-ul generează acest registru automat."
-        ),
-        "urgency": "info",
-    },
-]
-
-
 def get_monthly_alerts(
     year: int, month: int, has_bolt_invoice: bool = False,
     cota_nerezident: Optional[float] = None,
@@ -1438,7 +1424,7 @@ __all__ = [
     "get_obligations_for_user",
     "format_calendar_telegram",
     # API VECHI (backward compat)
-    "MONTHLY_DEADLINES", "ANNUAL_DEADLINES", "SPECIAL_NOTES",
+    "MONTHLY_DEADLINES", "ANNUAL_DEADLINES",
     "get_monthly_alerts", "get_annual_alerts", "format_fiscal_message",
     # Constante
     "LUNI_RO", "LUNI_RO_UPPER",
