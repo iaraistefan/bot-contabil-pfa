@@ -81,6 +81,21 @@ class FrecventaObligatie(str, Enum):
     UNICA = "UNICA"                 # o singură dată (ex: D700)
 
 
+# Termenul unei obligații UNICA fără declanșator (vezi §D700 mai jos).
+#
+# `ObligatieCalculate.termen` e `date`, nu `Optional[date]`: a-l face opțional ar
+# sparge ~15 call-site-uri (strftime/isoformat) plus sortarea din
+# `get_obligations_for_user` — un cost mare pentru un caz care oricum nu ajunge la
+# user, fiindcă obligația e marcată `aplicabil_acum=False` și toți apelanții
+# filtrează pe `only_applicable=True`.
+#
+# Sentinelul e `date.max`, NU `today`, și asta e o alegere despre modul de eșec:
+# dacă vreodată scapă într-un ecran, „31.12.9999" se vede de la o poștă că e un
+# bug, pe când „azi" ar trece drept adevăr și ar reintroduce exact minciuna pe
+# care o scoatem aici.
+TERMEN_NEDETERMINAT = date.max
+
+
 class StatusObligatie(str, Enum):
     """Status pentru o obligație (calculat din zile rămase)."""
     DEPASIT = "DEPASIT"           # > 0 zile depășite
@@ -738,9 +753,13 @@ def _is_aplicabil(
     has_intracom_invoice: bool,
     has_cod_special_tva: bool,
     is_vat_payer: bool = False,
+    prima_activitate: Optional[date] = None,
 ) -> Tuple[bool, Optional[str]]:
     """
     Verifică dacă o obligație se aplică unui user în context.
+
+    `prima_activitate`: data primului venit înregistrat — declanșatorul
+    obligațiilor UNICA. Vezi ramura de la finalul funcției.
 
     Returns:
         (aplicabil, motiv_neaplicabil)
@@ -769,6 +788,31 @@ def _is_aplicabil(
     if obligatie.cod == "D700" and has_cod_special_tva:
         return False, "Cod special TVA deja înregistrat — D700 nu mai e necesar"
 
+    # O obligație UNICA se naște dintr-un EVENIMENT, nu dintr-o dată de calendar.
+    # Pentru D700 evenimentul e primirea serviciului de intermediere — prima cursă
+    # (art. 317 alin. (1) lit. c), vezi §D700). Fără niciun venit înregistrat n-avem
+    # declanșatorul, deci n-avem nici termenul: obligația e PROSPECTIVĂ, nu restantă.
+    #
+    # Nu inventăm o dată doar ca s-o putem afișa. Nici data începerii activității
+    # n-ar merge: e o margine inferioară (un PFA autorizat în 2023 poate începe
+    # ridesharing în 2026), nu declanșatorul. Aici tăcem — calendarul spune ce e
+    # SCADENT, iar fără prima cursă nimic nu e scadent. Obligația reapare aici,
+    # RESTANTĂ, în clipa în care există primul venit.
+    #
+    # Ce NU se stinge odată cu ea: recomandarea de prevenție „ia-ți codul special
+    # înainte să începi", care se declanșează pe PROFIL, nu pe prezența în
+    # calendar (vezi `profil_califica_pentru` + recomandarea D700 din
+    # `compliance_guardian.get_compliance_status`). Omul care e pe cale să
+    # înceapă trebuie să afle ÎNAINTE; dacă avertismentul ar depinde de lista de
+    # termene, ar apărea abia DUPĂ prima cursă, adică prea târziu. E exact
+    # declanșatorul greșit reparat în PR #158 (vezi §D700), mutat din text în
+    # logică: un semnal pe care userul îl află numai după ce e prea târziu.
+    if obligatie.frecventa == FrecventaObligatie.UNICA and prima_activitate is None:
+        return False, (
+            f"Nu am încă niciun venit înregistrat — {obligatie.cod} "
+            f"se naște la prima cursă, nu la o dată din calendar"
+        )
+
     return True, None
 
 
@@ -786,6 +830,7 @@ def compute_obligation(
     today: Optional[date] = None,
     d100_suma: Optional[float] = None,
     d100_status: Optional[str] = None,
+    prima_activitate: Optional[date] = None,
 ) -> ObligatieCalculate:
     """
     Calculează contextul unei obligații pentru o lună specifică.
@@ -801,6 +846,9 @@ def compute_obligation(
         has_cod_special_tva: dacă PFA-ul are deja D700 depus
         judet: pt lookup IBAN (ex "BN")
         today: data de referință (default = azi)
+        prima_activitate: data primului venit (`transactions.first_income_date`) —
+                     declanșatorul obligațiilor UNICA. Pasat de apelantul cu
+                     sesiune, ca `d100_suma`/`d100_status`.
     """
     if today is None:
         today = date.today()
@@ -820,8 +868,21 @@ def compute_obligation(
             year, month, luna_termen, definitie.ziua_termenului
         )
     elif definitie.frecventa == FrecventaObligatie.UNICA:
-        # Termenul "ASAP" — punem azi + 7 zile
-        termen = today + timedelta(days=7)
+        # Termenul unei obligații UNICA e ANTERIOR evenimentului care o naște:
+        # art. 317 alin. (1) lit. c) cere înregistrarea „înaintea primirii
+        # serviciilor respective". Data primei curse e deci ULTIMA zi la care mai
+        # erai la timp — de la ea încolo obligația e RESTANTĂ și escaladează normal.
+        #
+        # NU `today + N`. Un termen recalculat zilnic din `today` are ÎNTOTDEAUNA
+        # același număr de zile rămase: arăta veșnic „mai ai 7 zile" și retrimitea
+        # aceeași alertă la nesfârșit (deduplicarea o oprea doar în cadrul lunii),
+        # cu un termen inventat pe deasupra. Tiparul e problema, nu cifra 7 — de
+        # aceea `tests/test_d700_termen_eveniment.py` verifică INVARIANȚA la
+        # `today`, nu vreun prag anume.
+        termen = (
+            prima_activitate if prima_activitate is not None
+            else TERMEN_NEDETERMINAT
+        )
     else:
         termen = today + timedelta(days=30)
 
@@ -833,7 +894,21 @@ def compute_obligation(
         definitie, forma_juridica, activity_code,
         has_intracom_invoice, has_cod_special_tva,
         is_vat_payer=is_vat_payer,
+        prima_activitate=prima_activitate,
     )
+
+    # Perioada unei obligații UNICA nu e luna în care te uiți la ea — e momentul în
+    # care s-a născut. Contează: alertele zilnice și bilanțul săptămânal deduplică pe
+    # (cod, perioada_an, perioada_luna) — `proactive_alerts._process_user_alerts` și
+    # `_collect_all_obligations` — iar jobul verifică TREI luni la fiecare rulare
+    # (`_get_months_to_check`). Cu luna iterată drept perioadă, aceeași
+    # obligație unică primea trei chei distincte: pleca de trei ori și era numărată
+    # de trei ori în scorul de compliance. Reparație de rădăcină, aici, nu trei
+    # petice în cei trei consumatori.
+    if definitie.frecventa == FrecventaObligatie.UNICA:
+        perioada_an, perioada_luna = termen.year, termen.month
+    else:
+        perioada_an, perioada_luna = year, month
 
     # Calculează suma estimată
     suma_estimata = None
@@ -873,11 +948,43 @@ def compute_obligation(
         suma_estimata=suma_estimata,
         baza_calcul=baza_calcul,
         iban_cont=iban_cont,
-        perioada_an=year,
-        perioada_luna=month,
+        perioada_an=perioada_an,
+        perioada_luna=perioada_luna,
         aplicabil_acum=aplicabil,
         motiv_neaplicabil=motiv,
     )
+
+
+def profil_califica_pentru(
+    cod_definitie: str,
+    forma_juridica: str,
+    activity_code: str,
+    *,
+    is_vat_payer: bool = False,
+    has_cod_special_tva: bool = False,
+) -> bool:
+    """
+    Profilul userului se califică pentru obligația `cod_definitie` (cheia din
+    `DEFINITII_OBLIGATII`, ex. "D700") — DOAR pe formă juridică + activitate.
+
+    Deliberat NU se uită la termene, venituri sau lună. E întrebarea „ți se aplică
+    vreodată tipul ăsta de obligație?", nu „ai ceva scadent acum?". Calendarul
+    răspunde la a doua; prevenția răspunde la prima și trebuie să poată trăi
+    separat — altfel un avertisment de tip „ia-ți codul special ÎNAINTE să începi"
+    s-ar aprinde abia după ce ai început.
+
+    Sursă unică pentru partea de profil din `_is_aplicabil`: aceleași două reguli,
+    nu o copie care se desincronizează.
+    """
+    definitie = DEFINITII_OBLIGATII.get(cod_definitie)
+    if definitie is None:
+        return False
+    if not _matches_forma_juridica(
+        forma_juridica, is_vat_payer, has_cod_special_tva,
+        definitie.forme_juridice,
+    ):
+        return False
+    return "*" in definitie.activitati or activity_code in definitie.activitati
 
 
 def get_obligations_for_user(
@@ -895,6 +1002,7 @@ def get_obligations_for_user(
     today: Optional[date] = None,
     d100_suma: Optional[float] = None,
     d100_status: Optional[str] = None,
+    prima_activitate: Optional[date] = None,
 ) -> List[ObligatieCalculate]:
     """
     Returnează TOATE obligațiile fiscale pentru un user în luna respectivă.
@@ -914,6 +1022,9 @@ def get_obligations_for_user(
         judet: pt IBAN lookup
         only_applicable: dacă True, returnează doar obligațiile aplicabile
         today: data de referință
+        prima_activitate: data primului venit — declanșatorul obligațiilor UNICA
+                     (D700). Fără ea, o obligație UNICA e considerată neaplicabilă
+                     (prospectivă), NU primește un termen inventat.
 
     Returns:
         Lista de ObligatieCalculate, sortată după termen.
@@ -930,6 +1041,7 @@ def get_obligations_for_user(
             today=today,
             d100_suma=d100_suma,
             d100_status=d100_status,
+            prima_activitate=prima_activitate,
         )
         if only_applicable and not obl.aplicabil_acum:
             continue
@@ -1421,6 +1533,8 @@ __all__ = [
     "DefinitieObligatie", "ObligatieCalculate",
     "DEFINITII_OBLIGATII",
     "compute_obligation",
+    "profil_califica_pentru",
+    "TERMEN_NEDETERMINAT",
     "get_obligations_for_user",
     "format_calendar_telegram",
     # API VECHI (backward compat)

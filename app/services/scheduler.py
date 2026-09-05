@@ -391,6 +391,12 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
         except Exception:
             _d100_suma = _d100_status = None
+        # Declanșatorul obligațiilor UNICA (D700) — data primului venit.
+        from app.repositories import transactions as tx_repo
+        try:
+            _prima_activitate = tx_repo.first_income_date(session, user_id)
+        except Exception:
+            _prima_activitate = None
         obl = get_obligations_for_user(
             year, month,
             forma_juridica=ctx["forma_juridica"],
@@ -402,6 +408,7 @@ def _format_plata_line(session, user_id: int, year: int, month: int, today) -> s
             judet=ctx["judet"],
             only_applicable=True,
             today=today,
+            prima_activitate=_prima_activitate,
             d100_suma=_d100_suma,
             d100_status=_d100_status,
         )
