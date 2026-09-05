@@ -740,8 +740,17 @@ class DeclaratieGenerata(Base):
     # materia prima pentru „Audit Trail" (I1).
     rezultat_json = Column(JSON, nullable=True)
 
-    # XML-ul generat. NULL la D212 (calcul + ghid, fara fisier) si la generarile
-    # esuate. Masurat: 629-1083 octeti pe perioada tipica -> inline, fara storage extern.
+    # XML-ul generat. NULL exact in trei cazuri, si-n niciun altul:
+    #   - D212 pe calea de ESTIMARE: fara `identitate`+`activitate` nu se cheama
+    #     generatorul, fiindca e o privire, nu o depunere;
+    #   - D212 pe NORMA DE VENIT: se declara in capitolul II, cu alta structura,
+    #     deci primeste cifre + ghid, `motiv_fara_xml` si `motiv_negenerat`;
+    #   - generarile esuate, la orice tip.
+    # D212 cu identitate+activitate pe sistem real PRODUCE fisier, ca celelalte
+    # patru. Regula VIE sta in `declaratii_arhiva.genereaza_si_arhiveaza_d212` si
+    # in `declaratii_service.genereaza_d212` — daca se schimba, se schimba acolo;
+    # randurile astea doar o rezuma.
+    # Masurat: 629-1083 octeti pe perioada tipica -> inline, fara storage extern.
     xml = Column(Text, nullable=True)
     nume_fisier_xml = Column(String(120), nullable=True)
 
