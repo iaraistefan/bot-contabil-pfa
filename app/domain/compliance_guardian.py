@@ -53,6 +53,7 @@ from app.domain.fiscal_calendar import (
     DEFINITII_OBLIGATII,
     compute_obligation,
     get_obligations_for_user,
+    profil_califica_pentru,
     StatusObligatie,
     FrecventaObligatie,
     LUNI_RO_UPPER,
@@ -236,6 +237,10 @@ def validate_payment(
     # (cu sesiune) construiește planul și le pasează.
     d100_suma: Optional[float] = None,
     d100_status: Optional[str] = None,
+    # Declanșatorul obligațiilor UNICA (data primului venit). D700 n-are plată
+    # (tip_iban=None), deci practic nu ajunge aici; îl pasăm totuși ca validarea
+    # să vadă ACEEAȘI obligație ca restul aplicației, nu una calculată altfel.
+    prima_activitate: Optional[date] = None,
     # Context temporal
     today: Optional[date] = None,
 ) -> PaymentValidationResult:
@@ -305,6 +310,7 @@ def validate_payment(
         today=today,
         d100_suma=d100_suma,
         d100_status=d100_status,
+        prima_activitate=prima_activitate,
     )
 
     # ─── PAS 3: Verifică aplicabilitatea ──────────────────────
@@ -650,6 +656,7 @@ def get_compliance_status(
     today: Optional[date] = None,
     d100_suma: Optional[float] = None,
     d100_status: Optional[str] = None,
+    prima_activitate: Optional[date] = None,
 ) -> ComplianceStatus:
     """
     Returnează snapshot total al compliance-ului unui user.
@@ -657,6 +664,7 @@ def get_compliance_status(
     Combină toate obligațiile aplicabile + le clasifică pe urgență +
     generează recomandări concrete. `d100_suma`/`d100_status` (sub-pas D):
     D100 din planul per-platformă (sursă unică), nu 2% hardcodat.
+    `prima_activitate` (data primului venit) e declanșatorul obligațiilor UNICA.
     """
     if today is None:
         today = date.today()
@@ -672,6 +680,7 @@ def get_compliance_status(
         today=today,
         d100_suma=d100_suma,
         d100_status=d100_status,
+        prima_activitate=prima_activitate,
     )
 
     status = ComplianceStatus(
@@ -716,9 +725,27 @@ def get_compliance_status(
                 f"🟠 {o.definitie.cod} expiră în {o.zile_ramase} zile"
             )
 
-    # Recomandări
-    if not has_cod_special_tva and any(
-        o.definitie.cod == "D700" for o in obligatii
+    # ── Recomandări ──────────────────────────────────────────
+    # D700 e PREVENȚIE, nu scadență. Condiția e PROFILUL (te califici pe formă
+    # juridică + activitate ȘI n-ai încă cod special), NU prezența D700 în lista
+    # de termene de mai sus.
+    #
+    # De ce contează: D700 lipsește din calendar cât timp userul n-are niciun
+    # venit, fiindcă obligația se naște la prima cursă și n-avem de unde ști data
+    # (vezi ramura UNICA din `fiscal_calendar._is_aplicabil`). Condiționată pe
+    # listă, recomandarea s-ar fi stins exact pentru omul care e PE CALE să
+    # înceapă — singurul care mai poate depune la timp — și s-ar fi aprins abia
+    # DUPĂ prima cursă, cu obligația deja restantă. E aceeași greșeală ca
+    # declanșatorul reparat în PR #158 (vezi §D700 din `fiscal_calendar`): un
+    # semnal pe care userul îl află numai după ce e prea târziu, mutat din text
+    # în logică.
+    #
+    # Calendarul spune ce e SCADENT. Prevenția e altă întrebare și trăiește
+    # separat — de aceea trece prin `profil_califica_pentru`, nu prin `obligatii`.
+    if not has_cod_special_tva and profil_califica_pentru(
+        "D700", forma_juridica, activity_code,
+        is_vat_payer=is_vat_payer,
+        has_cod_special_tva=has_cod_special_tva,
     ):
         status.recomandari.append(
             "⚙️ Depune D700 (cod special TVA) — necesar pentru "

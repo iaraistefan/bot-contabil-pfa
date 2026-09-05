@@ -621,6 +621,9 @@ def obligatii_fiscale(year: int, month: int):
         # D100 split per-platformă (Uber sub-pas D): planul = sursă unică suma+status,
         # IDENTIC cu _d100_block → cele două ecrane web nu mai pot diverge.
         d100_plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+        # Declanșatorul obligațiilor UNICA (D700): data primului venit. Fără ea,
+        # D700 nu apare în calendar — prospectivă, nu cu un termen inventat.
+        prima_activitate = tx_repo.first_income_date(session, user_id)
     except Exception as e:
         logger.error(f"API obligatii profil error {year}/{month} user={user_id}: {e}")
         session.close()
@@ -639,6 +642,7 @@ def obligatii_fiscale(year: int, month: int):
             only_applicable=True,
             d100_suma=d100_plan.suma_declarata,
             d100_status=d100_plan.status,
+            prima_activitate=prima_activitate,
         )
         data = [{
             "cod": o.definitie.cod,

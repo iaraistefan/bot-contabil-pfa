@@ -38,6 +38,7 @@ from typing import Dict, List, Optional, Tuple
 import pytz
 import requests
 
+from app.domain.fiscal_calendar import FrecventaObligatie  # excluderea UNICA din numărătoare
 from app.domain.vat_plafon_msg import build_vat_plafon_msg  # sursă unică text plafon TVA
 
 logger = logging.getLogger(__name__)
@@ -102,11 +103,28 @@ def _send_telegram_message(
         return False
 
 
-def _determine_alert_type(zile_ramase: int) -> Optional[str]:
+def _determine_alert_type(
+    zile_ramase: int, frecventa: Optional[str] = None,
+) -> Optional[str]:
     """
     Determină ce tip de alertă să trimitem pentru o obligație.
     Returns None dacă nu e momentul de alertat (anti-spam).
+
+    `frecventa`: `DefinitieObligatie.frecventa`. O obligație UNICA e exclusă din
+    numărătoarea inversă — vezi mai jos.
     """
+    # O obligație UNICA n-are numărătoare inversă. N-o naște o dată din calendar,
+    # ci un EVENIMENT (D700: prima cursă, art. 317), iar termenul ei e ANTERIOR
+    # evenimentului. Pragurile „peste 7 / peste 3 / azi" nu descriu nimic pentru
+    # ea: ori evenimentul a avut loc, și atunci era datorată ÎNAINTE de el, deci e
+    # restantă; ori n-a avut loc, și atunci obligația nici nu apare în calendar.
+    # O zi rămasă pozitivă la o obligație UNICA e un artefact, nu o informație.
+    #
+    # Restanța rămâne pe loc, deliberat: aia e adevărată și trebuie să escaladeze.
+    # Excludem pragurile, nu obligația.
+    if zile_ramase >= 0 and frecventa == FrecventaObligatie.UNICA:
+        return None
+
     if zile_ramase == 0:
         return ALERT_DUE_TODAY
     if zile_ramase == 3:
@@ -279,6 +297,20 @@ def _ytd_income_brut(session, user_id: int, year: int) -> float:
     return float(total or 0.0)
 
 
+def _get_prima_activitate(session, user_id: int) -> Optional[date]:
+    """
+    Data primului venit — declanșatorul obligațiilor UNICA (D700). Defensiv:
+    o eroare de interogare NU trebuie să suprime alertele celorlalte obligații;
+    întoarce None, iar D700 iese din calendar (tăcere, nu un termen inventat).
+    """
+    try:
+        from app.repositories import transactions as tx_repo
+        return tx_repo.first_income_date(session, user_id)
+    except Exception as e:
+        logger.error(f"_get_prima_activitate error user={user_id}: {e}")
+        return None
+
+
 def _get_months_to_check(today: date) -> List[Tuple[int, int]]:
     """
     Returnează lunile pentru care verificăm obligații:
@@ -314,6 +346,8 @@ def _collect_all_obligations(
 
     all_obligatii = []
     seen = set()
+    # Constant pe user — o scoatem din buclă (aceeași valoare pentru toate lunile).
+    prima_activitate = _get_prima_activitate(session, user.id)
 
     for year, month in _get_months_to_check(today):
         intracom_base = _get_intracom_base_for_month(
@@ -340,6 +374,7 @@ def _collect_all_obligations(
                 today=today,
                 d100_suma=_d100_suma,
                 d100_status=_d100_status,
+                prima_activitate=prima_activitate,
             )
         except Exception as e:
             logger.error(
@@ -549,6 +584,8 @@ def _process_user_alerts(
 
     alerts_sent = 0
     months_to_check = _get_months_to_check(today)
+    # Constant pe user — o scoatem din buclă (aceeași valoare pentru toate lunile).
+    prima_activitate = _get_prima_activitate(session, user.id)
 
     for year, month in months_to_check:
         intracom_base = _get_intracom_base_for_month(
@@ -576,6 +613,7 @@ def _process_user_alerts(
                 today=today,
                 d100_suma=_d100_suma,
                 d100_status=_d100_status,
+                prima_activitate=prima_activitate,
             )
         except Exception as e:
             logger.error(
@@ -584,7 +622,9 @@ def _process_user_alerts(
             continue
 
         for obligatie in obligatii:
-            alert_type = _determine_alert_type(obligatie.zile_ramase)
+            alert_type = _determine_alert_type(
+                obligatie.zile_ramase, obligatie.definitie.frecventa,
+            )
             if not alert_type:
                 continue
 
@@ -896,6 +936,7 @@ def test_alerts_for_user(bot_token: str, telegram_id: int) -> Dict:
             d100_suma=_d100_suma,
             d100_status=_d100_status,
             today=today,
+            prima_activitate=_get_prima_activitate(session, user.id),
         )
 
         lines = [

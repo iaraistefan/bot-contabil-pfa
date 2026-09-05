@@ -1683,8 +1683,13 @@
       : `<div class="hp-deadline"><div class="d-lab"><span class="dot ${DOT[near.status]||'ok'}"></span>cel mai apropiat termen</div><div class="d-when">${termenRo(near.termen)} · ${zileRo(near.zile_ramase)}</div></div>`;
     const platiSorted=[...plati].sort((a,b)=>a.zile_ramase-b.zile_ramase);
     const lines=platiSorted.map(o=>`<div class="hp-line"><div class="l"><span class="dot ${DOT[o.status]||'ok'}"></span>${escHtml(o.cod)} — ${escHtml(o.nume)}</div><div class="r"><b>${RON(o.suma_estimata)} RON</b> · ${o.zile_ramase<0?zileRo(o.zile_ramase):termenRo(o.termen)}</div></div>`).join("");
+    // O declaratie fara suma poate fi RESTANTA: D700 isi ia termenul din prima
+    // cursa (art. 317 — inregistrarea se cere inaintea primirii serviciului), deci
+    // e o data din TRECUT din clipa in care exista. Fara marcaj, omul vedea data
+    // goala si n-avea de unde sti ca e depasit. Acelasi idiom ca la `plati` de mai
+    // sus si ca in timeline: negativul se spune, nu se afiseaza ca data.
     const declLine = declar.length
-      ? `<div class="hp-decl">+ ${declar.length===1?"1 declarație de depus":declar.length+" declarații de depus"} (fără plată): ${declar.map(o=>`<b>${escHtml(o.cod)}</b> — ${escHtml(o.nume)} · ${termenRo(o.termen)}`).join(", ")}</div>`
+      ? `<div class="hp-decl">+ ${declar.length===1?"1 declarație de depus":declar.length+" declarații de depus"} (fără plată): ${declar.map(o=>`<b>${escHtml(o.cod)}</b> — ${escHtml(o.nume)} · ${o.zile_ramase<0?zileRo(o.zile_ramase):termenRo(o.termen)}`).join(", ")}</div>`
       : "";
     const note = overdue
       ? `<div class="hp-note">⚠ <span>Se acumulează penalități cât timp nu e plătit. Depune și plătește cât mai curând.</span></div>`

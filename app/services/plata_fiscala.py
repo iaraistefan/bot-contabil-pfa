@@ -370,6 +370,13 @@ def build_payment_detail_message(
             session, user_id=user_id, year=period_year, month=period_month)
         _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
 
+    # Declanșatorul obligațiilor UNICA (D700) — data primului venit.
+    from app.repositories import transactions as tx_repo
+    try:
+        _prima_activitate = tx_repo.first_income_date(session, user_id)
+    except Exception:
+        _prima_activitate = None
+
     # Calculează obligația
     obligatie = compute_obligation(
         definitie,
@@ -382,6 +389,7 @@ def build_payment_detail_message(
         judet=ctx["judet"],
         d100_suma=_d100_suma,
         d100_status=_d100_status,
+        prima_activitate=_prima_activitate,
     )
 
     # Construim mesajul
@@ -525,6 +533,12 @@ def _plata_banner_items(session, user_id, ctx, applicable) -> list:
         _d100_suma, _d100_status = _plan.suma_declarata, _plan.status
     except Exception:
         _d100_suma = _d100_status = None
+    # Declanșatorul obligațiilor UNICA (D700) — data primului venit.
+    from app.repositories import transactions as tx_repo
+    try:
+        _prima_activitate = tx_repo.first_income_date(session, user_id)
+    except Exception:
+        _prima_activitate = None
     items = []
     for cod in applicable:
         definitie = DEFINITII_OBLIGATII.get(cod)
@@ -537,6 +551,7 @@ def _plata_banner_items(session, user_id, ctx, applicable) -> list:
                 has_cod_special_tva=ctx["has_cod_special_tva"], is_vat_payer=ctx["is_vat_payer"],
                 judet=ctx["judet"], today=today,
                 d100_suma=_d100_suma, d100_status=_d100_status,
+                prima_activitate=_prima_activitate,
             )
         except Exception:
             continue
@@ -754,6 +769,12 @@ async def handle_callback(
             )
             # D100 split per-platformă (sub-pas D): suma/status din plan (nu 2%).
             _plan = tax_engine.d100_plan_for(session, user_id=user_id, year=year, month=month)
+            # Declanșatorul obligațiilor UNICA (D700) — data primului venit.
+            from app.repositories import transactions as tx_repo
+            try:
+                _prima_activitate = tx_repo.first_income_date(session, user_id)
+            except Exception:
+                _prima_activitate = None
 
             status = get_compliance_status(
                 year, month,
@@ -767,6 +788,7 @@ async def handle_callback(
                 today=today,
                 d100_suma=_plan.suma_declarata,
                 d100_status=_plan.status,
+                prima_activitate=_prima_activitate,
             )
 
             msg = format_compliance_status_telegram(status)

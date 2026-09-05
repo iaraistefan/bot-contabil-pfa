@@ -2,7 +2,7 @@
 Repository pentru Transaction.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -137,3 +137,49 @@ def to_dict(tx: Transaction) -> Dict[str, Any]:
         "period_year": tx.period_year,
         "period_month": tx.period_month,
     }
+
+
+def first_income_date(session: Session, user_id: int) -> Optional[date]:
+    """
+    Data celui mai VECHI venit al userului — declanșatorul obligațiilor UNICA.
+
+    Pentru D700, art. 317 alin. (1) lit. c) leagă înregistrarea de PRIMIREA
+    serviciului de intermediere, nu de facturarea lui; pentru un șofer, momentul
+    real e prima cursă (vezi §D700 în `fiscal_calendar`). Primul venit înregistrat
+    e cea mai bună dovadă pe care o avem că serviciul a fost deja primit.
+
+    NU filtrăm `locked` (spre deosebire de `cash_income_for_year`). Tranzacțiile
+    dintr-o perioadă fiscală ÎNCHISĂ sunt exact cele mai vechi: cu `locked == False`
+    data primei curse ar migra înainte pe măsură ce se închid perioadele, iar
+    obligația ar părea tot mai puțin restantă cu fiecare închidere. Un termen care
+    se repară singur în timp e o minciună lentă, nu o corectură.
+
+    NU folosim `Document.data_doc`: e `String(20)` în format „zz.ll.aaaa", deci
+    MIN() pe el sortează LEXICOGRAFIC — „01.12.2025" < „02.01.2026", adică
+    decembrie ar ieși „mai vechi" decât ianuarie următoare. `Transaction.occurred_on`
+    e `Date` real și indexat (parsat din `data_doc` la postare, `posting.py`):
+    singura coloană pe care MIN() înseamnă ce pare că înseamnă. Dacă cineva vrea
+    să „optimizeze" interogarea asta înapoi pe `data_doc`, aici scrie de ce nu.
+
+    Returns: data primului venit, sau None dacă userul n-are niciun venit
+    (`func.min` ignoră NULL-urile, deci și tranzacțiile fără `occurred_on`).
+    """
+    from sqlalchemy import func
+
+    val = (
+        session.query(func.min(Transaction.occurred_on))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.tx_type == "INCOME",
+        )
+        .scalar()
+    )
+    if val is None:
+        return None
+    # SQLite poate întoarce text pentru un agregat pe coloană Date, în funcție de
+    # driver/versiune — normalizăm, ca apelantul să primească mereu un `date`.
+    if isinstance(val, str):
+        return date.fromisoformat(val[:10])
+    if isinstance(val, datetime):
+        return val.date()
+    return val
