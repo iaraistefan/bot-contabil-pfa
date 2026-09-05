@@ -747,9 +747,20 @@ def get_compliance_status(
         is_vat_payer=is_vat_payer,
         has_cod_special_tva=has_cod_special_tva,
     ):
+        # Textul spune AMBELE ieșiri, deliberat. Recomandarea se stinge pe
+        # `has_cod_special_tva`, care vine din `regim_tva == SPECIAL_INTRACOM` —
+        # iar regimul se comută automat când userul își scrie codul
+        # (`users._comuta_regim_intracom`). Userul care și-a luat codul pe altă
+        # cale (contabil, SPV direct) nu are de unde ști asta: pentru el
+        # obligația e rezolvată, dar eu îi tot bat la cap săptămânal fiindcă nu
+        # mi-a spus. Un sfat care numește o singură ieșire dintr-o buclă în care
+        # userul e deja prins nu e un sfat, e o sâcâială.
         status.recomandari.append(
-            "⚙️ Depune D700 (cod special TVA) — necesar pentru "
-            "achiziții intracomunitare Bolt"
+            "⚙️ Îți trebuie codul special de TVA (art. 317) — fără el nu poți "
+            "depune legal D301 și D390 pentru comisioanele Bolt/Uber. Dacă nu-l "
+            "ai încă, îl ceri o singură dată prin D700, din SPV. Dacă îl ai deja "
+            "de altundeva, scrie-mi-l în /coduri_fiscale — altfel n-am de unde "
+            "să știu că-l ai și îți tot amintesc degeaba."
         )
 
     if status.total_de_platit_7zile > 0:
