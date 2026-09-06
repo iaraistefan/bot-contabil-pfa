@@ -746,6 +746,45 @@ def _matches_forma_juridica(
     return False
 
 
+def _exclus_de_regimul_tva(
+    obligatie: DefinitieObligatie,
+    is_vat_payer: bool,
+    has_cod_special_tva: bool,
+) -> Optional[str]:
+    """
+    Motivul pentru care regimul de TVA exclude obligația, sau None dacă n-o exclude.
+
+    SURSĂ UNICĂ pentru regula asta — o folosesc și `_is_aplicabil` (calendarul), și
+    `profil_califica_pentru` (prevenția). Două copii ale ei s-ar desincroniza exact
+    ca §ONRC, iar rezultatul ar fi un user căruia calendarul îi spune una și sfatul
+    alta.
+
+    D700 e cererea de înregistrare pe art. 317, adică procedura pentru cine NU e
+    înregistrat NORMAL în scopuri de TVA (art. 316). Două motive de excludere:
+
+      • ai deja codul special → l-ai obținut, nu-l mai ceri o dată;
+      • ești plătitor complet de TVA → codul tău de la art. 316 e valid și pentru
+        operațiuni intracomunitare. Art. 317 nu ți se aplică deloc: pentru tine
+        declarațiile sunt D300 (decontul) și D390, nu D301.
+
+    Fără verificarea a doua, `forme_juridice=["PFA", ...]` face match exact pe „PFA"
+    prin `_matches_forma_juridica` — deci un plătitor complet primea D700 alături de
+    D300 și D390, o obligație pe care legea nu i-o cere și pe care ANAF n-ar avea
+    ce să i-o proceseze.
+    """
+    if obligatie.cod != "D700":
+        return None
+    if has_cod_special_tva:
+        return "Cod special TVA deja înregistrat — D700 nu mai e necesar"
+    if is_vat_payer:
+        return (
+            "Ești înregistrat normal în scopuri de TVA (art. 316) — codul tău "
+            "e valid și pentru operațiuni intracomunitare, deci art. 317 "
+            "(D700) nu ți se aplică"
+        )
+    return None
+
+
 def _is_aplicabil(
     obligatie: DefinitieObligatie,
     forma_juridica: str,
@@ -783,10 +822,12 @@ def _is_aplicabil(
     if obligatie.cod == "D301" and not has_cod_special_tva:
         return False, "Cod special TVA neînregistrat — depune D700 întâi"
 
-    # D700 (înregistrare cod special, UNICA) apare DOAR dacă NU ești deja
-    # înregistrat. Cu cod special deja obținut, nu mai e o obligație.
-    if obligatie.cod == "D700" and has_cod_special_tva:
-        return False, "Cod special TVA deja înregistrat — D700 nu mai e necesar"
+    # D700 (înregistrare cod special art. 317, UNICA) — exclus dacă ai deja codul
+    # SAU dacă ești plătitor complet de TVA. Regula stă în `_exclus_de_regimul_tva`,
+    # o singură dată, împărțită cu `profil_califica_pentru`.
+    motiv_tva = _exclus_de_regimul_tva(obligatie, is_vat_payer, has_cod_special_tva)
+    if motiv_tva:
+        return False, motiv_tva
 
     # O obligație UNICA se naște dintr-un EVENIMENT, nu dintr-o dată de calendar.
     # Pentru D700 evenimentul e primirea serviciului de intermediere — prima cursă
@@ -965,7 +1006,8 @@ def profil_califica_pentru(
 ) -> bool:
     """
     Profilul userului se califică pentru obligația `cod_definitie` (cheia din
-    `DEFINITII_OBLIGATII`, ex. "D700") — DOAR pe formă juridică + activitate.
+    `DEFINITII_OBLIGATII`, ex. "D700") — pe formă juridică + activitate + regimul
+    de TVA, adică pe TOT ce ține de profil.
 
     Deliberat NU se uită la termene, venituri sau lună. E întrebarea „ți se aplică
     vreodată tipul ăsta de obligație?", nu „ai ceva scadent acum?". Calendarul
@@ -984,7 +1026,14 @@ def profil_califica_pentru(
         definitie.forme_juridice,
     ):
         return False
-    return "*" in definitie.activitati or activity_code in definitie.activitati
+    if "*" not in definitie.activitati and activity_code not in definitie.activitati:
+        return False
+    # Regimul de TVA poate exclude obligația indiferent de formă și activitate
+    # (D700: art. 317 nu se aplică plătitorilor pe art. 316). Aceeași sursă ca
+    # `_is_aplicabil` — prevenția și calendarul nu au voie să spună lucruri diferite.
+    return _exclus_de_regimul_tva(
+        definitie, is_vat_payer, has_cod_special_tva
+    ) is None
 
 
 def get_obligations_for_user(
