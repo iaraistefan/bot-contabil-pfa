@@ -1079,10 +1079,16 @@ def format_calendar_telegram(
     judet: Optional[str] = None,
     d100_suma: Optional[float] = None,
     d100_status: Optional[str] = None,
+    prima_activitate: Optional[date] = None,
 ) -> str:
     """
     Format Telegram complet pentru calendar fiscal personalizat.
     `d100_suma`/`d100_status` (sub-pas D): D100 din planul per-platformă (nu 2%).
+
+    `prima_activitate` (data primului venit) e declanșatorul obligațiilor UNICA.
+    Fără ea D700 nu apare — corect pentru un user care n-a început, dar o omisiune
+    tăcută pentru unul care are venituri. Apelantul cu sesiune o pasează, ca
+    `d100_suma`; vezi `transactions.first_income_date`.
     """
     obligatii = get_obligations_for_user(
         year, month, forma_juridica, activity_code,
@@ -1094,6 +1100,7 @@ def format_calendar_telegram(
         only_applicable=True,
         d100_suma=d100_suma,
         d100_status=d100_status,
+        prima_activitate=prima_activitate,
     )
 
     lines = [
