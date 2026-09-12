@@ -4,8 +4,12 @@ pe care se sprijină luna în care semnalăm D100/D301/D390.
 
 CONTEXT (detaliat în app/domain/declansator_termen.py): luna alertei se ia din data
 facturii, dar legea leagă D100 de plata venitului (art. 224 alin. 5) și D301/D390 de
-exigibilitate (art. 324 alin. 2). Coincid doar cât timp furnizorul emite în ultima zi
-a perioadei — obicei Bolt măsurat pe 5 facturi reale (dec. 2025 – apr. 2026), nu regulă.
+exigibilitate (art. 324 alin. 2). Coincid pe două verigi: mecanismul de reținere a
+comisionului din curse (tare — plata cade obligatoriu în luna acoperită) plus datarea
+facturii în ultima zi a perioadei (slabă — doar ea ne lasă să echivalăm luna datei cu
+perioada acoperită, fiindcă perioada, deși tipărită pe factură, nu e captată).
+Tripwire-ul păzește veriga slabă. Măsurat pe 5 facturi reale (dec. 2025 – apr. 2026),
+5/5, iar tiparul e confirmat pe factura tipărită Bolt RO1126-158556.
 
 Testele acoperă DOUĂ straturi:
   • predicatul pur — inclusiv februarie bisect/nebisect, unde un tabel scris de mână

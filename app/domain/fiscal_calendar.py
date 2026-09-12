@@ -819,8 +819,10 @@ def _is_aplicabil(
     # ⚠️ DECLANȘATOR PRESUPUS, nu legal: un singur `if` pentru trei obligații care în
     # lege au trei declanșatoare DIFERITE — D100 pe plata venitului (art. 224 alin. 5),
     # D301/D390 pe exigibilitate (art. 324 alin. 2 / OPANAF 6.073/2024). Noi ramificăm
-    # pe „există factură în lună". Coincid cât timp furnizorul datează factura în ultima
-    # zi a perioadei; măsurat pe Bolt, 5/5. Regula, temeiurile, măsurătoarea și limitele
+    # pe „există factură în lună". Coincid pe două verigi: comisionul e reținut din curse
+    # (deci plata cade în luna acoperită) + factura e datată în ultima zi a perioadei
+    # (deci luna datei = perioada acoperită); măsurat pe Bolt, 5/5, confirmat pe factura
+    # tipărită. A doua verigă e cea fragilă. Regula, temeiurile, măsurătoarea și limitele
     # ei — ÎNTR-UN SINGUR LOC: app/domain/declansator_termen.py, care e și tripwire-ul
     # ce sună când tiparul se rupe. NU rescrie regula aici.
     if obligatie.cod in ("D100 poz. 634", "D301", "D390"):
