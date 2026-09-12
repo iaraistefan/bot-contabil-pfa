@@ -34,6 +34,7 @@ from app.services import stripe_webhook as _stripe_wh  # Brick 2c — singura sc
 from app.services import tax_engine
 from app.domain import labels_ro
 from app.domain import eligibilitate as elig
+from app.domain import forma_servita  # oferta (ce servim) vs taxonomia (ce există)
 from app.domain.doc_autorizare import (
     MAX_LEN_NR_DOC_AUTORIZARE, MESAJ_DATA_INVALIDA, NrDocAutorizarePreaLung,
     motiv_nr_doc_text, normalizeaza_nr_doc_autorizare, nr_doc_din_anaf,
@@ -889,6 +890,22 @@ def cui_lookup():
     res = lookup_cui(cui)
     if not res.get("found"):
         return jsonify({"found": False, "error": res.get("error") or "Firmă negăsită"})
+    # POARTA FORMEI JURIDICE — perechea web a celei din onboarding (bot). Forma nu
+    # se alege, se ATRIBUIE din CUI: fără poarta asta, scoaterea SRL-ului din
+    # dropdown n-ar schimba nimic pentru cine introduce CUI-ul firmei, fiindcă
+    # wizardul o transportă din răspunsul ANAF direct în payload (wizCuiConfirm).
+    # `found: True` + `forma_neservita: True` — firma EXISTĂ, noi n-o servim; sunt
+    # două lucruri diferite și ecranul le spune diferit.
+    _forma = res.get("forma_juridica_detectata")
+    if not forma_servita.e_servita(_forma):
+        logger.info(f"lookup CUI {cui} oprit: forma neservită {_forma!r}")
+        return jsonify({
+            "found": True,
+            "forma_neservita": True,
+            "denumire": res.get("denumire"),
+            "forma_juridica": _forma,
+            "mesaj": forma_servita.mesaj_forma_neservita(res.get("denumire")),
+        })
     activity = activity_from_caen(res.get("cod_caen") or "")
     act_label = ACTIVITIES_BY_CODE.get(activity, {}).get("label") if activity else None
     # Numarul de certificat si CAUZA lipsei lui, dintr-o singura functie care nu
@@ -1064,6 +1081,19 @@ def onboarding_save():
                     "First answer the question about your PFA."
                 ),
             }), 403
+    # POARTA FORMEI JURIDICE, pe server — aceeași lecție ca poarta de eligibilitate
+    # de deasupra: dropdown-ul din JS e decor dacă endpoint-ul acceptă orice.
+    # `update_profile` validează pe VALID_FORME_JURIDICE, adică pe TAXONOMIE (ce se
+    # poate stoca); aici verificăm OFERTA (ce se poate alege). Sunt două praguri.
+    _fj = fields.get("firma_forma_juridica")
+    if _fj is not None and not forma_servita.e_servita(_fj):
+        logger.info(f"onboarding/save respins user={user_id}: forma neservită {_fj!r}")
+        return jsonify({
+            "error": "forma_neservita",
+            "firma_forma_juridica": _fj,
+            "message": forma_servita.mesaj_forma_neservita(fields.get("firma_nume")),
+        }), 400
+
     # Datele de activitate (PAS 4a) vin ca ISO str → convertim la `date` pentru ORM.
     # String gol/invalid → None: update_profile aplica DOAR non-None, deci o data goala
     # lasa valoarea neschimbata (setarea unei date noi functioneaza; capturarea e optionala).

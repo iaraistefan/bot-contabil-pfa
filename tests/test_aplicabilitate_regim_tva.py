@@ -198,14 +198,27 @@ def test_d700_e_singura_obligatie_dependenta_de_tva_cu_forma_simpla():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "DEFECT CUNOSCUT, NEREPARAT AICI: `_matches_forma_juridica` construiește "
-        "sufixul din forma userului — pentru `SRL_MICRO` iese "
-        "`SRL_MICRO_platitor_TVA`, dar datele scriu `SRL_platitor_TVA`. Deci un "
-        "SRL plătitor de TVA nu primește NICIO declarație de TVA (nici D300, nici "
-        "D390, nici D301). Descoperit în auditul de clasă al acestui PR; reparația "
-        "ADAUGĂ obligații reale în calendarul unor useri, deci merită PR-ul ei. "
-        "Când se repară, șterge marcajul — `strict=True` face testul să pice dacă "
-        "începe să treacă, ca nimeni să nu repare tăcut."
+        "DEFECT REAL ÎNTR-O TAXONOMIE DEVENITĂ INACCESIBILĂ. Două jumătăți, și "
+        "amândouă contează:\n"
+        "  (1) Defectul EXISTĂ: `_matches_forma_juridica` construiește sufixul din "
+        "forma userului — pentru `SRL_MICRO` iese `SRL_MICRO_platitor_TVA`, dar "
+        "datele scriu `SRL_platitor_TVA`. Un SRL plătitor de TVA n-ar primi NICIO "
+        "declarație de TVA (nici D300, nici D390, nici D301).\n"
+        "  (2) Nu mai poate fi ATINS: SRL_MICRO/SRL_NORMAL au fost retrase din "
+        "ofertă (app/domain/forma_servita.py). Nu se mai pot alege din bot sau web, "
+        "iar cele trei drumuri prin care forma se ATRIBUIE din CUI (onboarding bot, "
+        "lookup web, reîmprospătare ANAF) se opresc înainte de a o scrie. Producția "
+        "avea zero useri pe SRL la data retragerii — deci nimeni n-a pățit-o și "
+        "nimeni nu poate ajunge acolo acum.\n"
+        "NU-L REPARA crezând că e viu: ai repara o cale pe care n-o mai parcurge "
+        "nimeni, și ai readuce în calendar obligații pentru o formă pe care motorul "
+        "fiscal nu o servește oricum (D212 i-ar calcula CAS/CASS de persoană fizică). "
+        "NU-L ȘTERGE crezând că e caduc: enum-ul a rămas intenționat complet, iar "
+        "ziua în care cineva repune SRL-ul în FORME_SELECTABILE, ăsta e testul care "
+        "spune ce mai e de reparat înainte. E memoria defectului, nu cererea lui.\n"
+        "Dacă REINTRODUCEM SRL-ul în ofertă: repară întâi sufixul, apoi șterge "
+        "marcajul. `strict=True` face testul să pice dacă începe să treacă, ca "
+        "nimeni să nu repare tăcut."
     ),
 )
 def test_srl_platitor_tva_ar_trebui_sa_primeasca_d300():

@@ -82,7 +82,16 @@ CASS_PCT = _P["cota_cass"]  # 10
 # ============================================================
 
 class FormaJuridica(str, Enum):
-    """Formele juridice acceptate."""
+    """TAXONOMIE: formele juridice care EXISTĂ — nu cele pe care le servim.
+
+    Lista rămâne completă inclusiv pentru formele pe care Coniar nu le acoperă
+    (SRL_MICRO, SRL_NORMAL): ANAF ni le întoarce în continuare pentru orice CUI de
+    firmă, și trebuie să le putem numi ca să explicăm de ce ne oprim.
+
+    OFERTA — ce se poate ALEGE — e `app.domain.forma_servita.FORME_SELECTABILE`,
+    o submulțime a listei ăsteia. Nu adăuga aici o formă crezând că o pui pe piață,
+    și nu șterge una crezând că o retragi: sunt două liste, cu două roluri.
+    """
     PFA = "PFA"
     II = "II"
     IF = "IF"

@@ -29,6 +29,7 @@ from db import get_session
 from app.repositories import users as users_repo
 from app.integrations.anaf_lookup import lookup_cui
 from app.domain.fiscal_profile import VAT_THRESHOLD_RON  # sursă unică prag TVA (B8)
+from app.domain import forma_servita  # oferta (ce servim) vs taxonomia (ce există)
 from app.domain.doc_autorizare import (
     MESAJ_DATA_INVALIDA, formateaza_data_d212, nr_doc_din_anaf,
     parseaza_data_anaf, parseaza_data_utilizator, text_confirmare_data,
@@ -175,12 +176,16 @@ def default_regim_impunere(forma: str) -> str:
 
 
 # === Forme juridice ===
+# OFERTA, nu taxonomia. SRL_MICRO/SRL_NORMAL au existat aici și au fost retrase:
+# motorul fiscal e construit pe PFA (D212, CAS/CASS pe praguri de salarii minime,
+# deduceri, registru în partidă simplă), iar unui SRL i-ar da cifre greșite la
+# fiecare pas. Formele rămân în enum-ul FormaJuridica — vezi
+# app/domain/forma_servita.py pentru de ce sunt două liste și nu una.
+# Gardian: tests/test_forma_juridica_lbl_dashboard.py (bot == web == Python).
 FORME_JURIDICE = [
     {"code": "PFA", "label": "🧑‍💼 PFA — Persoană Fizică Autorizată"},
     {"code": "II", "label": "🏪 Întreprindere Individuală (II)"},
     {"code": "IF", "label": "👨‍👩‍👧 Întreprindere Familială (IF)"},
-    {"code": "SRL_MICRO", "label": "🏢 SRL — Microîntreprindere"},
-    {"code": "SRL_NORMAL", "label": "🏛️ SRL/SA — Impozit profit"},
     {"code": "PROFESIE_LIBERALA", "label": "⚕️ Profesie liberală"},
 ]
 FORME_BY_CODE = {f["code"]: f for f in FORME_JURIDICE}
@@ -836,9 +841,29 @@ async def handle_onboarding_text(
                 anaf = {"found": False, "error": str(e)[:100]}
 
             if anaf.get("found"):
+                # POARTA FORMEI JURIDICE. Aici e reparația reală a retragerii SRL:
+                # forma nu se ALEGE din butoane, se ATRIBUIE din CUI. Cine introduce
+                # CUI-ul firmei ajungea până acum cu `firma_forma_juridica=SRL_MICRO`
+                # scris în profil fără să fi ales nimic — deci scoaterea butoanelor
+                # singură n-ar fi schimbat nimic pentru el.
+                # Oprim ÎNAINTE de update_profile: niciun câmp scris, nicio avansare
+                # de pas. Userul rămâne pe STEP_CUI și poate da alt CUI imediat.
+                forma_detectata = anaf.get("forma_juridica_detectata") or ""
+                if not forma_servita.e_servita(forma_detectata):
+                    logger.info(
+                        f"onboarding oprit user={user_id}: forma neservită "
+                        f"{forma_detectata!r} pentru CUI {cui_text}"
+                    )
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=forma_servita.mesaj_forma_neservita(anaf.get("denumire")),
+                    )
+                    await send_step_question(update, context, STEP_CUI, user_id)
+                    return True
+
                 # === AUTO-COMPLET MAXIM ===
                 caen = anaf.get("cod_caen") or ""
-                forma = anaf.get("forma_juridica_detectata") or ""
+                forma = forma_detectata
                 activity = activity_from_caen(caen)
                 regim_imp = default_regim_impunere(forma) if forma else "SISTEM_REAL"
 

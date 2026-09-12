@@ -85,17 +85,20 @@ def test_e2e_ridesharing_cap_coada(monkeypatch, tmp_path):
 
 
 def test_e2e_non_ridesharing_fara_pasi_bolt(monkeypatch, tmp_path):
-    # user IT (non-ridesharing) → complete fără pași platforme/Bolt
+    # user IT (non-ridesharing) → complete fără pași platforme/Bolt.
+    # Recuzita e un PFA pe CAEN 6201, nu un SRL: subiectul e ABSENȚA pașilor Bolt
+    # pentru o activitate non-ridesharing, iar un SRL s-ar opri acum la poarta
+    # formei juridice și n-ar mai ajunge niciodată la ce măsoară testul.
     monkeypatch.setattr(anaf_lookup, "lookup_cui", lambda cui: {
-        "found": True, "cui": cui, "denumire": "IT SRL", "cod_caen": "6201",
-        "forma_juridica_detectata": "SRL_MICRO", "regim_tva": "PLATITOR_21",
+        "found": True, "cui": cui, "denumire": "POPESCU ION PFA", "cod_caen": "6201",
+        "forma_juridica_detectata": "PFA", "regim_tva": "PLATITOR_21",
         "is_platitor_tva": True, "is_inactiv": False, "stare_inregistrare": "OK",
     })
     client, S, uid = _web(monkeypatch, tmp_path)
     d = client.get("/api/v1/cui-lookup?cui=123").get_json()
     assert d["is_ridesharing"] is False
     client.post("/api/v1/onboarding/save", json={"name": "Ana", "step": 1})
-    client.post("/api/v1/onboarding/save", json={"firma_cui": "123", "firma_nume": "IT SRL",
+    client.post("/api/v1/onboarding/save", json={"firma_cui": "123", "firma_nume": "POPESCU ION PFA",
                 "activity_code": "it_freelance", "regim_impunere": "SISTEM_REAL", "step": 3})
     client.post("/api/v1/vehicul", json={"nr_inmatriculare": "B100IT"})
     r = client.post("/api/v1/onboarding/complete", json={})

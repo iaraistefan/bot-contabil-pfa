@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from app.domain.doc_autorizare import motiv_nr_doc_text, nr_doc_din_anaf
+from app.domain import forma_servita  # oferta (ce servim) vs taxonomia (ce există)
 from app.integrations import anaf_lookup
 from app.repositories import users as users_repo
 
@@ -129,6 +130,20 @@ def reimprospateaza(session, user_id: int) -> RezultatReimprospatare:
         if _gol(val_anaf):
             continue                                        # ANAF n-are ce da
         val_anaf = str(val_anaf).strip()
+        # POARTA FORMEI JURIDICE — al treilea drum pe care forma se ATRIBUIE din
+        # CUI, nu se alege. Un profil cu forma goală care apasă „reîmprospătează"
+        # ar fi primit SRL_MICRO scris tăcut, ocolind și butoanele, și onboardingul.
+        # O SEMNALĂM ca diferență (userul vede ce spune ANAF) dar n-o SCRIEM.
+        if cheie == "firma_forma_juridica" and not forma_servita.e_servita(val_anaf):
+            logger.info(
+                f"reimprospatare user={user_id}: forma neservită {val_anaf!r} "
+                f"nescrisă în profil (CUI {cui})"
+            )
+            rez.diferente.append(
+                (eticheta, str(profile.get(cheie) or "—").strip(),
+                 f"{val_anaf} — formă pe care nu o servesc, de aceea n-o scriu")
+            )
+            continue
         val_noastra = profile.get(cheie)
         if _gol(val_noastra):
             updates[cheie] = val_anaf
