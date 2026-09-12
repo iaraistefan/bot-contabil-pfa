@@ -25,26 +25,38 @@ Legea NU leagă însă termenul de factură. Îl leagă de altce, diferit pe dec
 
 Trei declanșatoare legale distincte; unul singur implementat („factura").
 
-CE FACE COINCIDENȚA SĂ ȚINĂ AZI
-───────────────────────────────
-Bolt datează factura de comision în ULTIMA ZI a lunii pe care o acoperă. Comisionul
-e reținut din curse în timpul lunii, deci plata curge în interiorul aceleiași luni,
-iar exigibilitatea se naște tot acolo. Când factura e datată 31.01, toate trei
-declanșatoarele — factură, plată, exigibilitate — cad în ianuarie și dau același
-termen: 25 februarie. De asta sistemul e corect azi, în ciuda declanșatorului greșit.
+CE FACE COINCIDENȚA SĂ ȚINĂ AZI — DOUĂ VERIGI, NU UNA
+─────────────────────────────────────────────────────
+VERIGA 1, TARE — MECANISMUL DE REȚINERE.
+Bolt NU încasează comisionul la scadența unei facturi: îl REȚINE din fiecare cursă,
+pe parcursul perioadei. Factura reală o confirmă negru pe alb — „De plătit: 0,00 lei",
+taxare inversă, TVA 0%: nu e o cerere de plată, e decontul unei plăți deja făcute
+prin reținere. Deci venitul către nerezident e plătit ÎN TIMPUL lunii acoperite, iar
+exigibilitatea se naște tot acolo.
+Asta e temelia: coincidența dintre plată, exigibilitate și perioada acoperită e
+CONSECINȚA MECANISMULUI, nu o convenție de datare. Cât timp comisionul se reține din
+curse, plata nu POATE cădea în altă lună decât cea în care s-au făcut cursele.
 
-E un OBICEI DE FURNIZOR, nu o regulă. Nimic din codul nostru nu-l impune și nimeni
-nu ne anunță dacă Bolt începe să emită pe 03.02 pentru ianuarie. În ziua aceea
-`period_month` devine februarie → D100 semnalat pe 25 martie, în timp ce venitul a
-fost plătit în ianuarie → termenul legal era 25 februarie. O lună de ÎNTÂRZIERE,
-apărută în tăcere.
+VERIGA 2, SLABĂ — DATAREA.
+Ce leagă mecanismul de ceea ce calculăm noi e o a doua verigă, mult mai fragilă:
+faptul că Bolt datează factura în ULTIMA ZI a perioadei acoperite. Doar asta ne
+permite să echivalăm „luna lui `data_doc`" cu „perioada acoperită" — fiindcă noi NU
+captăm perioada, doar data. Când factura e datată 31.08 pentru 01.08–31.08, cele trei
+declanșatoare cad în august și dau același termen: 25 septembrie.
+
+Veriga 2 se poate rupe fără ca veriga 1 să se schimbe: mecanismul poate rămâne
+identic, iar Bolt să înceapă să emită pe 03.09 pentru august. În ziua aceea
+`period_month` devine septembrie → D100 semnalat pe 25 octombrie, în timp ce venitul
+a fost reținut în august → termenul legal era 25 septembrie. O lună de ÎNTÂRZIERE,
+apărută în tăcere. De asta tripwire-ul RĂMÂNE, deși veriga 1 e solidă: el păzește
+veriga 2.
 
 Modulul nu repară declanșatorul și nu mută nicio lună. Face doar ca ziua în care
-presupunerea cade să fie ZGOMOTOASĂ: o abatere de la tipar lasă urmă în log și în
+datarea se schimbă să fie ZGOMOTOASĂ: o abatere de la tipar lasă urmă în log și în
 `audit_logs`, ca s-o aflăm de la cea dintâi factură atipică, nu de la prima amendă.
 
 ═══════════════════════════════════════════════════════════════════════
-MĂSURĂTOAREA PE CARE SE SPRIJINĂ — ȘI LIMITELE EI
+CE E CONFIRMAT LA SURSĂ — ȘI CE A RĂMAS LIMITĂ
 ═══════════════════════════════════════════════════════════════════════
 
 Măsurat pe baza de producție (2026-09-12): TOATE facturile de comision existente,
@@ -53,19 +65,27 @@ acoperite în 5 din 5 cazuri (31.12 · 31.01 · 28.02 · 31.03 · 30.04), zero a
 zero date neparsabile. Tranzacțiile derivate au primit `period_month` = luna
 acoperită, 5/5.
 
-⚠️ LIMITA 1 — NU SUNT DOI MARTORI, E UNUL.
-   Perioada acoperită NU e citită de pe factură. Nu există în baza noastră nici un
-   câmp cu intervalul facturat: `raw_json` e ecoul extracției (aceleași câmpuri care
-   s-au scris în coloane), fără dată de început/sfârșit. „Comision Bolt ianuarie
-   2026" este `detalii` — TEXT LIBER produs de modelul de extracție, citind ACEEAȘI
-   poză din care a citit și `data_doc`. Cele două nu se confirmă reciproc: sunt o
-   singură citire AI, raportată de două ori. Consecvența 5/5 dovedește că extracția
-   e stabilă, NU că factura spune asta.
-   Al doilea martor independent nu există: `source_files` n-are nume de fișier (doar
-   `kind`/`telegram_file_id`/`sha256`/`mime`), iar pozele stau la Telegram, nu la noi.
-   DE VERIFICAT cu facturile pe hârtie: există pe factura Bolt un interval tipărit
-   („Period: 01.01.2026 – 31.01.2026")? Dacă nu, „ianuarie 2026" e inferența modelului
-   din data facturii, și atunci 5/5 e tautologie, nu dovadă.
+✅ CONFIRMAT PE FACTURA TIPĂRITĂ (Bolt RO1126-158556, august 2026).
+   Prima versiune a acestui modul avertiza că perioada acoperită nu e citită de pe
+   factură, ci dedusă de extracția AI din aceeași poză din care vine și data — deci
+   un martor, nu doi, și 5/5 ar fi putut fi tautologie. VERIFICAT PE FACTURA REALĂ:
+   avertismentul NU se susține. Factura poartă „Perioada: 01.08.2026 - 31.08.2026"
+   ca RÂND PROPRIU, repetat și în descrierea liniei. Perioada acoperită e un fapt
+   tipărit de furnizor, nu o inferență a modelului, iar tiparul „data = ultima zi a
+   perioadei" e confirmat LA SURSĂ. Limita a căzut; 5/5 e tipar, nu consecvență de
+   extracție.
+
+⚠️ LIMITA 1 — TRIPWIRE-UL E UN PROXY CONSERVATOR, NU SEMNALUL EXACT.
+   Ce ar rupe cu adevărat termenul e ca `data_doc` să cadă în AFARA perioadei
+   acoperite. Noi nu putem verifica asta: perioada e tipărită pe factură, dar NU o
+   captăm în nici un câmp (`documents` are doar `data_doc`). Predicatul „ultima zi a
+   lunii" e deci un proxy — și asta e alegerea corectă despre modul de eșec: cât timp
+   data e ultima zi a lunii sale, echivalarea „lună a datei = perioadă acoperită" se
+   susține pe tiparul confirmat; în orice alt caz nu mai avem cum s-o susținem, deci
+   sunăm. Va suna și pentru o factură de mijloc de lună inofensivă (fals pozitiv
+   ieftin: un rând de audit), dar nu va tăcea pentru una periculoasă.
+   Semnalul exact ar cere captarea intervalului tipărit. Nu o facem acum — ar fi
+   extracție nouă + migrare, pentru o problemă care azi nu se manifestă.
 
 ⚠️ LIMITA 2 — DRUMUL UBER E NETESTAT CU DATE REALE.
    Măsurătoarea NU acoperă ambele platforme. În producție nu a intrat NICIODATĂ o
@@ -73,16 +93,46 @@ acoperită, 5/5.
    Uber, zero `vat_id` olandez — toate cele 5 facturi sunt Bolt (`EE102090374`).
    Un user are `regim_nerezident_uber` configurat, dar fără nicio factură.
    Codul are drumul Uber cablat (split D100 per-brand, Uber B.V. / NL), însă cum
-   DATEAZĂ Uber facturile de comision nu știm din date — doar din cod. Dacă Uber
-   emite în luna următoare celei acoperite, scenariul de întârziere de mai sus devine
-   real la cea dintâi factură Uber, iar acest tripwire e singurul care o va spune.
+   DATEAZĂ Uber facturile de comision nu știm din date — doar din cod. Nici măcar
+   veriga 1 nu e verificată la Uber: nu știm dacă Uber reține comisionul din curse
+   la fel ca Bolt sau facturează pentru plată separată. Confirmarea de mai sus e pe
+   o factură BOLT; nu o extinde la Uber. Dacă Uber emite în luna următoare celei
+   acoperite, scenariul de întârziere devine real la cea dintâi factură Uber, iar
+   acest tripwire e singurul care o va spune.
 
 ⚠️ LIMITA 3 — TEXTELE DIN UI MINT ÎN CONTINUARE, CU BUNĂ ȘTIINȚĂ.
    „Doar lunile cu factură de comision" apare în ~20 de locuri (`fiscal_calendar`
    câmpurile `conditie_extra`/`cand`/`cui_se_aplica`, `MONTHLY_DEADLINES`,
    `dashboard.html`). NU le-am aliniat la lege: n-are rost să promitem în text un
-   declanșator pe care codul nu-l urmează. Se aliniază când se repară declanșatorul,
-   adică după ce știm intervalul tipărit pe factură (LIMITA 1).
+   declanșator pe care codul nu-l urmează. Se aliniază când se repară declanșatorul
+   — ceea ce acum e POSIBIL (perioada e tipărită pe factură, deci captabilă), dar
+   rămâne o decizie separată: extracție nouă + migrare.
+
+═══════════════════════════════════════════════════════════════════════
+CÂMPURI PE FACTURA REALĂ CARE NU EXISTĂ LA NOI — CONSEMNATE, NECAPTATE
+═══════════════════════════════════════════════════════════════════════
+
+Văzute pe Bolt RO1126-158556 (august 2026). NU le captăm acum, dinadins — azi n-au
+efect. Scrise aici ca să nu fie redescoperite ca noutate:
+
+  • „Perioada: 01.08.2026 - 31.08.2026" — intervalul acoperit, rând propriu. Ar fi
+    declanșatorul EXACT pentru D301/D390 (exigibilitatea se leagă de prestare, nu de
+    emitere) și ar transforma tripwire-ul din proxy în verificare reală (vezi LIMITA 1).
+
+  • „Data scadentă" — la 7 zile după emitere. Emiterea fiind în ultima zi a perioadei,
+    scadența cade MEREU în luna URMĂTOARE celei acoperite. Azi fără efect, fiindcă
+    „De plătit" e 0,00 lei: comisionul e deja reținut, scadența e formală. Ar conta la
+    o factură cu sumă reală de plătit — acolo scadența (nu emiterea) ar fi momentul
+    plății, deci declanșatorul D100 — și ar cădea în ALTĂ lună decât cea pe care o
+    calculăm noi. Adică exact ruptura pe care o păzim, pe o altă cale.
+
+  • „Taxe restante pe zi 0,5%" — penalitatea contractuală a furnizorului pentru
+    întârziere. Distinctă de majorările ANAF (0,02%/zi, în `penalty_info` la D100).
+    Azi inaplicabilă (nimic de plătit). Dacă apare vreodată o factură cu sumă reală,
+    e un cost pe care userul ar trebui să-l vadă.
+
+Nota comună a celor trei: toate devin relevante ÎN ACELAȘI CAZ — o factură de comision
+cu „De plătit" > 0. Cât timp Bolt reține din curse, niciuna nu are efect fiscal.
 """
 
 import calendar
