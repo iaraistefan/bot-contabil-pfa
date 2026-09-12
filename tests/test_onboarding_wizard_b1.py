@@ -55,9 +55,12 @@ def test_cui_lookup_ridesharing(monkeypatch, tmp_path):
 
 
 def test_cui_lookup_non_ridesharing(monkeypatch, tmp_path):
+    # Subiectul e RUTAREA PE CAEN (6201 → it_freelance), nu forma juridică. Fixtura
+    # folosea „IT SRL"/SRL_MICRO ca recuzită; de când SRL-ul e formă neservită, o
+    # recuzită de firmă ar opri lookup-ul la poartă și testul ar măsura altceva.
     monkeypatch.setattr(anaf_lookup, "lookup_cui", lambda cui: {
-        "found": True, "cui": cui, "denumire": "IT SRL", "cod_caen": "6201",
-        "forma_juridica_detectata": "SRL_MICRO", "regim_tva": "PLATITOR_21", "is_platitor_tva": True,
+        "found": True, "cui": cui, "denumire": "POPESCU ION PFA", "cod_caen": "6201",
+        "forma_juridica_detectata": "PFA", "regim_tva": "PLATITOR_21", "is_platitor_tva": True,
         "is_inactiv": False, "stare_inregistrare": "OK",
     })
     client, _, _ = _web(monkeypatch, tmp_path)

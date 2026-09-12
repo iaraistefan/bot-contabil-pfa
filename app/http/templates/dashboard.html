@@ -2712,10 +2712,18 @@
   function wizAdvance(){ if(WIZ.i<WIZ.steps.length-1){ WIZ.i++; wizRender(); } else { wizDone(); } }
   // ── Ecran FINALIZARE (sub-pas C): rezumat + complete → dashboard normal ──
   const WIZ_REGIM_LBL={NORMA_VENIT:"Normă de venit",SISTEM_REAL:"Sistem real"};
-  // Cele șase forme juridice (oglindesc FORME_JURIDICE din app/services/onboarding.py).
+  // TAXONOMIE — traducător de coduri în etichete, pentru orice cod care poate ajunge
+  // pe ecran. Acoperă tot enum-ul FormaJuridica (app/domain/fiscal_profile.py),
+  // inclusiv formele neservite: `formaLabel` e generic, iar un profil poate purta
+  // orice cod din enum. NU e lista de opțiuni — aia e mai jos.
   const WIZ_FORMA_LBL={PFA:"PFA — Persoană Fizică Autorizată",II:"Întreprindere Individuală (II)",
     IF:"Întreprindere Familială (IF)",SRL_MICRO:"SRL — Microîntreprindere",
     SRL_NORMAL:"SRL/SA — Impozit profit",PROFESIE_LIBERALA:"Profesie liberală"};
+  // OFERTĂ — ce se poate ALEGE. Oglindește forma_servita.FORME_SELECTABILE
+  // (app/domain/forma_servita.py) și butoanele din bot. Submulțime a taxonomiei de
+  // deasupra: SRL-urile au etichetă, dar nu se pot alege — motorul fiscal e construit
+  // pe PFA și le-ar da cifre greșite la fiecare pas.
+  const WIZ_FORME_SELECTABILE=["PFA","II","IF","PROFESIE_LIBERALA"];
   WIZ.formaLabel=function(cod){ return WIZ_FORMA_LBL[cod]||cod||""; };
   const WIZ_NEREZ_LBL={BOLT_CU_CRF:"Bolt 2%",BOLT_FARA_CRF:"Bolt 16%",UBER_CU_CRF:"Uber 0%",UBER_FARA_CRF:"Uber 16%"};
   function wizDone(){
@@ -2856,6 +2864,23 @@
       const r=await authFetch("/api/v1/cui-lookup?cui="+encodeURIComponent(cui.trim()));
       const d=await r.json();
       if(!d.found){ wizCuiManual(d.error||"Firmă negăsită"); return; }
+      // POARTA FORMEI JURIDICE. NU cădem pe wizCuiManual: acolo userul ar putea
+      // alege o formă și continua, adică exact ce vrem să prevenim. Firma a fost
+      // găsită — n-o servim noi. Ecranul explică de ce și lasă câmpul de CUI liber
+      // pentru al doilea CUI (cel al PFA-ului), fără să avanseze pasul.
+      if(d.forma_neservita){
+        WIZ.data._anaf=null; WIZ.data._cuiConfirmat=false;
+        const nb=document.getElementById("wiz-next"); if(nb){ nb.disabled=true; nb.style.opacity=".5"; }
+        // Antetul NU numește regimul. `forma_juridica` vine dintr-o ghicitură pe
+        // denumire (anaf_lookup: orice „SRL" → SRL_MICRO), iar „Microîntreprindere"
+        // scris aici ar fi presupunerea noastră afișată ca fapt — exact în ecranul
+        // prin care spunem că nu dăm cifre nesigure. Denumirea reală e în mesaj.
+        card.innerHTML=`<div class="panel" style="background:var(--card-2);margin:0">
+          <div class="hint is-warn" style="font-weight:var(--w-semibold)">🏢 Firmă, nu PFA</div>
+          <div class="hint" style="margin-top:var(--sp-2);white-space:pre-line">${WIZ.esc(d.mesaj||"")}</div>
+        </div>`;
+        return;
+      }
       WIZ.data._anaf=d;
       const tva=d.is_platitor_tva?"plătitor TVA":"neplătitor TVA";
       const stare=d.is_inactiv?'<span style="color:var(--red)">⚠️ INACTIVĂ la ANAF</span>':'activă';
@@ -2911,7 +2936,7 @@
       <label class="set-lbl" style="margin-top:var(--sp-2)">Formă juridică</label>
       <select class="set-inp" id="wiz-forma">
         <option value="">— alege —</option>
-        ${Object.keys(WIZ_FORMA_LBL).map(function(k){
+        ${WIZ_FORME_SELECTABILE.map(function(k){
           const sel=(formaCurenta===k)?" selected":"";
           return `<option value="${k}"${sel}>${WIZ.esc(WIZ_FORMA_LBL[k])}</option>`;
         }).join("")}
