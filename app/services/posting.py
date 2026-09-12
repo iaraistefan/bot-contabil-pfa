@@ -40,6 +40,7 @@ from app.repositories import transactions as tx_repo
 from app.repositories import audit as audit_repo
 from app.repositories import vehicule as vehicule_repo
 from app.domain import tax_rules
+from app.domain import declansator_termen
 from app.activities.registry import get_activity
 from app.activities.base import BaseActivity
 from app.models import (
@@ -307,6 +308,12 @@ def post_document(
       - import_fingerprint: amprenta liniei de extras, stocată pe tranzacția EXPENSE
         (anti-dublură). Se aplică pe ramura CHELTUIALA (singura folosită de import).
     """
+    # Perioada fiscală se derivă din DATA DOCUMENTULUI. Pentru FACTURA_COMISION asta
+    # e o PRESUPUNERE, nu declanșatorul legal: legea leagă D100 de plata venitului și
+    # D301/D390 de exigibilitate. Coincid doar cât timp furnizorul datează factura în
+    # ultima zi a perioadei. Regula, măsurătoarea și limitele ei stau ÎNTR-UN SINGUR
+    # LOC: app/domain/declansator_termen.py (tripwire-ul se cheamă din
+    # `_post_factura_comision`). NU rescrie regula aici.
     occurred_on = _parse_occurred_on(data_doc)
     period_year = occurred_on.year if occurred_on else None
     period_month = occurred_on.month if occurred_on else None
@@ -597,6 +604,68 @@ def _post_cheltuiala(
 #       FACTURA_COMISION  ⭐ VAT-ENGINE-AWARE (Pas 8.4b)
 # ============================================================
 
+def _tripwire_declansator(session, *, user_id: int, document_id: int, occurred_on):
+    """
+    Lasă urmă VIZIBILĂ când o factură de comision nu respectă tiparul pe care se
+    sprijină luna alertei (data facturii = ultima zi a perioadei acoperite).
+
+    DE CE: vezi `app/domain/declansator_termen.py` — acolo stă regula, temeiurile
+    (art. 224 alin. 5 pentru D100, art. 324 alin. 2 pentru D301/D390), măsurătoarea
+    pe cele 5 facturi reale și limitele ei. NU repetăm regula aici.
+
+    Urma e dublă, pentru două orizonturi:
+      • `logger.warning` → se vede imediat în logurile Render;
+      • `audit_logs` (action = DECLANSATOR_FACTURA_ATIPIC) → rămâne interogabil peste
+        luni, ca să putem răspunde la „a tras vreodată?" fără să fi citit logurile
+        în ziua respectivă.
+
+    NU blochează și NU corectează nimic: postarea merge înainte identic.
+
+    ⚠️ MODUL DE EȘEC (de ce SAVEPOINT, nu doar try/except): `audit_repo.write` face
+    `session.add()` fără flush, deci un rând de audit invalid NU crapă aici — crapă
+    mai târziu, la primul autoflush, ÎN MIJLOCUL postării, și otrăvește toată
+    tranzacția. Un `try/except` pus în jurul apelului dă confort fals: a fost prins
+    în test, unde eșecul audit-ului pierdea factura întreagă. Un tripwire al cărui
+    eșec e chiar paguba pe care o păzim nu e tripwire.
+    Deci scriem urma într-un SAVEPOINT propriu și o dăm la flush pe loc: dacă rândul
+    e invalid, se pierde DOAR el, iar tranzacția principală rămâne sănătoasă. Urma
+    stă în aceeași tranzacție cu postarea (dacă postarea se anulează, dispare și
+    urma — n-avem urme pentru facturi care nu există), iar log-ul de mai jos se scrie
+    ÎNAINTE, deci rămâne chiar dacă tabelul de audit e indisponibil.
+    """
+    try:
+        abatere = declansator_termen.verifica_factura_comision(occurred_on)
+        if abatere is None:
+            return
+        logger.warning(
+            f"TRIPWIRE declansator doc_id={document_id} user_id={user_id}: "
+            f"{abatere.motiv} — {abatere.nota}"
+        )
+        with session.begin_nested():
+            audit_repo.write(
+                session,
+                entity_type="document",
+                entity_id=document_id,
+                action=declansator_termen.ACTIUNE_AUDIT,
+                user_id=user_id,
+                source="system",
+                after={
+                    "motiv": abatere.motiv,
+                    "data_factura": (
+                        abatere.data_factura.isoformat() if abatere.data_factura else None
+                    ),
+                    "ultima_zi_a_lunii": abatere.ultima_zi_a_lunii,
+                },
+                note=abatere.nota,
+            )
+            session.flush()
+    except Exception as e:
+        logger.error(
+            f"_tripwire_declansator doc_id={document_id}: urma nu s-a scris ({e}). "
+            f"Postarea continuă — vezi WARNING-ul de mai sus pentru abatere."
+        )
+
+
 def _post_factura_comision(
     session, *, user_id, user_is_vat_payer, user_can_deduct_vat=False, document_id,
     platforma, detalii, comision,
@@ -617,6 +686,13 @@ def _post_factura_comision(
     / SPECIAL_INTRACOM: fără VAT_IN → Net TVA = VAT_OUT (de plată real), nu 0.
     Corectură golul TVA neplătitor (forward-only; istoricul NU se rescrie).
     """
+    # Tripwire: luna în care vor apărea D100/D301/D390 s-a luat din data acestei
+    # facturi. Dacă data nu e ultima zi a lunii, presupunerea care face legală acea
+    # lună a căzut → urmă în log + audit_logs. Nu blochează nimic.
+    _tripwire_declansator(
+        session, user_id=user_id, document_id=document_id, occurred_on=occurred_on
+    )
+
     # ════════════════════════════════════════════════════════
     # === Analiză VAT (înainte de orice calcul) ===
     # ════════════════════════════════════════════════════════
