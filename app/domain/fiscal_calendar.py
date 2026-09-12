@@ -815,6 +815,14 @@ def _is_aplicabil(
         return False, f"Nu se aplică activității {activity_code}"
 
     # Condiții specifice
+    #
+    # ⚠️ DECLANȘATOR PRESUPUS, nu legal: un singur `if` pentru trei obligații care în
+    # lege au trei declanșatoare DIFERITE — D100 pe plata venitului (art. 224 alin. 5),
+    # D301/D390 pe exigibilitate (art. 324 alin. 2 / OPANAF 6.073/2024). Noi ramificăm
+    # pe „există factură în lună". Coincid cât timp furnizorul datează factura în ultima
+    # zi a perioadei; măsurat pe Bolt, 5/5. Regula, temeiurile, măsurătoarea și limitele
+    # ei — ÎNTR-UN SINGUR LOC: app/domain/declansator_termen.py, care e și tripwire-ul
+    # ce sună când tiparul se rupe. NU rescrie regula aici.
     if obligatie.cod in ("D100 poz. 634", "D301", "D390"):
         if not has_intracom_invoice:
             return False, "Nu există factură intracomunitară în această lună"
