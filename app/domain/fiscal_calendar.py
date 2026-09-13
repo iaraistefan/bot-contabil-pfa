@@ -278,10 +278,16 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         tip_iban=None,  # nu se plătește — e doar declarativă
         frecventa=FrecventaObligatie.ANUALA,
         # ─── TERMENUL E „ULTIMA ZI A LUNII", NU O ZI FIXĂ ───
-        # Art. 231 alin. (1) Cod fiscal: declarația se depune „până în ULTIMA ZI a lunii
-        # februarie inclusiv a anului curent pentru anul expirat" — modificat 24-12-2020
-        # prin pct. 154, art. I din Legea 296/2020 (MO 1269/21.12.2020). Forma
-        # consolidată legislatie.just.ro valabilă la 08.08.2026.
+        # Formă canonică: vezi docs/FORMA-TEMEI-LEGAL.md
+        #   1. Art. 231 alin. (1) Cod fiscal
+        #   2. Citat: declarația se depune „până în ULTIMA ZI a lunii februarie
+        #      inclusiv a anului curent pentru anul expirat".
+        #   3. Modificat 24-12-2020 prin pct. 154, art. I din Legea 296/2020
+        #      (MO 1269/21.12.2020).
+        #   4. Forma consolidată legislatie.just.ro valabilă la 08.08.2026.
+        #   5. Verificat 13.09.2026 pe noulcodfiscal.ro (art. 231) — textul citat
+        #      confirmat cuvânt cu cuvânt. Sursă SECUNDARĂ, nu forma consolidată de
+        #      la pct. 4: re-confirmă textul, nu istoricul modificărilor.
         #
         # Aici scria `ziua_termenului=28`, ceea ce era o TRANSCRIERE, nu termenul: legea
         # nu spune 28, spune „ultima zi". În anii bisecți ultima zi e 29, deci afirmația
@@ -555,13 +561,23 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "Doar dacă ești SRL Normal. Ca PFA ridesharing NU te privește — tu ai D212."
         ),
         # ─── TERMENUL ANUAL E BIFURCAT PE ANI, ȘI TRĂIEȘTE ÎN FRAZĂ ───
-        # Art. 42 alin. (1) Cod fiscal, modificat 25-02-2026 prin OUG 8/2026: declarația
-        # anuală de impozit pe profit se depune „până la data de 25 iunie inclusiv a
-        # anului următor" — era 25 martie.
-        # Aplicabilitatea e la art. 45 alin. (21^4): „se aplică începând cu declarația
-        # anuală privind impozitul pe profit aferentă anului 2026/anului fiscal modificat
-        # care începe în anul 2026". Deci pentru anul fiscal 2025 termenul rămâne
-        # 25 martie 2026; din anul fiscal 2026 încolo, 25 iunie.
+        # Formă canonică: vezi docs/FORMA-TEMEI-LEGAL.md
+        #   1. Art. 42 alin. (1) Cod fiscal (+ art. 45 alin. (21^4) pt. aplicabilitate)
+        #   2. Citat: declarația anuală se depune „până la data de 25 iunie inclusiv a
+        #      anului următor" — era 25 martie. Aplicabilitatea, art. 45 alin. (21^4):
+        #      „se aplică începând cu declarația anuală privind impozitul pe profit
+        #      aferentă anului 2026/anului fiscal modificat care începe în anul 2026".
+        #   3. Modificat prin OUG nr. 8 din 24 februarie 2026 (MO 147/25.02.2026).
+        #      Data intrării în vigoare: NEGĂSIT ca mențiune explicită în act (căutat
+        #      13.09.2026); publicarea e 25.02.2026, iar bifurcația de mai jos NU
+        #      depinde de ea — depinde de anul fiscal, dat de art. 45 alin. (21^4).
+        #   4. Forma consolidată: NU am citit Codul fiscal consolidat pentru art. 42.
+        #      Am citit ACTUL MODIFICATOR pe legislatie.just.ro (doc. 307580).
+        #      Distincția contează: dacă art. 42 a mai fost atins DUPĂ OUG 8/2026,
+        #      n-am cum să știu din ce am citit. DE RELUAT pe forma consolidată.
+        #   5. Verificat 13.09.2026 (actul modificator, MO, textul citat).
+        # Deci pentru anul fiscal 2025 termenul rămâne 25 martie 2026; din anul fiscal
+        # 2026 încolo, 25 iunie.
         #
         # DE CE STĂ ÎN TEXT ȘI NU ÎNTR-UN CÂMP — NU E O OMISIUNE DE IMPLEMENTAT:
         # 1. `DefinitieObligatie` n-are axă temporală. `ziua_termenului` /
@@ -597,10 +613,21 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
     # D700 — Înregistrare cod special TVA (o singură dată)
     #
     # TEMEIUL DECLANȘATORULUI — de ce „prima cursă", nu „prima factură"
-    # Art. 317 alin. (1) lit. c) Cod fiscal: persoana impozabilă neînregistrată
-    # trebuie să solicite înregistrarea „ÎNAINTEA PRIMIRII SERVICIILOR
-    # RESPECTIVE" — forma consolidată legislatie.just.ro valabilă la 08.08.2026,
-    # verificat 18.08.2026.
+    # Formă canonică: vezi docs/FORMA-TEMEI-LEGAL.md
+    #   1. Art. 317 alin. (1) lit. c) Cod fiscal (Legea 227/2015)
+    #   2. Citat: persoana impozabilă neînregistrată trebuie să solicite
+    #      înregistrarea „ÎNAINTEA PRIMIRII SERVICIILOR RESPECTIVE".
+    #   3. Act modificator: NEGĂSIT (căutat 13.09.2026 pe legislatie.just.ro
+    #      doc. 184311 — forma actualizată se servește trunchiat, nu ajunge la
+    #      art. 317; pe noulcodfiscal.ro art. 317 — pagina nu afișează istoric de
+    #      modificări; prin căutare web). NU scriem „nemodificat de la publicare":
+    #      absența istoricului nu e dovada absenței modificării, iar textul curent
+    #      conține o trimitere la alin. (2^1), care NU există în Legea 227/2015 în
+    #      forma publicată — deci articolul A FOST modificat, doar că nu am putut
+    #      stabili prin ce act. DE RELUAT.
+    #   4. Forma consolidată legislatie.just.ro valabilă la 08.08.2026.
+    #   5. Verificat 18.08.2026 (textul citat). Căutarea de la pct. 3 —
+    #      13.09.2026, fără rezultat.
     #
     # Obligația se leagă deci de PRIMIREA SERVICIULUI, nu de facturarea lui.
     # Pentru un șofer, serviciul de intermediere se primește CÂND CONDUCE —

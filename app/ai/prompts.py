@@ -26,11 +26,27 @@ CHANGELOG:
 PROMPT_VERSION = "extract.v9"
 
 
+# TEMEIUL COTEI TVA — atribuire CORECTATĂ, vezi docs/FORMA-TEMEI-LEGAL.md
+#   1. Legea nr. 141/2025 privind unele măsuri fiscal-bugetare
+#   2. Cota standard de TVA crește de la 19% la 21%; cotele reduse 5% și 9% se
+#      comasează într-una de 11%.
+#   3. Publicată în MO din 25.07.2025, în vigoare de la 01.08.2025.
+#   4. Forma consolidată: NU citită pentru acest punct. Confirmat din surse
+#      secundare concordante (CECCAR/presă fiscală, EY tax alert). DE RELUAT.
+#   5. Verificat 13.09.2026.
+#
+# ⚠️ Aici scria „conform OUG 115/2023" — cifra era CORECTĂ (21%), actul era GREȘIT.
+# E a doua oară când tiparul ăsta apare (prima: plafonul CASS atribuit Legii 141/2025
+# în loc de 239/2025, PR #127) și e exact clasa pe care o formă canonică NU o prinde:
+# un temei complet și fals arată identic cu unul complet și adevărat. Singurul
+# antidot e citatul literal + citirea actului.
+# Cota ca VALOARE are sursă unică în `tax_rules.cota_tva` (pe dată); aici e doar
+# context pentru model.
 def build_extraction_system_prompt(today_str: str) -> str:
     return f"""
 Esti un extractor strict pentru contabilitatea unui PFA/SRL din Romania.
 DATA CURENTA: {today_str}.
-COTA TVA STANDARD: 21% (Actualizat 2026, conform OUG 115/2023).
+COTA TVA STANDARD: 21% (Legea 141/2025, in vigoare din 01.08.2025).
 
 REGULA #1 — FORMATUL DE OUTPUT (NENEGOCIABIL):
 - Raspunsul TAU este INTOTDEAUNA JSON pur, o lista Python.

@@ -23,6 +23,18 @@ from typing import Optional
 from openai import OpenAI
 
 from config import settings
+# Plafonul TVA vine din SURSA UNICĂ, nu scris aici. Înainte era hardcodat „300.000",
+# o cifră stătută (plafonul e 395.000 din 2025) — iar greșeala a supraviețuit fiindcă
+# prompturile nu vorbesc cu userul, ci cu modelul, deci n-au fost privite de auditul
+# prozei fiscale. O premisă falsă dată modelului se întoarce tot ca răspuns fals, doar
+# pe o cale mai lungă. Vezi docs/INVENTAR-PROZA-FISCALA.md §P.
+from app.domain.fiscal_profile import VAT_THRESHOLD_RON
+
+# Formatat în convenția ROMÂNEASCĂ (punct la mii), nu cu `{:,}` din Python: acela dă
+# „395,000", iar în română virgula e separator ZECIMAL — un model care citește
+# „395,000 RON" într-un text românesc poate înțelege 395. Prompt-ul e în română, deci
+# și numărul trebuie să fie.
+_PLAFON_TVA_RO = f"{VAT_THRESHOLD_RON:,.0f}".replace(",", ".")
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +122,7 @@ Context specific:
 - Primește facturi de comision de la Bolt Operations OÜ (Estonia, VAT EE102090374)
 - Aplică taxare inversă (reverse charge) pe comisioanele Bolt/Uber — depune D301 și D390
 - Folosește un autoturism mixt (50% deductibilitate)
-- Nu este plătitor de TVA înregistrat (sub plafonul de 300.000 RON)
+- Nu este plătitor de TVA înregistrat (sub plafonul de {_PLAFON_TVA_RO} RON)
 - Depune Declarația Unică anual
 
 Caută în special pe:

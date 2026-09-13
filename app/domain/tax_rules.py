@@ -28,7 +28,13 @@ VAT_REVERSE_CHARGE_PCT = 21    # Taxare inversă — aceeași cotă ca standard
 FUEL_DEDUCTIBLE_PCT = 50       # Deductibilitate auto mixtă (%)
 WITHHOLDING_TAX_PCT = 2        # Impozit nerezidenți (informativ)
 
-# Pragul de la care se aplică 21% (înainte: 19%). OUG aplicabilă din 01.08.2025.
+# Pragul de la care se aplică 21% (înainte: 19%).
+# Actul e o LEGE, nu o OUG — aici scria „OUG aplicabilă din 01.08.2025", fără număr.
+# Temei (formă canonică, vezi docs/FORMA-TEMEI-LEGAL.md): Legea nr. 141/2025 privind
+# unele măsuri fiscal-bugetare · cota standard crește de la 19% la 21%, cotele reduse
+# 5% și 9% se comasează în 11% · publicată în MO 25.07.2025, în vigoare 01.08.2025 ·
+# forma consolidată NU citită pentru acest punct (surse secundare concordante) ·
+# verificat 13.09.2026.
 PRAG_TVA_21 = date(2025, 8, 1)
 
 # --- Cod TVA Bolt — SURSĂ UNICĂ (golden rule) ---
