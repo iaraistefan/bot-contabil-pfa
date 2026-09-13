@@ -199,7 +199,145 @@ def _banner_data(rez, an):
     }
 
 
+def _banner_data_d212(rez, an):
+    """
+    Ca `_banner_data`, dar pentru `RezultatD212Service` (motorul unic).
+
+    Singura diferență e de unde vine suma: `total_plata` în loc de `total_taxe`.
+    Restul — termenele D212/D207 — se calculează identic, deci se refolosește. Un al
+    doilea calcul de termen aici ar fi exact greșeala pe care PR-ul ăsta o repară,
+    la altă scară.
+    """
+    d = _banner_data({"total_taxe": 0.0}, an)
+    d["amount"] = getattr(rez, "total_plata", 0.0) or 0.0
+    return d
+
+
+def _nota_asigurare_nedeclarata(profile: dict, rez, an: int):
+    """
+    Textul de dezvăluire când presupunem conservator, FĂRĂ ca userul să fi răspuns.
+
+    `None` = nu e cazul (a răspuns, sau podeaua CASS n-a fost aplicată).
+
+    DE CE EXISTĂ: CASS are o podea de 6 salarii minime. Cine e deja asigurat prin
+    altă sursă (salariu de cel puțin 6 SMB pe an, sau pensie) o sare și plătește pe
+    venitul net REAL. Diferența nu e o nuanță — pe datele reale ale unui user din
+    producție, 2.430 lei față de 174,56 lei pe linia CASS.
+    Motorul citește `is_salariat`/`is_pensionar` din profil. Cât timp sunt NULL
+    (niciodată întrebat — userii de dinaintea wizardului), presupune conservator.
+    A presupune e corect; a presupune ÎN TĂCERE nu e: omul ar plăti de 7 ori mai
+    mult fără să afle vreodată că exista o întrebare.
+
+    CE NU FACE: nu recalculează. Podeaua e vizibilă din ce a întors deja motorul
+    (`cass_baza > venit_net`), iar cifra alternativă e cota × venit net — aritmetică
+    pe date pe care le avem, nu un al doilea calcul. Un motor de umbră care „verifică"
+    primul e exact problema pe care o închide PR-ul ăsta.
+    """
+    if profile.get("is_salariat") is not None or profile.get("is_pensionar") is not None:
+        return None                       # a răspuns — respectăm răspunsul, tăcem
+    venit_net = getattr(rez, "venit_net", None)
+    cass_baza = getattr(rez, "cass_baza", None)
+    cass = getattr(rez, "cass", None)
+    if not venit_net or not cass_baza or not cass:
+        return None
+    if cass_baza <= venit_net:
+        return None                       # podeaua nu s-a aplicat — nimic de spus
+
+    from app.domain.contributii import PARAMETRI_CONTRIBUTII
+    try:
+        cota = PARAMETRI_CONTRIBUTII[an]["cota_cass"] / 100.0
+    except (KeyError, TypeError):
+        return None
+    cass_pe_real = round(venit_net * cota, 2)
+    return (
+        "\n\n━━━━━━━━━━━━━━━━━━━━\n"
+        "ℹ️ *Am presupus ceva — verifică dacă e adevărat.*\n\n"
+        f"Am calculat CASS pe baza minimă ({cass:.0f} lei), fiindcă nu mi-ai spus "
+        f"dacă ești asigurat de sănătate *prin altă sursă*.\n\n"
+        "Dacă ai *salariu de cel puțin 6 salarii minime pe an* sau *pensie*, CASS "
+        f"se calculează pe venitul tău real: *{cass_pe_real:.0f} lei* în loc de "
+        f"{cass:.0f}.\n\n"
+        "_Contează nivelul, nu doar faptul că ești angajat: part-time sau angajare "
+        "pe o parte din an pot fi sub prag._\n\n"
+        # Destinația e numele EXACT al secțiunii din UI (dashboard.html, pagina
+        # `setari`, blocul „Situația ta personală"). Înainte scria „configurare" —
+        # adică wizardul, în care un user deja onboardat NU MAI POATE INTRA. O notă
+        # care cere ceva și trimite într-o fundătură e aceeași greșeală cu
+        # empty-state-ul care spunea „folosește manual" și lua butonul spre manual.
+        'Spune-mi în Dashboard → Setări → „Situația ta personală”, și recalculez.'
+    )
+
+
+async def _finalizeaza_automat(update, context, user_id, an, luni):
+    """
+    Calea AUTOMATĂ, pe motorul unic (`tax_engine.compute_d212_anual`) — același
+    care produce fișierul XML și care alimentează dashboardul, alertele și scheduler-ul.
+
+    Nu mai întreabă despre asigurare: răspunsul se ia din profil, unde persistă.
+    Când profilul tace, tace și el — dar ZGOMOTOS, vezi `_nota_asigurare_nedeclarata`.
+    """
+    from app.repositories import users as users_repo
+    session = get_session()
+    try:
+        rez = tax_engine.compute_d212_anual(session, user_id=user_id, an=an)
+        profile = users_repo.get_profile_dict(session, user_id) or {}
+    finally:
+        session.close()
+
+    msg = rez.ghid_telegram or rez.ghid_plain or ""
+    if luni is not None and luni < 12:
+        luna_txt = "luna" if luni == 1 else "luni"
+        msg = (
+            f"ℹ️ *Am găsit {luni} {luna_txt} cu date pentru {an}.*\n\n"
+            f"Dacă ai lucrat doar atât în {an}, cifrele sunt corecte și complete. "
+            f"Altfel, folosește *Manual* cu totalul real.\n"
+            f"-----------------------------------\n\n"
+        ) + msg
+    for av in (getattr(rez, "avertismente", None) or []):
+        msg += f"\n\n⚠️ {av}"
+    nota = _nota_asigurare_nedeclarata(profile, rez, an)
+    if nota:
+        msg += nota
+
+    await banner_send.send_banner_or_text(
+        update.callback_query, context,
+        screen="prezentare", data=_banner_data_d212(rez, an),
+        text=msg, caption=f"🧮 Declarația Unică {an}",
+    )
+
+
 async def _finalizeaza_calcul(update, context, venit_brut, chelt_ded, an, luni, asigurat):
+    """
+    ⚠️ CALEA MANUALĂ — SINGURUL loc rămas pe motorul VECHI (`du_calc`). TEMPORAR.
+
+    Nu e o scăpare din unificare, e o piesă care lipsește: `compute_d212_anual`
+    CITEȘTE cifrele din baza de date și nu știe să primească cifre din afara ei.
+    Calea manuală există tocmai pentru cine NU are datele în bot — deci nu se putea
+    muta, trebuie CONSTRUITĂ.
+
+    CE AR CERE (măsurat, nu estimat din ochi): `compute_d212_anual` merge pe
+    `_d212_args_si_avertisment(session, user_id, an)`, care citește tranzacțiile din
+    DB și apoi împletește profilul (regim, normă, pensionar, salariat,
+    proporționalizare, activitate mixtă). Injectarea cere: (a) parametri opționali de
+    suprascriere pe venit/cheltuieli în constructorul de argumente; (b) o cale care
+    OCOLEȘTE cache-ul — el e cheiat pe `(user_id, an)` și niște cifre injectate l-ar
+    otrăvi pentru toți ceilalți apelanți.
+
+    (c) DECIZIA FISCALĂ E LUATĂ, NU O REDESCHIDE: **flagurile de profil se aplică ȘI
+    peste cifrele tastate manual.** Motivul, ca să nu fie nevoie de a doua dezbatere:
+    regimul e CINE EȘTI, nu de unde vin cifrele. Norma de venit înseamnă că baza
+    impozabilă E norma, indiferent ce venit tastezi — cheltuielile reale nici măcar
+    nu-s deductibile pe normă. Iar podeaua CASS depinde de faptul că ești asigurat
+    altundeva, nu de sursa numărului. Cifrele introduse manual înlocuiesc DATELE,
+    niciodată PROFILUL.
+
+    PÂNĂ ATUNCI, ce înseamnă concret: calea manuală e REGIM-OARBĂ (`du_calc` n-are
+    niciun parametru prin care o normă ar putea intra — vezi semnătura lui) și
+    ÎNTREABĂ despre asigurare în loc să citească profilul. Cele două căi pot deci da
+    răspunsuri diferite pe același om. Diferența e mărginită: calea manuală se
+    folosește doar când userul introduce el cifrele, deci știe că lucrează pe o
+    ipoteză a lui.
+    """
     rez = du_calc.calcul_declaratie_unica(
         venit_brut, chelt_ded, an=an, asigurat_salariat=asigurat
     )
@@ -253,18 +391,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, pa
     if actiune == "auto":
         an = int(parts[2])
         await query.edit_message_text(f"🔄 Adun datele pe {an}...")
+        # UN SINGUR MOTOR. Aici se chema `du_calc` (app/domain/declaratie_unica.py),
+        # un al doilea motor care răspundea la ACEEAȘI întrebare cu alt răspuns.
+        # Vezi `_MOTIVUL_UNIFICARII` la finalul fișierului.
         venit_brut, chelt_ded, luni = _sumar_anual_din_date(user_id, an)
         if venit_brut <= 0 and chelt_ded <= 0:
+            # Butoanele se PĂSTREAZĂ: înainte, mesajul îi cerea userului să treacă pe
+            # manual și îi lua exact butonul care duce acolo (edit fără reply_markup).
             await query.edit_message_text(
                 f"📭 Nu am date înregistrate pentru {an}.\n\n"
-                f"Folosește varianta manuală (introduci tu cifrele).",
+                f"Introdu tu cifrele — butonul e mai jos.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✍️ Introduc eu cifrele",
+                                          callback_data=f"du|manual|{an}")],
+                    [InlineKeyboardButton("❌ Închide", callback_data="nav|close")],
+                ]),
             )
             return
-        context.user_data[_PENDING] = {
-            "venit_brut": venit_brut, "chelt_ded": chelt_ded,
-            "an": an, "luni": luni,
-        }
-        await _intreaba_asigurare(query.edit_message_text)
+        await _finalizeaza_automat(update, context, user_id, an, luni)
         return
 
     if actiune == "manual":
@@ -345,3 +489,39 @@ async def handle_wizard_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return True
 
     return False
+
+
+# ============================================================
+#   DE CE UN SINGUR MOTOR — istoria, ca să nu se refacă
+# ============================================================
+_MOTIVUL_UNIFICARII = """
+Până la PR-ul ăsta, D212 avea DOUĂ motoare care răspundeau la aceeași întrebare:
+
+  A) app/domain/declaratie_unica.py (`du_calc`) — pe drumul din MENIU
+  B) app/services/tax_engine.compute_d212_anual — pe drumul cu FIȘIER, plus
+     dashboard, alerte proactive și scheduler
+
+MĂSURAT pe profilul real al unui user din producție (2025, venit net 1.745,61 lei),
+cele două nu divergeau în matematică — ci în SURSA RĂSPUNSULUI:
+
+  · (A) ÎNTREBA userul „ești asigurat prin altă sursă?" și îi lua răspunsul ca
+    parametru, fără să-l scrie nicăieri. Răspuns „nu" → CASS 2.430 lei.
+    Răspuns „da" → CASS 174,56 lei. De 7,3 ori diferență, pe o apăsare de buton
+    care se evapora.
+  · (B) CITEȘTE `is_salariat` / `is_pensionar` din profil și nu întreabă niciodată.
+
+Același om, același an, aceleași date, două cifre. Nimic nu semnala diferența.
+
+A doua ruptură, structurală: `du_calc` n-are parametru de regim, activitate sau
+sesiune (vezi semnătura). Nu e o ramură lipsă pentru normă — e o poartă inexistentă.
+Pentru un user pe normă de venit din 2026 încolo, (A) ar fi calculat mereu sistem
+real. Asta e datoria P10/P11 din audit, închisă aici.
+
+DECIZIA: un singur drum, un singur motor. Calea automată trece pe (B). Întrebarea
+despre asigurare NU se mai pune aici — răspunsul trăiește în profil, unde persistă,
+iar când profilul tace, `_nota_asigurare_nedeclarata` o spune pe față.
+
+Ce a rămas pe (A): DOAR calea manuală, marcată și explicată la `_finalizeaza_calcul`.
+
+Gardianul care oprește reapariția clasei: tests/test_un_singur_motor_fiscal.py.
+"""

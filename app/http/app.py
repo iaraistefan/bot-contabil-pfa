@@ -1840,8 +1840,13 @@ def setari_get():
             "firma_forma_juridica": profile.get("firma_forma_juridica") or "PFA",
             "regim_impunere": profile.get("regim_impunere") or "",
             "norma_venit_anuala": profile.get("norma_venit_anuala"),
-            "is_pensionar": bool(profile.get("is_pensionar")),
-            "is_salariat": bool(profile.get("is_salariat")),
+            # BRUTE, nu `bool(...)`: tri-stare. `None` = n-a fost intrebat niciodata,
+            # si e DIFERIT de `False` = a raspuns „nu". Ecranul de Setari are nevoie
+            # de distinctie ca sa arate „nu mi-ai spus inca", iar motorul D212 ca sa
+            # stie cand a PRESUPUS conservator si s-o spuna.
+            # Consumatorii vechi (`if(s.is_pensionar)`) raman corecti: `null` e falsy.
+            "is_pensionar": profile.get("is_pensionar"),
+            "is_salariat": profile.get("is_salariat"),
             # Activitate mixta (PAS 4b) — split temporal normă→real (afisare).
             "are_activitate_neeligibila_norma": bool(profile.get("are_activitate_neeligibila_norma")),
             "data_activitate_neeligibila": profile.get("data_activitate_neeligibila"),
@@ -1881,6 +1886,28 @@ def setari_post():
     body = request.get_json(silent=True) or {}
     banca = body.get("banca")
     iban = body.get("iban")
+    # SITUAȚIA PERSONALĂ (CAS/CASS) — până acum se putea răspunde DOAR în wizardul de
+    # configurare, o singură dată, iar în Setări era doar afișată. Două consecințe:
+    # userii de dinaintea wizardului au rămas cu NULL fără nicio cale de reparat, iar
+    # cine se angajează / iese la pensie după onboarding n-avea unde s-o spună.
+    # Faptul se SCHIMBĂ în timp — deci are nevoie de un loc unde se schimbă și el.
+    #
+    # Tri-stare DELIBERAT (`None` = necunoscut, ≠ `False` = „nu"): `update_profile`
+    # aplică doar non-None, iar motorul D212 distinge NULL de False ca să știe când
+    # a PRESUPUS conservator și s-o spună (vezi `_nota_asigurare_nedeclarata`).
+    # Un `bool()` aici ar șterge exact distincția pe care se sprijină nota.
+    is_salariat = body.get("is_salariat")
+    is_pensionar = body.get("is_pensionar")
+    if is_salariat is not None and not isinstance(is_salariat, bool):
+        return jsonify({
+            "error": "invalid_is_salariat",
+            "message": "Câmpul „am salariu peste prag” acceptă doar da/nu.",
+        }), 400
+    if is_pensionar is not None and not isinstance(is_pensionar, bool):
+        return jsonify({
+            "error": "invalid_is_pensionar",
+            "message": "Câmpul „sunt pensionar” acceptă doar da/nu.",
+        }), 400
     # Regim nerezident PER-PLATFORMĂ (Uber sub-pas C). Backward-compat: cheia veche
     # `regim_nerezident` (fără sufix) e tratată ca Bolt.
     regim_bolt = body.get("regim_nerezident_bolt") or body.get("regim_nerezident")
@@ -1963,6 +1990,8 @@ def setari_post():
             regim_nerezident_uber=regim_uber,
             data_doc_autorizare=data_cert,     # None → neschimbat
             nr_doc_autorizare=nr_cert,         # None → neschimbat; sterge motivul
+            is_salariat=is_salariat,           # None → neschimbat (pastreaza NULL)
+            is_pensionar=is_pensionar,         # None → neschimbat (pastreaza NULL)
         )
         session.commit()
         profile = users_repo.get_profile_dict(session, user_id) or {}
@@ -1979,6 +2008,10 @@ def setari_post():
             "nr_doc_autorizare_motiv_text": (
                 motiv_nr_doc_text(profile.get("nr_doc_autorizare_motiv")) or ""
             ),
+            # Brute, NU `bool(...)`: frontend-ul are nevoie de tri-stare ca sa arate
+            # „nu mi-ai spus inca" altfel decat „mi-ai spus nu".
+            "is_salariat": profile.get("is_salariat"),
+            "is_pensionar": profile.get("is_pensionar"),
         })
     except Exception as e:
         session.rollback()
