@@ -350,11 +350,14 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 
 ### BLOCANTE — LANSARE
 
-- **L1** · **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
-- **L2** · **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
-- **L3** · **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
-- **L4** · **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
-- **L5** · **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+- **L1** · 🔺 **ROTIREA CREDENȚIALELOR DE PRODUCȚIE.** Parola bazei e **nerotită din 23 aug 2026**; a trecut prin mai multe transcripte de sesiune și printr-un fișier în clar pe Desktop. Inbound IP e `0.0.0.0/0`, iar în bază stau **CNP-uri și venituri**.
+    ⚠️ **ÎNAINTE de rotire:** verifică pe serviciul web că `DATABASE_URL` e **LEGAT** de resursa bazei, nu lipit ca text — altfel rotirea rupe aplicația.
+    Apoi **Render → Database → Credential Rotation**, apoi **ștergerea fișierului local**.
+- **L2** · **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
+- **L3** · **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
+- **L4** · **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
+- **L5** · **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
+- **L6** · **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
 
 ### IEFTINE ȘI ÎNAINTE DE LANSARE
 
