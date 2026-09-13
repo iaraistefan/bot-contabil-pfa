@@ -318,7 +318,7 @@ def _genereaza_d100_din_plan(an, luna, firma, plan, *, d_rec=0, suportat_de_bolt
                 "Cu certificatul de rezidenta fiscala si aplicarea Conventiei, "
                 "impozitul pe comision este *0%* — D100 *nu se depune* lunar.\n\n"
                 "⚠️ Venitul scutit se declara *anual in D207* (informativa, "
-                "termen 28 februarie)."
+                "termen: ultima zi a lunii februarie)."
             )
         else:
             ghid = (
@@ -554,7 +554,7 @@ def genereaza(
                     "RO-Estonia, impozitul pe comisionul Bolt este *0%* — D100 "
                     "*nu se depune* lunar.\n\n"
                     "⚠️ Venitul scutit se declară *anual în D207* (informativă, "
-                    "termen 28 februarie). D207 rămâne obligatorie."
+                    "termen: ultima zi a lunii februarie). D207 rămâne obligatorie."
                 ),
             )
 
