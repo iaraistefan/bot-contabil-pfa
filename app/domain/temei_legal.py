@@ -132,6 +132,21 @@ RE_VERIFICAT = re.compile(r"[Vv]erificat\s+(\d{2}\.\d{2}\.\d{4})")
 #   (re-verificare în ianuarie, după ce pachetul de sfârșit de an a aterizat). La 8
 #   definiții înseamnă ~8 verificări pe an: muncă reală, dar care încape într-o ședință.
 #
+# ⚠️ PRAGUL ĂSTA E O PLASĂ DE REZERVĂ, NU DETECTORUL PRINCIPAL.
+#   Detectorul de schimbări legislative e `app/ai/fiscal_monitor.py`: rulează lunar
+#   (job programat în `scheduler.py`), caută activ modificări în Monitorul Oficial și
+#   pe ANAF, și raportează. ACOLO se prinde o lege care s-a mutat.
+#   Pragul de aici nu caută nimic. El doar spune „temeiul ăsta n-a mai fost privit de
+#   prea mult timp" — prinde ce a scăpat de detector, nu ține locul detectorului.
+#
+#   DE CE CONTEAZĂ DISTINCȚIA: cineva care vede o lege mutată nesemnalată va fi tentat
+#   să coboare pragul, crezând că așa o prinde mai repede. N-o va prinde — pragul nu
+#   citește legea, citește un calendar. Tot ce va obține e ca testul să cadă mai des,
+#   iar căderile să se „repare" prin împingerea datei, adică DATE EDITATE FĂRĂ
+#   VERIFICARE. Ar strica exact instrumentul pe care încearcă să-l ascută.
+#   Dacă detectorul ratează ceva, se repară DETECTORUL (prompt, surse, frecvență),
+#   nu plasa de dedesubt.
+#
 # SE MUTĂ DE AICI, nu din test. Dacă se coboară la 6, se coboară cu ochii deschiși:
 # va cere de două ori mai des o muncă pe care nimeni n-o poate face repede.
 PRAG_PROSPETIME_LUNI = 12
