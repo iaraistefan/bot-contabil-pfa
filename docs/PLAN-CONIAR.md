@@ -356,10 +356,11 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
     ⚠️ **ÎNAINTE de rotire:** verifică pe serviciul web că `DATABASE_URL` e **LEGAT** de resursa bazei, nu lipit ca text — altfel rotirea rupe aplicația.
     Apoi **Render → Database → Credential Rotation**, apoi **ștergerea fișierului local**.
 - **L2** · **Călirea Stripe** — fallback pe `stripe_customer_id` când `metadata.user_id` lipsește · alerte admin pe ramurile tăcute · ordinea evenimentelor · backfill trial pentru userii existenți · șters `STRIPE_PUBLISHABLE_KEY` (declarată, nefolosită).
-- **L3** · **Proba de foc în sandbox** — plată reală, userul devine PRO, adresa ajunge în DB.
-- **L4** · **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
-- **L5** · **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
-- **L6** · **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+- **L3** · **Test cap-coadă cu USER NOU** — de la `/start` la prima declarație și prima plată, fără ajutor din partea ta.
+- **L4** · **Trecerea pe live Stripe** — cont activat · Products/Prices live · endpoint webhook nou cu secret nou · chei live · plată reală + stornare.
+- **L5** · **Prezentare + marketing** — *sursa textelor e* `docs/INVENTAR-CONIAR.md` (ce face produsul azi), nu busola.
+
+> ✅ **ÎNCHIS: „Proba de foc în sandbox"** (19.08.2026) — plata a mers, userul a devenit plătitor, adresa a ajuns în DB. Vezi jurnalul pentru ce a dovedit și ce NU. Ce a rămas neacoperit (chei live, stornare, ordinea evenimentelor) e la **L2** și **L4**, nu aici.
 
 ### IEFTINE ȘI ÎNAINTE DE LANSARE
 
@@ -471,6 +472,11 @@ Fiecare treaptă mută o bucată de muncă de la om la noi. Gating-ul de azi tre
 - **[august 2026] BLOCANT DE PRODUS ÎNCHIS: D212 avea numere, nu artefact** (**#134** generatorul, **#149** wiring-ul). Cea mai importantă declarație a unui PFA era **singura fără ieșire** — omul citea cifra pe dashboard și o tasta singur în formularul ANAF.
   **Din cele trei variante s-a ales (b)** — *îi dăm întâi un artefact și arhivăm generarea, ca la celelalte patru*. **(a)** („arhivare la schimbare") și **(c)** („amândouă") au primit răspuns implicit: **estimarea rămâne nearhivată**, fiindcă e o privire recalculată la fiecare afișare, nu un eveniment. Cu (a) sau (c), tabelul ar fi ținut **două feluri de fapt** — „ce am generat" și „ce ți-am arătat" — și ar fi trebuit să le distingă explicit, altfel ar fi mințit despre ce conține. Alegând (b), distincția nu mai trebuie făcută: **în arhivă intră doar faptele de generare**.
   **Rămâne fără fișier doar norma de venit** — se livrează cifre + ghid, cu explicația că norma se declară în capitolul II, cu altă structură; un fișier pe structura greșită ar fi respins de ANAF sau, mai rău, acceptat și greșit.
+
+- **[19.08.2026] BLOCANT DE LANSARE ÎNCHIS: „Proba de foc în sandbox".** Plată reală în sandbox, dusă cap-coadă. **Confirmat în DB** (verificat independent, read-only, 13.09.2026): `stripe_customer_id` = `cus_V6InH9RKUjMf9A` · `stripe_subscription_id` = `sub_1U66CGCFtRUlqZo6ms2YQkdN` · `stripe_status` = `active` · `stripe_tier` = `START`. Adresa de facturare a **umplut golurile existente**, nu le-a suprascris: `adresa_strada` = „Sat Dumbrava 72" și `cod_postal` = „427123" au venit din Stripe, pe când `judet` și `localitate` erau deja din ANAF. Exact diviziunea dorită — Stripe completează ce ANAF nu dă.
+  **CE A DOVEDIT:** lanțul **checkout → webhook → tier** funcționează cap-coadă **în producție**, pe chei de sandbox. Adică: sesiunea de checkout se creează, webhook-ul se verifică și se procesează, userul chiar devine plătitor în baza reală, iar datele de facturare ajung unde trebuie. Nu mai e o presupunere despre cod — e un rând în DB.
+  **CE NU A DOVEDIT, și unde stă fiecare:** ⓐ **cheile live** — sandbox-ul nu spune nimic despre contul activat, Products/Prices live sau endpoint-ul cu secret nou (rămâne la blocantul *Trecerea pe live Stripe*); ⓑ **stornarea** — n-a fost exercitată deloc (același blocant); ⓒ **ordinea evenimentelor** — o singură plată, curată, nu spune nimic despre ce se întâmplă când webhook-urile vin răsturnate sau duplicate (rămâne la blocantul *Călirea Stripe*, împreună cu fallback-ul pe `stripe_customer_id` și alertele pe ramurile tăcute). O probă reușită acoperă calea fericită; blocantele rămase sunt exact căile nefericite.
+  **Notă de precizie:** DB-ul confirmă **starea**, nu **data** — `updated_at` pe rândul respectiv e 03.09.2026, fiindcă rândul a mai fost atins ulterior. Data de 19.08.2026 vine din evidența lui Stefan, nu din bază. Separat, `trial_ends_at` e `NULL` pe userul plătitor, coerent cu follow-up-ul deja consemnat despre backfill-ul de trial pentru userii existenți.
 
 ---
 
