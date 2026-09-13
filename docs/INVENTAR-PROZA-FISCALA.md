@@ -228,6 +228,21 @@
 | 95 | `:8-11,21-22,192-194` | Consum normat = km business × normă / 100; verdictul se dă pe LITRI, nu pe lei; NU determină deductibilitatea | NU | MEDIE |
 | 96 | `:277,295-296` | „Ai depășit consumul normat" — afirmă un plafon de plauzibilitate | NU | MEDIE |
 
+## P. Prompturi AI — `app/ai/`
+
+> ⚠️ **PUNCT ORB al primei treceri.** Nici `prompts.py`, nici `fiscal_monitor.py` n-au fost privite, deși ambele conțin afirmații fiscale **hardcodate** și ambele sunt **vii**: `fiscal_monitor` rulează ca job programat (`scheduler.py:604-608`) și e importat în bot (`bot_contabil.py:20`).
+>
+> Motivul ratării merită scris, fiindcă e o clasă, nu un accident: inventarul a căutat proza acolo unde **vorbește cu userul**. Prompturile nu vorbesc cu userul — vorbesc cu **modelul**. Dar o premisă falsă dată modelului se întoarce ca răspuns fals, doar pe o cale mai lungă. Severitatea e mai mică (indirect), clasa e aceeași.
+
+| # | Locație | Afirmația | Temei | Sev. |
+|---|---|---|---|---|
+| 97 | `fiscal_monitor.py:113` | Context de cercetare: „Nu este plătitor de TVA înregistrat (sub plafonul de **300.000** RON)" — **CIFRĂ STĂTUTĂ**, plafonul e 395.000 (`fiscal_profile.VAT_THRESHOLD_RON`) | NU | MEDIE |
+| 98 | `prompts.py:33` | „COTA TVA STANDARD: 21% (Actualizat 2026, conform **OUG 115/2023**)" — cifra corectă, **atribuire greșită**: 21% vine din Legea 141/2025 | parțial → **greșit** | MEDIE |
+| 99 | `fiscal_monitor.py:47-52` | Lista temelor monitorizate: impozit 10%, CAS 25%, CASS 10%, deductibilitate auto 50% | NU | MICĂ |
+| 100 | `prompts.py:173` | „TVA Datorat = Comision × cota TVA standard în vigoare (Taxare Inversă)" — regula de taxare inversă | NU | MEDIE |
+
+**#97 și #98 sunt REPARATE** în PR-ul care a adăugat secțiunea asta (forma canonică a temeiului). Rămân în tabel ca istoric — inventarul consemnează ce s-a găsit, nu doar ce a rămas.
+
 ---
 
 # TOTALURI
