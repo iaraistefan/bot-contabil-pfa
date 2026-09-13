@@ -915,6 +915,29 @@
               </button>
             </div>
             <div class="set-section">
+              <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Situația ta personală</div>
+              <div class="hint" style="margin-bottom:var(--sp-3)">Schimbă CAS-ul și CASS-ul din Declarația Unică. Se poate schimba în timp — dacă te angajezi, ieși la pensie sau treci part-time, spune-mi aici și recalculez.</div>
+              <label class="set-lbl">Am salariu de cel puțin 6 salarii minime pe an</label>
+              <select class="set-inp" id="set-salariat">
+                <option value="">— nu ți-am spus încă —</option>
+                <option value="da">Da</option>
+                <option value="nu">Nu</option>
+              </select>
+              <div class="hint" style="margin-top:var(--sp-1)">Contează <b>nivelul</b>, nu doar faptul că ești angajat: legea cere salarii de cel puțin 6 salarii minime pe an ca să fii considerat deja asigurat. Dacă da, CASS pe PFA se calculează pe venitul real, fără podeaua minimă. Part-time sau angajare pe o parte din an pot fi sub prag — atunci podeaua se aplică. CAS pe PFA rămâne după prag, neatins.</div>
+              <label class="set-lbl" style="margin-top:var(--sp-3)">Sunt pensionar</label>
+              <select class="set-inp" id="set-pensionar">
+                <option value="">— nu ți-am spus încă —</option>
+                <option value="da">Da</option>
+                <option value="nu">Nu</option>
+              </select>
+              <div class="hint" style="margin-top:var(--sp-1)">Pensionarii NU plătesc CAS (pensie) pe activitatea PFA, iar CASS se aplică pe venitul real. La pensie <b>nu contează suma</b> — orice pensie califică.</div>
+              <div id="set-situatie-msg" class="hint" style="margin-top:var(--sp-2);min-height:18px"></div>
+              <button class="btn btn-primary" id="set-situatie-save" style="margin-top:var(--sp-1)" onclick="salveazaSituatie()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Salvează
+              </button>
+            </div>
+            <div class="set-section">
               <div class="t" style="font-family:var(--display);font-weight:var(--w-semibold);font-size:var(--text-base);margin-bottom:var(--sp-1)">Reîmprospătează datele de la ANAF</div>
               <div class="hint" style="margin-bottom:var(--sp-3)">Întreb din nou ANAF pe CUI-ul tău și <b>completez ce e gol</b> în profil — inclusiv câmpuri apărute după ce ți-ai făcut contul. Ce ai completat deja nu se atinge: dacă ANAF spune altceva, îți arăt diferența și decizi tu. Utilă și când ți-ai mutat sediul sau ți-ai schimbat CAEN-ul.</div>
               <div id="set-anaf-msg" class="hint" style="margin-bottom:var(--sp-2);min-height:18px;white-space:pre-line"></div>
@@ -2266,6 +2289,13 @@
       if(nz) nz.value = s.regim_nerezident_bolt||"";   // "" = neconfigurat → fără preselecție
       const nzu=document.getElementById("set-nerezident-uber");
       if(nzu) nzu.value = s.regim_nerezident_uber||"";
+      // Situația personală (CAS/CASS) — TRI-STARE. `null` ≠ `false`: primul înseamnă
+      // „nu mi-ai spus", al doilea „mi-ai spus nu". Un `||""` ar strivi `false` peste
+      // gol și userul care a răspuns „nu" ar vedea iar „nu ți-am spus încă".
+      const sal=document.getElementById("set-salariat");
+      if(sal) sal.value = (s.is_salariat===true?"da":(s.is_salariat===false?"nu":""));
+      const pens=document.getElementById("set-pensionar");
+      if(pens) pens.value = (s.is_pensionar===true?"da":(s.is_pensionar===false?"nu":""));
       // Certificat ONRC: AMÂNDOUĂ câmpurile sunt editabile. Numărul era read-only
       // fiindcă „vine automat din ANAF" — asumpție dezmințită în producție, unde
       // un user îl avea gol și D212 refuza să se genereze, fără cale de reparare.
@@ -2352,6 +2382,36 @@
       box.innerHTML=html;
     }catch(e){console.error(e);box.innerHTML='<div class="hint">Nu am putut încărca secțiunea certificat.</div>';}
   }
+  async function salveazaSituatie(){
+    const msg=document.getElementById("set-situatie-msg");
+    const sal=((document.getElementById("set-salariat")||{}).value)||"";
+    const pens=((document.getElementById("set-pensionar")||{}).value)||"";
+    if(!sal && !pens){ if(msg) msg.textContent=""; return; }   // ambele goale → nimic de trimis
+    if(msg){ msg.style.color="var(--muted)"; msg.textContent="Se salvează…"; }
+    try{
+      // Gol → NU trimitem cheia deloc: backend-ul lasă neschimbat, deci NULL rămâne
+      // NULL. Un `false` trimis pentru „gol" ar transforma tăcerea în răspuns.
+      const body={};
+      if(sal) body.is_salariat = (sal==="da");
+      if(pens) body.is_pensionar = (pens==="da");
+      const r=await authFetch("/api/v1/setari",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.ok && d.ok){
+        if(msg){ msg.style.color="var(--pos-br)"; msg.textContent="✓ Salvat. Recalculez CAS și CASS cu situația ta."; }
+        haptic("success");
+        // Cifrele D212 depind de flagurile astea → golim ce le-ar putea arăta vechi.
+        cache.setari=null; loaded.tva=false;
+        for(const k in cache){ if(k[0]==="p"||k.indexOf("d212")===0) delete cache[k]; }
+      }else{
+        if(msg){ msg.style.color="var(--red)"; msg.textContent=d.message||"Nu am putut salva."; }
+      }
+    }catch(e){ console.error(e); if(msg){ msg.style.color="var(--red)"; msg.textContent="Conexiune pierdută. Încearcă din nou."; } }
+  }
+  window.salveazaSituatie=salveazaSituatie;
+
   async function salveazaRegimNerezident(){
     const msg=document.getElementById("set-nerez-msg");
     const bolt=((document.getElementById("set-nerezident")||{}).value)||"";
