@@ -177,7 +177,8 @@ def _banner_data(rez, an):
 
     `amount` = `rez['total_taxe']` — EXACT suma pe care `format_telegram` o afișează
     (ca bannerul și textul să arate aceeași sumă). Termenele D212 (25 Mai an+1) și
-    D207 (28 Feb an+1) — reutilizează `compute_obligation` (luna 5 / luna 2;
+    D207 (ultima zi a lui februarie an+1) — reutilizează `compute_obligation`
+    (luna 5 / luna 2;
     profil-independent: termenul se calculează înainte de aplicabilitate). Luni RO.
     """
     from app.domain import fiscal_calendar as fc

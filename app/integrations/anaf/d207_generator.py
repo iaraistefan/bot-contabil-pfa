@@ -33,6 +33,7 @@ CUI romanesc); cifS = codul fiscal STRAIN (VAT nerezident, din
 vat_engine.intracom_operator_for).
 """
 
+import calendar
 from dataclasses import dataclass, field
 from typing import List, Optional
 from xml.sax.saxutils import escape
@@ -264,10 +265,32 @@ def genereaza_ghid_d207(
              f"platformelor nerezidente in {an} + impozitul aferent (inclusiv partea "
              f"SCUTITA — Uber cu certificat, impozit 0, se declara oricum).")
     L.append("")
-    L.append(b("Termen:") + f" pana pe ultima zi lucratoare din februarie {an + 1} "
-             f"(pt {an}: ~28 februarie {an + 1}; daca pica in weekend, prima zi "
-             f"lucratoare urmatoare). Declaratie INFORMATIVA — nu platesti nimic "
-             f"(impozitul s-a virat lunar prin D100).")
+    # Ultima zi a lunii februarie a anului de DEPUNERE (an + 1) — art. 231 alin. (1)
+    # spune „ultima zi", nu 28, iar in anii bisecti sunt 29. Calculata, nu scrisa.
+    #
+    # ⚠️ FRAZA DE MAI JOS DESCRIE O REGULA PE CARE SISTEMUL NU O APLICA INCA.
+    # Regula zilei nelucratoare (Cod procedura fiscala art. 75 → Cod procedura civila
+    # art. 181 alin. (2): „cand ultima zi a unui termen cade intr-o zi nelucratoare,
+    # termenul se prelungeste pana in prima zi lucratoare care urmeaza") NU e
+    # implementata nicaieri in cod: `_compute_termen_*` produc date pur calendaristice,
+    # si nu exista niciun calendar de sarbatori legale in proiect.
+    # Deci ghidul va spune „posibil 2 martie", iar calendarul fiscal va arata 29
+    # februarie, pentru acelasi termen. E o NEPOTRIVIRE ACCEPTATA DELIBERAT:
+    #   • directia e conservatoare — data pe care o calculam noi e mai DEVREME decat
+    #     cea legala, deci un user care se ia dupa calendar depune la timp;
+    #   • ghidul e sfat despre LEGE, nu afirmatie despre ce am calculat noi. A-l taia
+    #     ca sa se potriveasca cu motorul ar insemna sa ascundem o regula reala ca sa
+    #     nu ne contrazica propria simplificare.
+    # NU „repara" calendarul stergand fraza asta, si nu presupune ca e o omisiune:
+    # regula e GENERALA (atinge toate cele 7 termene calculate, nu doar D207), deci
+    # daca se implementeaza vreodata, se implementeaza in `_compute_termen_*`, o
+    # singura data, impreuna cu un calendar de sarbatori legale.
+    _ultima_zi_feb = calendar.monthrange(an + 1, 2)[1]
+    L.append(b("Termen:") + f" pana in ultima zi a lunii februarie {an + 1} "
+             f"(pt {an}: {_ultima_zi_feb} februarie {an + 1}). Daca acea zi cade "
+             f"intr-o zi nelucratoare, termenul se muta INAINTE, in prima zi "
+             f"lucratoare urmatoare — care poate fi deja in martie. Declaratie "
+             f"INFORMATIVA — nu platesti nimic (impozitul s-a virat lunar prin D100).")
     L.append("")
     L.append(b("Beneficiari raportati:"))
     for benef in beneficiari:

@@ -18,7 +18,7 @@ CHANGELOG:
   • CORECȚIE FISCALĂ: D100 nerezidenți 2% NU e reținut automat de Bolt,
     TREBUIE depus de PFA. Versiunea v1 era greșită.
   • Adăugat D100 poz. 634 (impozit nerezidenți comisioane)
-  • Adăugat D207 (declarația informativă anuală, 28 februarie)
+  • Adăugat D207 (declarația informativă anuală, ultima zi a lunii februarie)
   • Adăugat D700 (înregistrare cod special TVA — o singură dată)
   • Profile-aware: lucrează cu FiscalProfile, suportă PFA/SRL Micro/Normal
   • Activity-aware: filtrare per activitate (ridesharing, ecommerce, etc.)
@@ -27,6 +27,7 @@ CHANGELOG:
   • Backward compatible: API-ul vechi (get_monthly_alerts) încă funcționează
 """
 
+import calendar
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -131,6 +132,14 @@ class DefinitieObligatie:
     frecventa: FrecventaObligatie
     ziua_termenului: int                        # ziua din luna scadentă
     luna_anuala_termen: Optional[int] = None    # doar pt anuale (ex: 5 = mai)
+
+    # Termenul cade în ULTIMA ZI a lunii, nu într-o zi fixă de calendar.
+    # Când e True, `ziua_termenului` NU mai decide data: ziua se ia din
+    # `calendar.monthrange`, deci urmărește anii bisecți singură.
+    # Există fiindcă unele termene sunt definite în lege ca „ultima zi a lunii X",
+    # nu ca un număr (vezi D207, art. 231 alin. (1)). A scrie numărul ar fi o
+    # transcriere care iese falsă o dată la patru ani.
+    termen_in_ultima_zi_a_lunii: bool = False
 
     forme_juridice: List[str] = field(default_factory=list)
     activitati: List[str] = field(default_factory=lambda: ["*"])
@@ -263,11 +272,34 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "Centralizează toate veniturile plătite nerezidenților în anul "
             "precedent — AMBELE platforme se declară aici: Bolt (impozabil 2%/16%) "
             "ȘI Uber (inclusiv partea scutită 0% cu certificat — scutirea se declară "
-            "TOT în D207, nu doar impozitul). Se depune o dată pe an, până pe 28 februarie."
+            "TOT în D207, nu doar impozitul). Se depune o dată pe an, până în ultima "
+            "zi a lunii februarie."
         ),
         tip_iban=None,  # nu se plătește — e doar declarativă
         frecventa=FrecventaObligatie.ANUALA,
+        # ─── TERMENUL E „ULTIMA ZI A LUNII", NU O ZI FIXĂ ───
+        # Art. 231 alin. (1) Cod fiscal: declarația se depune „până în ULTIMA ZI a lunii
+        # februarie inclusiv a anului curent pentru anul expirat" — modificat 24-12-2020
+        # prin pct. 154, art. I din Legea 296/2020 (MO 1269/21.12.2020). Forma
+        # consolidată legislatie.just.ro valabilă la 08.08.2026.
+        #
+        # Aici scria `ziua_termenului=28`, ceea ce era o TRANSCRIERE, nu termenul: legea
+        # nu spune 28, spune „ultima zi". În anii bisecți ultima zi e 29, deci afirmația
+        # ieșea falsă. Direcția era conservatoare (userul ar fi depus cu o zi mai
+        # devreme), dar o dată greșită rămâne greșită, iar aici nu era doar frază: D207 e
+        # ANUALA, deci `compute_obligation` → `_compute_termen_anual_rolling` producea
+        # data CALCULATĂ, în ambele motoare (v2/web ȘI v1/Telegram) și în bannerul D212.
+        # Următorul an bisect: 2028.
+        #
+        # `ziua_termenului` rămâne 28 doar fiindcă e un câmp obligatoriu al dataclass-ului
+        # — flag-ul de dedesubt îl IGNORĂ. Nu-l citi ca pe termen, și mai ales nu-l citi
+        # ca pe răspunsul corect: 28 e EXACT valoarea care s-ar folosi dacă flag-ul ar
+        # dispărea, adică exact bug-ul de dinainte. Cine scoate
+        # `termen_in_ultima_zi_a_lunii` readuce tăcut data greșită în anii bisecți.
+        # Nu „repara" nici numărul la 29 — ar strica anii nebisecți. Regula nu e un
+        # număr; de asta e un flag.
         ziua_termenului=28,
+        termen_in_ultima_zi_a_lunii=True,
         luna_anuala_termen=2,
         forme_juridice=["PFA", "II", "IF", "SRL_MICRO", "SRL_NORMAL"],
         activitati=["ridesharing"],
@@ -293,7 +325,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
             "SAU Uber (chiar scutit 0% cu certificat — tot se declară). Ambele intră aici."
         ),
         cand=(
-            "O dată pe an, până pe 28 februarie, pentru anul precedent. "
+            "O dată pe an, până în ULTIMA ZI a lunii februarie, pentru anul precedent "
+            "— adică 28 februarie, sau 29 în anii bisecți. "
             "Anuală, nu lunară."
         ),
         cum_depun=(
@@ -707,7 +740,8 @@ def _compute_termen_anual(
 
 
 def _compute_termen_anual_rolling(
-    year: int, month: int, luna_termen: int, ziua: int
+    year: int, month: int, luna_termen: int, ziua: int,
+    ultima_zi: bool = False,
 ) -> date:
     """
     Termen anual cu ROLL-FORWARD: dacă luna de referință (`month`) a trecut deja
@@ -718,10 +752,17 @@ def _compute_termen_anual_rolling(
     web) ȘI de `get_annual_alerts` (v1, Telegram), ca cele 2 suprafețe să NU poată
     diverge (fiscal #7: înainte v1 arăta data trecută → fals „D212 depășit").
     Mută anul DOAR după ce luna termenului trece.
+
+    `ultima_zi=True` → ziua se ia din `calendar.monthrange` pentru ANUL DEJA
+    ROLL-FORWARDAT, nu din `ziua`. Contează că se calculează DUPĂ roll-forward: un
+    termen din februarie e evaluat în anul în care chiar se depune, deci bisectul
+    care decide e al anului corect, nu al celui de referință. Vezi D207.
+    Deliberat `monthrange`, nu o formulă de an bisect scrisă de mână și nu un tabel
+    de zile — aceeași alegere ca la `declansator_termen.este_ultima_zi_a_lunii`.
     """
-    if month <= luna_termen:
-        return date(year, luna_termen, ziua)
-    return date(year + 1, luna_termen, ziua)
+    an = year if month <= luna_termen else year + 1
+    zi = calendar.monthrange(an, luna_termen)[1] if ultima_zi else ziua
+    return date(an, luna_termen, zi)
 
 
 def _compute_termen_trimestrial(
@@ -948,7 +989,8 @@ def compute_obligation(
         # (declarăm pt anul încheiat). SURSĂ UNICĂ cu get_annual_alerts (v1).
         luna_termen = definitie.luna_anuala_termen or 5
         termen = _compute_termen_anual_rolling(
-            year, month, luna_termen, definitie.ziua_termenului
+            year, month, luna_termen, definitie.ziua_termenului,
+            ultima_zi=definitie.termen_in_ultima_zi_a_lunii,
         )
     elif definitie.frecventa == FrecventaObligatie.UNICA:
         # Termenul unei obligații UNICA e ANTERIOR evenimentului care o naște:
@@ -1349,7 +1391,11 @@ ANNUAL_DEADLINES = [
         "code": "D207",
         "name": "Declarația informativă (D207)",
         "month": 2,
+        # `day` e ignorat: `ultima_zi` îl suprascrie din `calendar.monthrange`, ca la
+        # definiția v2 (art. 231 alin. (1) — „ultima zi a lunii februarie", nu 28).
+        # Rămâne scris ca să nu spargem forma dict-ului, comun cu D212/CAS/CASS.
         "day": 28,
+        "ultima_zi": True,
         "description": (
             "Centralizează veniturile plătite nerezidenților în anul anterior — "
             "AMBELE platforme: Bolt (impozabil 2%/16%) ȘI Uber (inclusiv partea "
@@ -1511,7 +1557,8 @@ def get_annual_alerts(year: int, today: Optional[date] = None) -> List[dict]:
     for decl in ANNUAL_DEADLINES:
         try:
             deadline = _compute_termen_anual_rolling(
-                year, today.month, decl["month"], decl["day"]
+                year, today.month, decl["month"], decl["day"],
+                ultima_zi=decl.get("ultima_zi", False),
             )
         except ValueError:
             continue
