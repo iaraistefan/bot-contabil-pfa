@@ -504,7 +504,8 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         nume="Impozit pe profit (SRL Normal)",
         descriere=(
             "Impozit 16% pe profitul SRL Normal. Termene: trimestrial "
-            "(25 a lunii după trimestru) + declarație anuală (25 martie)."
+            "(25 a lunii după trimestru) + declarație anuală (25 martie pentru "
+            "anul fiscal 2025; 25 iunie din anul fiscal 2026 — vezi nota la `cand`)."
         ),
         tip_iban=TipObligatie.D101_IMPOZIT_PROFIT,
         frecventa=FrecventaObligatie.TRIMESTRIALA,
@@ -520,7 +521,38 @@ DEFINITII_OBLIGATII: Dict[str, DefinitieObligatie] = {
         cui_se_aplica=(
             "Doar dacă ești SRL Normal. Ca PFA ridesharing NU te privește — tu ai D212."
         ),
-        cand="Trimestrial (25 a lunii după trimestru) + declarația anuală pe 25 martie.",
+        # ─── TERMENUL ANUAL E BIFURCAT PE ANI, ȘI TRĂIEȘTE ÎN FRAZĂ ───
+        # Art. 42 alin. (1) Cod fiscal, modificat 25-02-2026 prin OUG 8/2026: declarația
+        # anuală de impozit pe profit se depune „până la data de 25 iunie inclusiv a
+        # anului următor" — era 25 martie.
+        # Aplicabilitatea e la art. 45 alin. (21^4): „se aplică începând cu declarația
+        # anuală privind impozitul pe profit aferentă anului 2026/anului fiscal modificat
+        # care începe în anul 2026". Deci pentru anul fiscal 2025 termenul rămâne
+        # 25 martie 2026; din anul fiscal 2026 încolo, 25 iunie.
+        #
+        # DE CE STĂ ÎN TEXT ȘI NU ÎNTR-UN CÂMP — NU E O OMISIUNE DE IMPLEMENTAT:
+        # 1. `DefinitieObligatie` n-are axă temporală. `ziua_termenului` /
+        #    `luna_anuala_termen` sunt câte UNUL pe definiție, nu per an fiscal. Un termen
+        #    care diferă pe ani n-are unde să încapă fără a versiona structura.
+        # 2. D101 nici nu are termen anual CALCULAT. `frecventa=TRIMESTRIALA`, deci
+        #    `compute_obligation` trece pe `_compute_termen_trimestrial` și produce DOAR
+        #    termenul trimestrial. Termenul anual n-a existat niciodată ca dată calculată
+        #    — e livrat exclusiv ca proză, prin /ghid (`ghid_ui._card` și /api/v1/ghid
+        #    servesc acest câmp verbatim).
+        # Fraza e deci singurul loc unde termenul anual EXISTĂ. Bifurcația scrisă aici nu
+        # așteaptă o implementare; ea e implementarea.
+        #
+        # PLĂȚILE TRIMESTRIALE SUNT NEATINSE. La art. 41, OUG 8/2026 a schimbat doar BAZA
+        # de calcul a plății anticipate pe trimestrul I (cota × profitul contabil al
+        # perioadei, alin. (10^1)); termenul „25 inclusiv a lunii următoare trimestrului"
+        # a rămas. Verificat pe forma consolidată legislatie.just.ro, OUG 8/2026
+        # (doc. 307580), 12.09.2026 — nu presupus din titlul ordonanței.
+        cand=(
+            "Trimestrial, până pe 25 a lunii de după trimestru (termen neschimbat). "
+            "Plus declarația anuală, al cărei termen s-a mutat: pentru anul fiscal 2025 "
+            "→ 25 martie 2026; pentru anul fiscal 2026 și următorii → 25 iunie a anului "
+            "următor (OUG 8/2026)."
+        ),
         cum_depun="Prin SPV. Plătești 16% din profitul fiscal (venituri − cheltuieli deductibile).",
         de_ce=(
             "E impozitul pe profit clasic — relevant doar pentru SRL Normal. Majoritatea "

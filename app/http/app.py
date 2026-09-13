@@ -600,7 +600,26 @@ def obligatii_fiscale(year: int, month: int):
         profile = users_repo.get_profile_dict(session, user_id) or {}
 
         # parametri profil (cu fallback-uri sigure pentru PFA ridesharing)
-        forma_juridica = profile.get("forma_juridica") or "PFA"
+        #
+        # Cheia e `firma_forma_juridica` — singura pe care o produce `get_profile_dict`.
+        # Aici se citea cheia `forma_juridica`, fără prefixul `firma_` — o cheie care NU
+        # există în dict, deci expresia cădea MEREU pe „PFA", pentru orice user, la
+        # fiecare cerere. (Numele greșit NU e scris aici în forma lui de apel, dinadins:
+        # gardianul din tests/test_chei_profil.py scanează fișierul și ar raporta chiar
+        # propoziția asta ca pe o a doua instanță.)
+        # Nu era un `or` de siguranță:
+        # era o nepotrivire de chei mascată de un implicit care se întâmplă să fie corect
+        # azi (toți userii reali sunt PFA sau au forma NULL → PFA). Un bug tăcut arată
+        # exact ca o valoare implicită bine aleasă — de aceea a trăit aici.
+        # Miza: drumul Telegram citește cheia corectă (`proactive_alerts._build_user_context`
+        # → `fiscal_profile.from_user_dict`, care ia `firma_forma_juridica`). Cele două
+        # suprafețe puteau deci DIVERGE pe același user: web ar fi spus PFA, botul altceva,
+        # fără nicio eroare — același tipar pentru care s-a scris
+        # `_compute_termen_anual_rolling` ca sursă unică.
+        # Gardian de CLASĂ, nu de instanță: tests/test_chei_profil.py derivă cheile din
+        # `get_profile_dict` la rulare și cade dacă vreun `profile.get(...)` din cod
+        # întreabă după o cheie inexistentă.
+        forma_juridica = profile.get("firma_forma_juridica") or "PFA"
         activity_code = profile.get("activity_code") or "ridesharing"
         regim_tva = (profile.get("regim_tva") or "").lower()
         is_vat_payer = ("platitor" in regim_tva) and ("neplatitor" not in regim_tva)
