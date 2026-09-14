@@ -2070,6 +2070,14 @@ def documents_recent():
     session = get_session()
     try:
         from app.models import Document
+        # FĂRĂ FILTRU DE STATUS, ȘI E DELIBERAT — nu o omisiune de reparat.
+        # Ecranul ăsta e „ce am trimis eu", nu „ce s-a înregistrat". Un document
+        # care dispare din listă fiindcă n-a ajuns la starea finală e exact tăcerea
+        # pe care o evităm peste tot: omul a trimis poza, iar dacă nu vede nimic
+        # presupune că s-a pierdut. Statusul MERGE în payload (mai jos) și e afișat
+        # ca badge în dashboard — se arată, marcat, nu se ascunde.
+        # Cifrele de bani NU vin de aici: ele se calculează din `Transaction`, iar
+        # cele două locuri care citesc bani din `Document` filtrează pe „posted".
         docs = (
             session.query(Document)
             .filter(Document.user_id == user_id)

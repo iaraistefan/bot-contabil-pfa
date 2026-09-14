@@ -953,8 +953,9 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user_id:
                 doc_count = (
                     session.query(Document)
+                    # ALLOWLIST — vezi app/enums.py, DOC_STATUSES_SCRISE.
                     .filter(Document.user_id == user_id,
-                            Document.status != "rejected")
+                            Document.status == "posted")
                     .count()
                 )
                 tx_count = (
@@ -1015,8 +1016,9 @@ async def handle_cont(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         doc_count = (
             session.query(Document)
+            # ALLOWLIST — vezi app/enums.py, DOC_STATUSES_SCRISE.
             .filter(Document.user_id == user_id,
-                    Document.status != "rejected")
+                    Document.status == "posted")
             .count()
         )
         tx_count = (
@@ -2682,7 +2684,18 @@ def find_duplicate_document(user_id, data_doc, brut, numar_document=None):
                 .filter(
                     Document.user_id == user_id,
                     Document.numar_document == nr,
-                    Document.status != "rejected",
+                    # ALLOWLIST, și aici răspunsul NU e evident — merită gândit,
+                    # nu copiat. Duplicat înseamnă „bonul ăsta e DEJA înregistrat".
+                    #   • "posted"   → da, e înregistrat. Semnalăm.
+                    #   • "rejected" → userul l-a ȘTERS deliberat; retrimiterea
+                    #     aceluiași bon e o re-introducere legitimă, nu o greșeală.
+                    #     (Denylist-ul de dinainte ajungea la aceeași concluzie, dar
+                    #     din întâmplare: excludea „rejected" fiindcă era singura
+                    #     altă valoare, nu fiindcă ar fi judecat-o.)
+                    # O stare viitoare „neconfirmat" NU e automat duplicat: omul e
+                    # chiar în mijlocul înregistrării ei. Decizia aia se ia atunci,
+                    # aici, explicit — nu se moștenește tăcut dintr-un `!=`.
+                    Document.status == "posted",
                 )
                 .first()
             )
@@ -2696,7 +2709,12 @@ def find_duplicate_document(user_id, data_doc, brut, numar_document=None):
                 .filter(
                     Document.user_id == user_id,
                     Document.data_doc == data_doc,
-                    Document.status != "rejected",
+                    # ALLOWLIST, același raționament ca la nivelul 1 (număr de
+                    # document): un bon șters deliberat nu face din retrimitere un
+                    # duplicat. Aici miza e chiar mai mare — nivelul 2 e doar
+                    # POSIBIL duplicat (două bonuri reale pot avea aceeași zi și
+                    # aceeași sumă), deci fiecare fals pozitiv în plus costă.
+                    Document.status == "posted",
                 )
                 .all()
             )
@@ -2924,7 +2942,17 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                         session.query(Document)
                         .filter(
                             Document.source_file_id == sf_info["id"],
-                            Document.status != "rejected",
+                            # ALLOWLIST. Întrebarea e „poza asta a produs deja un
+                            # document ÎNREGISTRAT?", iar `posted` e singurul răspuns
+                            # afirmativ. Dacă poza a produs doar un document șters,
+                            # re-trimiterea trebuie să meargă.
+                            # ⚠️ Ramura `else` de dedesubt (`has_docs == False` →
+                            # re-extragem) e SINGURA cale de recuperare existentă azi
+                            # când confirmarea se pierde la un redeploy. Un denylist
+                            # ar înghiți orice stare viitoare și ar închide-o: omul ar
+                            # primi „poza asta e deja înregistrată" pentru ceva ce nu
+                            # s-a înregistrat niciodată.
+                            Document.status == "posted",
                         )
                         .count()
                     ) > 0

@@ -6,16 +6,32 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from app.enums import DocStatus
 from app.models import Document
 
 
-def count_by_tip(session, user_id: int, tip) -> int:
-    """Numarul de documente de un tip dat ale userului (pentru detectia 'prima cheltuiala')."""
-    return (
-        session.query(Document)
-        .filter(Document.user_id == user_id, Document.tip == tip)
-        .count()
-    )
+def count_by_tip(session, user_id: int, tip, status: str = DocStatus.POSTED.value) -> int:
+    """
+    Numarul de documente de un tip dat ale userului (pentru detectia 'prima cheltuiala').
+
+    `status` e PARAMETRU, nu valoare cablata inauntru, si asta tine de NUMELE functiei:
+    ea promite „numara dupa TIP". Daca ar filtra tacut si pe status, numele ar minti —
+    apelantul ar primi alt numar decat cere, fara sa i se spuna. Asa, implicitul e
+    vizibil in semnatura si se poate schimba la apel.
+
+    Implicit „posted", fiindca apelantul de azi intreaba „e prima ta cheltuiala
+    INREGISTRATA?" ca sa trimita un mesaj de intampinare o singura data. Un document
+    neconfirmat n-a inregistrat nimic; daca l-ar numara, mesajul s-ar consuma pe ceva
+    ce omul n-a confirmat si n-ar mai aparea la cheltuiala adevarata.
+
+    ALLOWLIST prin constructie: filtrul spune ce valoare vrea, nu ce valoare respinge.
+    `status=None` cere EXPLICIT toate starile — pentru cine chiar vrea asta.
+    Vezi app/enums.py (DOC_STATUSES_SCRISE) si tests/test_status_allowlist.py.
+    """
+    q = session.query(Document).filter(Document.user_id == user_id, Document.tip == tip)
+    if status is not None:
+        q = q.filter(Document.status == status)
+    return q.count()
 
 
 def create(
