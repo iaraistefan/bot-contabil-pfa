@@ -84,14 +84,17 @@ def check_and_remind(bot_token: str) -> None:
                 .filter(
                     Document.user_id == user.id,
                     Document.created_at >= week_ago.replace(tzinfo=None),
-                    Document.status != "rejected",
+                    # ALLOWLIST: numărăm ce e înregistrat. Aici e doar un semnal
+                    # de activitate (nudge), deci miza e mică — dar convenția e
+                    # una singură, altfel excepțiile devin regula.
+                    Document.status == "posted",
                 )
                 .count()
             )
 
             total_docs = (
                 session.query(Document)
-                .filter(Document.user_id == user.id, Document.status != "rejected")
+                .filter(Document.user_id == user.id, Document.status == "posted")
                 .count()
             )
 

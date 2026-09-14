@@ -629,7 +629,10 @@ def _bolt_income_docs_query(session, user_id, year, month):
             Document.user_id == user_id,
             Document.tip == "VENIT",
             Document.platforma == "Bolt",
-            Document.status != "rejected",
+            # ALLOWLIST: ne interesează venitul ÎNREGISTRAT. Un denylist ar
+            # număra orice stare viitoare (ex. un document neconfirmat) drept
+            # venit Bolt real, iar de aici atârnă decizia de sincronizare.
+            Document.status == "posted",
             Document.data_doc.like(f"%{data_suffix}"),
         )
     )
