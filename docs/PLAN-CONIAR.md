@@ -232,6 +232,9 @@
   **DE-AIA MĂSURĂTOAREA PRECEDE REPARAȚIA, de fiecare dată.** Nu ca ritual, ci fiindcă e singura cale prin care cele două cazuri se despart. Și măsurarea **schimbă reparația**, nu doar o confirmă: la (1) numărătoarea a arătat că nu e nevoie de reparație, ci de un tripwire; la (3) reconul găsise șase filtre, erau **șapte**.
   *Înrudit cu „un gardian care apară greșeala e mai rău decât niciunul”, dar distinct: acolo gardianul exista și păzea greșit; aici nu există deloc, iar textul spune că există.*
 
+  **CELE PATRU SUNT O SCARĂ, nu patru sfaturi.** *Instanța/clasa* — prea îngustă · *granularitatea* — unitate prea largă · *apără greșeala* — lucrul greșit · *garda inexistentă* — nimic. Deci, în ordine: **apăr clasa corectă? pe unitatea corectă? lucrul corect? și chiar apăr ceva?**
+  Ultima întrebare e cea mai grea, și de-aia vine la urmă: celelalte trei lasă o urmă pe care dai peste ea — un test care pică, un fișier prea mare, o valoare greșită. A patra nu lasă decât **o propoziție care sună corect**.
+
 ### 3.3 IDEI AVANSATE (notate, nu pt început)
 - ✅ **Foaia de parcurs MANUALĂ e CONSTRUITĂ și livrată** (buton „🛣️ Foaie parcurs" + `/sterge_tura` + export Excel): ture, km, litri — DOVADĂ la control, nu calcul (comutatorul deductibilității e regimul vehiculului, vezi 5A/5B). Ce rămâne idee amânată e doar versiunea AUTO-GENERATĂ de mai jos.
 - ⏳ [idee amânată] Foaie de parcurs auto-generată (GPS + date Bolt) — dificil + ❓INCERT legal, validează cu consultant
