@@ -86,6 +86,23 @@ EXPECTED_CALLBACKS = {
     "confirm|back", "confirm|cancel", "confirm|capex|{idx}|da", "confirm|capex|{idx}|nu",
     "confirm|edit", "confirm|field|{idx}|{field_key}",
     "confirm|item|{i}", "confirm|save", "confirm|tip|{idx}|CHELTUIALA",
+    # +confirm|save|{sfid} / |{source_file_id} = cheia LOTULUI în callback, ca
+    #   butonul să știe CE confirmă după ce procesul a repornit (extracția e acum
+    #   persistată ca lot „needs_review"). `confirm|save` RĂMÂNE emis — e calea de
+    #   intrare prin TEXT, care n-are fișier-sursă, deci nici lot. `missing` gol:
+    #   nicio rutare existentă nu s-a atins.
+    #   DE CE cheie și nu „cel mai recent lot pending": omul fotografiază trei
+    #   bonuri unul după altul, primește trei carduri, apoi apasă „Confirmă" pe
+    #   PRIMUL. Cardul arată cifre precise — pentru el nu e ambiguu nicio clipă —
+    #   dar „ultimul lot" ar posta datele celei de-a treia poze. A confirma altceva
+    #   decât ce scrie pe ecran e eroare fiscală. În plus, mesajele Telegram trăiesc
+    #   la nesfârșit: un card poate fi apăsat peste luni. Forma scurtă fără lot viu
+    #   se REFUZĂ, cu mesaj și cu ieșire (/neterminate).
+    #   Cele două literale sunt scrise ca literale (nu printr-o variabilă) tocmai ca
+    #   gardianul ăsta să le vadă.
+    #   Ambele locuri care-l emit (cardul de confirmare și lista /neterminate)
+    #   folosesc aceeași variabilă `sfid` → un singur literal în snapshot.
+    "confirm|save|{sfid}",
     "confirm|tip|{idx}|FACTURA_COMISION", "confirm|tip|{idx}|VENIT",
     "d100|{year}|{month}", "d301|{year}|{month}", "d390|{year}|{month}",
     "d207|{year}",  # fisa D207 ANUALA (fara luna) — wire-up buton D207

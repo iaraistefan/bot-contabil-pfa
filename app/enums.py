@@ -76,4 +76,12 @@ class DocStatus(str, Enum):
 DOC_STATUSES_SCRISE = frozenset({
     DocStatus.POSTED.value,      # "posted"   — document înregistrat, intră în cifre
     DocStatus.REJECTED.value,    # "rejected" — șters de user; rămâne pentru audit
+    # "needs_review" — EXTRAS, neconfirmat încă. Scris la INGESTIE (vezi
+    # `bot_contabil.process_entry`), promovat la "posted" când userul confirmă.
+    # Refolosim o valoare care exista deja în vocabular în loc să inventăm a șaptea:
+    # „needs_review" descrie exact starea — citit de AI, așteaptă ochiul omului.
+    # ⚠️ NU intră în nicio cifră: toate filtrele de bani cer „posted" (allowlist,
+    # vezi tests/test_status_allowlist.py). Apare doar în lista de documente a
+    # userului, marcat, și în /neterminate.
+    DocStatus.NEEDS_REVIEW.value,
 })

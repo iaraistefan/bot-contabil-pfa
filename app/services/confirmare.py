@@ -327,8 +327,28 @@ async def show_confirmation(chat_id, context, query=None):
         save_label = "⚠️ Salvează oricum"
     else:
         save_label = "✅ Confirmă și salvează"
+    # Cheia lotului MERGE ÎN CALLBACK. Fără ea, un buton apăsat după un redeploy
+    # n-ar ști CE confirmă — iar „cel mai recent lot al userului" e un răspuns
+    # greșit, nu doar imprecis. Scenariul real: omul fotografiază trei bonuri unul
+    # după altul, primește trei carduri, apoi apasă „Confirmă" pe PRIMUL. Cardul
+    # acela arată cifre precise, deci nu e ambiguu nicio clipă pentru om — dar
+    # „ultimul lot" ar posta datele celei de-a TREIA poze. A confirma altceva decât
+    # ce scrie pe ecran e eroare fiscală, nu o aproximare acceptabilă.
+    # În plus, mesajele Telegram trăiesc la nesfârșit: un card poate fi apăsat peste
+    # luni, când „ultimul lot pending" e orice altceva.
+    # Fără `source_file_id` (intrare prin text) rămâne forma scurtă — acolo nu există
+    # lot persistat, deci nici ce confirma din DB.
+    # Cele două forme se scriu ca LITERALE, nu printr-o variabilă: gardianul de
+    # zero-drift (`tests/test_callback_data_snapshot.py`) extrage literalii
+    # `callback_data=`, iar o variabilă ar face callback-ul invizibil pentru el —
+    # adică exact butonul cel mai important ar rămâne nepăzit.
+    sfid = (pending or {}).get("source_file_id")
+    if sfid:
+        save_btn = InlineKeyboardButton(save_label, callback_data=f"confirm|save|{sfid}")
+    else:
+        save_btn = InlineKeyboardButton(save_label, callback_data="confirm|save")
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton(save_label, callback_data="confirm|save")],
+        [save_btn],
         [InlineKeyboardButton("✏️ Corectează", callback_data="confirm|edit")],
         [InlineKeyboardButton("❌ Anulează", callback_data="confirm|cancel")],
     ])
@@ -582,3 +602,52 @@ async def handle_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("✅ Actualizat.")
     await show_confirmation(update.effective_chat.id, context)
     return True
+
+
+# ============================================================
+#   PERSISTAREA LOTULUI — ca extracția să supraviețuiască unui redeploy
+# ============================================================
+#
+# DE CE EXISTĂ. `user_data` e pur în memorie: `ApplicationBuilder` n-are
+# `.persistence(...)`, iar Render înlocuiește containerul la fiecare deploy. Opt
+# fluxuri se rup acolo, dar NU sunt egale: șapte pierd tastări (secunde de
+# re-introdus, cu calea înapoi imediată). ĂSTA pierde muncă deja făcută și PLĂTITĂ
+# — un apel la modelul de extracție — plus lasă poza orfană în `source_files`. Și
+# se declanșează la FIECARE document, adică pe drumul pe care umblă toată lumea.
+#
+# Payload-ul pending se suprapune aproape exact peste rânduri `Document`
+# neconfirmate: `source_file_id`, `raw_json`, `prompt_version` există deja, iar
+# `status` primește o valoare care exista deja în vocabular ("needs_review").
+# Zero migrare de schemă.
+#
+# CE NU SE PERSISTĂ, și de ce e în regulă:
+#   • `duplicates` — n-are coloană, și nici nu-i trebuie: `find_duplicate_document`
+#     ia doar `data_doc`, `brut`, `numar_document`, toate aflate pe rând. Se
+#     RECALCULEAZĂ la rehidratare — și e mai corect așa: între ingestie și
+#     confirmare poate apărea un document care schimbă verdictul.
+#   • intrarea prin TEXT (fără poză) — n-are `source_file_id`, deci n-are cheie de
+#     grupare. Rămâne pe comportamentul de azi, deliberat: acolo nu există fișier
+#     orfan, iar re-tastarea e ieftină. Nu inventăm o cheie sintetică.
+
+_CAMPURI_ITEM = ("platforma", "tip", "brut", "comision", "tva", "net", "cash",
+                 "detalii", "numar_document")
+
+
+def doc_to_item_dict(doc) -> dict:
+    """Un rând `Document` → forma de item folosită de cardul de confirmare."""
+    d = {c: getattr(doc, c, None) for c in _CAMPURI_ITEM}
+    d["data"] = doc.data_doc          # singurul nume care diferă
+    d["detalii"] = d.get("detalii") or ""
+    d["category_override"] = None     # alegere de om, nu se persistă: se reia
+    for numeric in ("brut", "comision", "tva", "net", "cash"):
+        d[numeric] = float(d.get(numeric) or 0.0)
+    return d
+
+
+def item_dict_to_doc_fields(item: dict) -> dict:
+    """Forma de item → câmpurile de scris înapoi pe rând (după editare)."""
+    campuri = {c: item.get(c) for c in _CAMPURI_ITEM}
+    campuri["data_doc"] = item.get("data")
+    nr = campuri.get("numar_document")
+    campuri["numar_document"] = str(nr).strip()[:80] if nr else None
+    return campuri
