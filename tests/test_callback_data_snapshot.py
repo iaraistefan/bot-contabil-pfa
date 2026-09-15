@@ -169,3 +169,80 @@ def test_btn_menu_text_neschimbat():
     import bot_contabil
     for name, val in EXPECTED_BTN_MENU.items():
         assert getattr(bot_contabil, name) == val, f"{name} schimbat → matcher rupt!"
+
+
+# ============================================================
+#   GARDIAN DE FORMĂ: `callback_data=` primește LITERAL, nu o variabilă
+# ============================================================
+#
+# Gardianul de zero-drift de mai sus extrage LITERALI. Un `cb = f"..."` urmat de
+# `callback_data=cb` e invizibil pentru el — butonul dispare din snapshot fără ca
+# nimic să se plângă, iar de-atunci încolo poate fi redenumit liber.
+#
+# Nu e ipotetic: la persistarea lotului pending, prima variantă a butonului de
+# confirmare era exact așa (`save_cb = f"confirm|save|{sfid}" if sfid else
+# "confirm|save"`), și a fost rescrisă în două ramuri cu literale TOCMAI ca să rămână
+# în raza gardianului. Acolo a ținut o notă scrisă de om. Nota apără o dată; testul
+# ăsta apără mereu.
+#
+# MĂSURAT la scriere (15.09.2026): 182 de apeluri `callback_data=`, ZERO pe variabilă.
+# Gaura se închide cât e încă teoretică — adică fără nicio reparație de făcut.
+
+_CB_ARG = re.compile(r"callback_data\s*=\s*([^,\)\n]+)")
+_E_LITERAL = re.compile(r"^f?[\"'].*[\"']$", re.DOTALL)
+
+# Apeluri care primesc `callback_data=` fără să fie BUTOANE. Allowlist pe apel, nu pe
+# fișier: `monitoring.capture_exception(e, callback_data=data)` trimite string-ul la
+# Sentry ca etichetă de diagnostic. Nu randează nimic, deci n-are ce păzi gardianul.
+_APELURI_NEBUTON = ("capture_exception(",)
+
+
+def _fara_comentarii(txt: str) -> str:
+    """Scoate comentariile, păstrând numerotarea liniilor.
+
+    Necesar fiindcă notele DESPRE gardian conțin `callback_data=` în proză — iar un
+    gardian care se declanșează pe propria documentație e un gardian pe care îl
+    dezarmezi în a doua zi.
+    """
+    iesire = []
+    for linie in txt.split("\n"):
+        taiat = linie.split("#", 1)[0] if "#" in linie else linie
+        iesire.append(taiat)
+    return "\n".join(iesire)
+
+
+def test_callback_data_nu_primeste_variabile():
+    vinovati = []
+    for f in _FILES:
+        txt = _fara_comentarii((_ROOT / f).read_text(encoding="utf-8"))
+        for m in _CB_ARG.finditer(txt):
+            arg = m.group(1).strip()
+            if _E_LITERAL.match(arg):
+                continue
+            inceput_linie = txt.rfind("\n", 0, m.start()) + 1
+            context = txt[max(0, inceput_linie - 200):m.start()]
+            if any(a in context for a in _APELURI_NEBUTON):
+                continue
+            nr = txt[:m.start()].count("\n") + 1
+            vinovati.append(f"{f}:{nr} → callback_data={arg}")
+
+    assert not vinovati, (
+        "`callback_data=` primește o VARIABILĂ:\n  " + "\n  ".join(vinovati)
+        + "\n\nGardianul de zero-drift extrage literali — o variabilă face butonul "
+        "INVIZIBIL pentru el, iar de-atunci poate fi redenumit fără ca nimic să "
+        "cadă. Scrie literalul la fața locului; dacă ai două forme, scrie DOUĂ "
+        "ramuri (vezi butonul de confirmare din app/services/confirmare.py).\n"
+        "Dacă apelul nu e un buton, adaugă-l în _APELURI_NEBUTON, cu motiv."
+    )
+
+
+def test_gardianul_de_forma_chiar_vede_apelurile():
+    """
+    Ancoră. Dacă `_CB_ARG` nu mai prinde nimic (forma apelurilor s-a schimbat),
+    testul de mai sus ar trece pe vid — verde, și inutil.
+    """
+    total = sum(
+        len(_CB_ARG.findall(_fara_comentarii((_ROOT / f).read_text(encoding="utf-8"))))
+        for f in _FILES
+    )
+    assert total >= 150, f"gardianul de formă vede doar {total} apeluri `callback_data=`"
