@@ -126,3 +126,66 @@ def to_dict(doc: Document) -> Dict[str, Any]:
         "status": doc.status,
         "prompt_version": doc.prompt_version,
     }
+
+
+# ============================================================
+#   LOTURI NECONFIRMATE (status "needs_review")
+# ============================================================
+#
+# Un lot = documentele extrase dintr-O SINGURĂ sursă (o poză, un PDF), grupate pe
+# `source_file_id`. Cheia exista deja; nu inventăm alta.
+#
+# ⚠️ NU EXISTĂ RETENȚIE AUTOMATĂ, și e o DECIZIE, nu o omisiune.
+# Un lot neconfirmat nu e gunoi — e un document neterminat, iar extracția rămâne
+# validă oricât ar trece, fiindcă documentul în sine nu se schimbă. O expirare
+# tăcută ar fi exact pierderea pe care persistarea asta o repară.
+# Loturile se închid DOAR prin acțiunea omului: confirmă (→ "posted") sau renunță
+# (→ "rejected"). Se văd în /neterminate și, marcate, în lista de documente.
+# Dacă lista devine vreodată o problemă reală, curățenia se decide ATUNCI, pe
+# măsurătoare — nu se ghicește acum printr-un TTL scos din burtă.
+
+def get_lot_pending(session, user_id: int, source_file_id: int):
+    """Documentele neconfirmate ale unei surse, în ordinea creării."""
+    return (
+        session.query(Document)
+        .filter(
+            Document.user_id == user_id,
+            Document.source_file_id == source_file_id,
+            Document.status == DocStatus.NEEDS_REVIEW.value,
+        )
+        .order_by(Document.id.asc())
+        .all()
+    )
+
+
+def list_loturi_pending(session, user_id: int, limit: int = 20):
+    """
+    Loturile neconfirmate ale userului, cel mai recent primul.
+    Întoarce [(source_file_id, [documente])] — gruparea se face pe cheia existentă.
+    """
+    docs = (
+        session.query(Document)
+        .filter(
+            Document.user_id == user_id,
+            Document.status == DocStatus.NEEDS_REVIEW.value,
+            Document.source_file_id.isnot(None),
+        )
+        .order_by(Document.id.desc())
+        .all()
+    )
+    loturi = {}
+    for d in docs:
+        loturi.setdefault(d.source_file_id, []).append(d)
+    # dict-urile Python păstrează ordinea inserării → deja „cel mai recent primul"
+    iesire = [(sfid, list(reversed(items))) for sfid, items in loturi.items()]
+    return iesire[:limit]
+
+
+def set_status_lot(session, docs, new_status: str) -> int:
+    """
+    Schimbă starea TUTUROR documentelor unui lot. Commit la apelant.
+    Lotul se mișcă întreg — aceeași regulă ca la salvare (ori toate, ori niciuna).
+    """
+    for d in docs:
+        d.status = new_status
+    return len(docs)

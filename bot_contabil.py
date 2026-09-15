@@ -426,7 +426,51 @@ def _persist_all_items(session, *, items, user_id, source_file_id,
 
     Apelantul face commit O SINGURĂ DATĂ (atomic) sau rollback la orice excepție
     → ori toți itemii intră, ori niciunul. coada-bugs #1.
+
+    LOT PENDING: dacă la ingestie s-au scris deja rânduri „needs_review" pentru
+    aceeași sursă, ele se PROMOVEAZĂ (câmpurile se rescriu din itemii — posibil
+    editați — și starea trece la „posted"), NU se creează altele. Altfel același
+    document ar apărea de două ori: o dată neconfirmat, o dată postat.
+    Promovarea cere ACELAȘI NUMĂR de itemi; dacă nu se potrivește (caz care nu
+    există azi — nimic nu adaugă sau scoate itemi între ingestie și confirmare),
+    cădem pe creare și marcăm lotul vechi ca respins, ca să nu rămână orfan.
     """
+    from app.enums import DocStatus
+    randuri = []
+    if user_id and source_file_id:
+        randuri = documents_repo.get_lot_pending(session, user_id, source_file_id)
+        if randuri and len(randuri) != len(items):
+            logger.warning(
+                f"lot pending nepotrivit (sf={source_file_id}): "
+                f"{len(randuri)} rânduri vs {len(items)} itemi — creez la loc"
+            )
+            documents_repo.set_status_lot(session, randuri, DocStatus.REJECTED.value)
+            randuri = []
+
+    if randuri:
+        results = []
+        for item, doc in zip(items, randuri):
+            banca = 0.0
+            if item.tip == DocType.VENIT:
+                banca = item.net - item.cash
+            for camp, val in confirmare.item_dict_to_doc_fields(
+                    item.model_dump()).items():
+                setattr(doc, camp, val)
+            doc.banca = banca
+            doc.status = DocStatus.POSTED.value
+            session.flush()
+            audit_repo.write(
+                session, entity_type="document", entity_id=doc.id,
+                action="update", user_id=user_id, source="user",
+                after=documents_repo.to_dict(doc),
+                note=f"confirmat de user (lot sf={source_file_id}, prompt={prompt_version})",
+            )
+            tx_ids = persist_transactions(
+                session, user_id=user_id, doc_id=doc.id, item=item, banca=banca,
+            )
+            results.append((item, doc.id, tx_ids))
+        return results
+
     results = []
     for item in items:
         banca = 0.0
@@ -1454,7 +1498,25 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         # Pas R1: Confirmare date extrase de AI
         if namespace == "confirm":
             if len(parts) > 1 and parts[1] == "save":
-                await execute_confirmed_save(update, context, user_id)
+                # `confirm|save|{source_file_id}` — cheia lotului e OBLIGATORIE.
+                # Forma scurtă se REFUZĂ, fără fallback pe „ultimul lot pending":
+                # vezi scenariul celor trei bonuri, scris la butonul din
+                # `confirmare.show_confirmation`. Pe scurt: cardul arată cifre
+                # precise, deci a posta ALT lot decât cel de pe ecran e eroare
+                # fiscală, nu o aproximare.
+                sfid = parts[2] if len(parts) > 2 else None
+                if sfid is None and not confirmare.has_pending(context):
+                    await update.callback_query.edit_message_text(
+                        "🗂 *Nu mai știu la care document se referă cardul ăsta.*\n\n"
+                        "E dintr-o versiune mai veche, sau a fost scris de mână în "
+                        "chat. Oricum ar fi, n-aș putea salva decât ghicind — iar a "
+                        "înregistra altceva decât ce vezi pe ecran n-ar fi în regulă.\n\n"
+                        "Trimite documentul din nou, sau scrie /neterminate ca să "
+                        "vezi ce a rămas neconfirmat.",
+                        parse_mode="Markdown",
+                    )
+                    return
+                await execute_confirmed_save(update, context, user_id, source_file_id=sfid)
             else:
                 await confirmare.handle_callback(update, context, parts)
             return
@@ -2792,19 +2854,119 @@ async def process_entry(
         prompt_version=extraction["prompt_version"],
         duplicates=duplicates,
     )
+    # LOTUL SE SCRIE ACUM, nu la confirmare. Extracția tocmai a costat un apel plătit;
+    # dacă procesul repornește înainte ca omul să apese, azi se pierde tot. Rândurile
+    # sunt „needs_review" → nu intră în nicio cifră (toate filtrele de bani cer
+    # „posted"), dar supraviețuiesc. Vezi antetul secțiunii din `confirmare.py`.
+    # Doar când există `source_file_id`: fără el n-avem cheie de lot (intrarea prin
+    # text). Eșecul e ÎNGHIȚIT deliberat — persistarea e o plasă de siguranță, nu o
+    # precondiție: dacă pică, fluxul de azi merge mai departe neschimbat.
+    if user_id and source_file_id:
+        try:
+            _persist_lot_pending(
+                user_id=user_id, source_file_id=source_file_id,
+                items=extraction["items"],
+                raw_response=extraction["raw_response"],
+                prompt_version=extraction["prompt_version"],
+            )
+        except Exception as e:
+            logger.error(f"_persist_lot_pending user={user_id} sf={source_file_id}: {e}")
     await confirmare.show_confirmation(update.effective_chat.id, context)
 
 
-async def execute_confirmed_save(update, context, user_id):
+def _persist_lot_pending(*, user_id, source_file_id, items, raw_response, prompt_version):
+    """
+    Scrie lotul extras ca documente „needs_review", ÎNTR-UN SINGUR COMMIT.
+
+    Idempotent pe (user, source_file): dacă lotul există deja (retrimiterea aceleiași
+    poze, sau o a doua extragere), NU se dublează — se lasă cel existent. Poza e
+    dedupată pe sha256 înainte, deci cazul e rar, dar un lot dublu ar produce două
+    carduri pentru același document.
+    """
+    from app.enums import DocStatus
+    session = get_session()
+    try:
+        if documents_repo.get_lot_pending(session, user_id, source_file_id):
+            return
+        for item in items:
+            doc = documents_repo.create(
+                session, user_id=user_id, source_file_id=source_file_id,
+                data_doc=item.data, platforma=item.platforma, tip=item.tip,
+                brut=item.brut, comision=item.comision, tva=item.tva,
+                net=item.net, cash=item.cash, banca=0.0,
+                detalii=item.detalii or "",
+                raw_json=(raw_response or "")[:10000],
+                prompt_version=prompt_version,
+                status=DocStatus.NEEDS_REVIEW.value, confidence=1.0,
+            )
+            nr_doc = getattr(item, "numar_document", None)
+            if nr_doc:
+                doc.numar_document = str(nr_doc).strip()[:80]
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def _rehidrateaza_lot(user_id, source_file_id):
+    """
+    Reconstruiește payload-ul pending din lotul „needs_review" scris la ingestie.
+    `None` dacă lotul nu există (confirmat deja, renunțat, sau altui user).
+
+    `duplicates` se RECALCULEAZĂ, nu se citește: dedup-ul e o interogare pură pe
+    (data, sumă, număr), iar între ingestie și confirmare poate apărea un document
+    care schimbă verdictul. Recalcularea e mai corectă decât o valoare stocată.
+    """
+    try:
+        sfid = int(source_file_id)
+    except (TypeError, ValueError):
+        return None
+    session = get_session()
+    try:
+        docs = documents_repo.get_lot_pending(session, user_id, sfid)
+        if not docs:
+            return None
+        items = [confirmare.doc_to_item_dict(d) for d in docs]
+        raw = next((d.raw_json for d in docs if d.raw_json), "") or ""
+        pv = next((d.prompt_version for d in docs if d.prompt_version), "") or ""
+    finally:
+        session.close()
+
+    duplicates = {}
+    for idx, it in enumerate(items):
+        suma = it.get("brut") or 0.0
+        if it.get("tip") == DocType.FACTURA_COMISION:
+            suma = it.get("comision") or 0.0
+        elif it.get("tip") == DocType.VENIT:
+            suma = it.get("net") or 0.0
+        dup = find_duplicate_document(
+            user_id, it.get("data"), suma, numar_document=it.get("numar_document"),
+        )
+        if dup:
+            duplicates[idx] = dup
+
+    return {
+        "items": items, "source_file_id": sfid,
+        "raw_response": raw, "prompt_version": pv, "duplicates": duplicates,
+    }
+
+
+async def execute_confirmed_save(update, context, user_id, source_file_id=None):
     """
     Pas R1: Salveaza efectiv documentele DUPA ce user-ul a confirmat.
-    Citeste datele 'pending' din user_data, le persista si afiseaza
-    mesajul de confirmare cu deductibilitate.
+
+    Citește din `user_data` când există; când NU (proces repornit între trimitere și
+    confirmare), REHIDRATEAZĂ din lotul „needs_review" scris la ingestie.
+    `source_file_id` vine din callback și spune EXACT care lot — nu se ghicește.
     """
     query = update.callback_query
     chat_id = query.message.chat_id
 
     pending = confirmare.get_pending(context)
+    if not pending and source_file_id:
+        pending = _rehidrateaza_lot(user_id, source_file_id)
     if not pending:
         await query.edit_message_text(
             "⏳ A trecut prea mult timp și confirmarea a expirat.\n"
@@ -2912,6 +3074,62 @@ async def execute_confirmed_save(update, context, user_id):
 #                    HANDLERS PRINCIPALE
 # ============================================================
 
+async def handle_neterminate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /neterminate — loturile citite dar neconfirmate.
+
+    DE CE COMANDA, si nu buton de meniu: meniul are cinci randuri pline, iar ecranul
+    asta e in mod normal GOL. Un slot permanent pentru un caz rar ar costa spatiu
+    fiecarui user, mereu. Descoperirea se face unde conteaza: in refuzul cardului
+    vechi si la retrimiterea unei poze deja citite.
+    """
+    user_id = ensure_user(update)
+    if not user_id:
+        return
+    session = get_session()
+    try:
+        loturi = documents_repo.list_loturi_pending(session, user_id)
+        rezumat = [
+            (sfid, len(docs), docs[0].data_doc, docs[0].platforma,
+             sum(float(d.brut or 0) for d in docs))
+            for sfid, docs in loturi
+        ]
+    finally:
+        session.close()
+
+    if not rezumat:
+        await update.message.reply_text(
+            "✅ *Nimic neterminat.* Tot ce mi-ai trimis e confirmat si inregistrat.",
+            parse_mode="Markdown",
+        )
+        return
+
+    linii = [
+        "📂 *Documente citite, neconfirmate*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "Le-am citit, dar n-ai apucat sa confirmi. Nu intra in nicio cifra pana",
+        "nu le confirmi — si nu se sterg singure, oricat ar sta aici.",
+        "",
+    ]
+    butoane = []
+    for sfid, n, data_doc, platforma, total in rezumat:
+        eticheta_n = "un document" if n == 1 else f"{n} documente"
+        linii.append(
+            f"• *{data_doc or 'fara data'}* — {platforma or 'sursa necunoscuta'} "
+            f"· {eticheta_n} · {total:.2f} lei"
+        )
+        butoane.append([InlineKeyboardButton(
+            f"👁 {data_doc or 'fara data'} · {platforma or '—'}",
+            callback_data=f"confirm|save|{sfid}",
+        )])
+    butoane.append([InlineKeyboardButton("❌ Inchide", callback_data="nav|close")])
+    await update.message.reply_text(
+        "\n".join(linii), parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(butoane),
+    )
+
+
 async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
 
@@ -2970,6 +3188,30 @@ async def handle_photo_wrapper(update: Update, context: ContextTypes.DEFAULT_TYP
                     return
                 else:
                     source_file_id = sf_info["id"]
+                    # POZA A MAI FOST CITITĂ, DAR N-A FOST CONFIRMATĂ.
+                    # Înainte, ramura asta re-extrăgea — adică plătea încă o dată
+                    # exact aceeași citire. Acum lotul e în DB, deci îl arătăm:
+                    # „ți-am citit deja poza asta, confirmi?". Al doilea apel la
+                    # model dispare, iar omul vede aceleași cifre, nu altele.
+                    pending_vechi = _rehidrateaza_lot(user_id, source_file_id)
+                    if pending_vechi:
+                        confirmare.store_pending(
+                            context, pending_vechi["items"],
+                            source_file_id=source_file_id,
+                            raw_response=pending_vechi["raw_response"],
+                            prompt_version=pending_vechi["prompt_version"],
+                            duplicates=pending_vechi["duplicates"],
+                        )
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text="📂 *Poza asta ți-am citit-o deja* — n-ai apucat "
+                                 "să confirmi. Uite ce am găsit:",
+                            parse_mode="Markdown",
+                        )
+                        await confirmare.show_confirmation(
+                            update.effective_chat.id, context
+                        )
+                        return
             else:
                 source_file_id = sf_info["id"]
 
@@ -3745,7 +3987,8 @@ if __name__ == '__main__':
     # Comenzi
     app_bot.add_handler(CommandHandler("start", handle_start))
     app_bot.add_handler(CommandHandler("ajutor", handle_ajutor_command))
-    app_bot.add_handler(CommandHandler("ghid", ghid_ui.handle_command))  # sub-pas Ghid 2
+    app_bot.add_handler(CommandHandler("ghid", ghid_ui.handle_command))
+    app_bot.add_handler(CommandHandler("neterminate", handle_neterminate))  # sub-pas Ghid 2
     app_bot.add_handler(CommandHandler("certificat", handle_certificat))  # Certificat Bolt
     app_bot.add_handler(CommandHandler("bolt_conectare", handle_bolt_conectare))  # #2-B status+link
     app_bot.add_handler(CommandHandler("profil", handle_profil))
