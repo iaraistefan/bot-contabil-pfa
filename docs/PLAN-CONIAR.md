@@ -222,6 +222,19 @@
   **UN FALS POZITIV CUNOSCUT SE PINUIEȘTE CA TEST.** Reacția naturală la primul fals pozitiv e să **slăbești** gardianul — și atunci pierzi mai mult decât câștigi. Un test care afirmă „cazul ăsta **NU** trebuie raportat" apără gardianul de a fi **dezarmat de cine îl întâlnește prima oară**.
 - **„Un gardian se judecă după modul lui de eșec, nu după cât e de deștept."** **Fail-closed bate fail-open.** Un gardian al cărui mod de eșec e chiar lucrul păzit **nu e gardian** — vezi de ce poarta de achiziție e o întrebare, nu detecție pe VIN (§4, august 2026). Înainte de orice detecție automată cu miză fiscală: scrie explicit ce se întâmplă când semnalul **lipsește**. Dacă răspunsul e „comportamentul de dinainte, adică bug-ul", reproiectează.
 
+- **„O PROPOZIȚIE CARE DESCRIE O GARDĂ INEXISTENTĂ E INDISTINCTĂ DE UNA CARE DESCRIE O GARDĂ EXISTENTĂ.”** Trei instanțe în aceeași sesiune (septembrie 2026), sub nume diferite:
+  1. **„Bolt datează factura în ultima zi a perioadei”** — obicei de furnizor prezentat ca regulă. Nimic din cod nu-l impunea, și nimeni nu ne-ar fi anunțat când s-ar fi schimbat;
+  2. **`DocStatus` declara șase valori, codul scria două.** Un gardian derivat din enum ar fi acceptat `status == „confirmed”` — o comparație **veșnic falsă**, fără nicio eroare, corectă la citire;
+  3. **denylist-urile pe status** (`!= „rejected”`) erau afirmații despre valorile care NU există — iar `status` n-are enum pe coloană, deci n-avea cine să le apere.
+
+  **COROLAR:** documentația **nu poate** distinge cele două cazuri, fiindcă arată identic în ambele. Doar codul poate — toate trei au fost prinse **citind codul**, niciuna citind ce spunea despre el. Un comentariu care afirmă o garanție e o **ipoteză despre cod**, nu o proprietate a lui; se verifică la fel ca o afirmație fiscală, nu se crede pe cuvânt.
+
+  **DE-AIA MĂSURĂTOAREA PRECEDE REPARAȚIA, de fiecare dată.** Nu ca ritual, ci fiindcă e singura cale prin care cele două cazuri se despart. Și măsurarea **schimbă reparația**, nu doar o confirmă: la (1) numărătoarea a arătat că nu e nevoie de reparație, ci de un tripwire; la (3) reconul găsise șase filtre, erau **șapte**.
+  *Înrudit cu „un gardian care apară greșeala e mai rău decât niciunul”, dar distinct: acolo gardianul exista și păzea greșit; aici nu există deloc, iar textul spune că există.*
+
+  **CELE PATRU SUNT O SCARĂ, nu patru sfaturi.** *Instanța/clasa* — prea îngustă · *granularitatea* — unitate prea largă · *apără greșeala* — lucrul greșit · *garda inexistentă* — nimic. Deci, în ordine: **apăr clasa corectă? pe unitatea corectă? lucrul corect? și chiar apăr ceva?**
+  Ultima întrebare e cea mai grea, și de-aia vine la urmă: celelalte trei lasă o urmă pe care dai peste ea — un test care pică, un fișier prea mare, o valoare greșită. A patra nu lasă decât **o propoziție care sună corect**.
+
 ### 3.3 IDEI AVANSATE (notate, nu pt început)
 - ✅ **Foaia de parcurs MANUALĂ e CONSTRUITĂ și livrată** (buton „🛣️ Foaie parcurs" + `/sterge_tura` + export Excel): ture, km, litri — DOVADĂ la control, nu calcul (comutatorul deductibilității e regimul vehiculului, vezi 5A/5B). Ce rămâne idee amânată e doar versiunea AUTO-GENERATĂ de mai jos.
 - ⏳ [idee amânată] Foaie de parcurs auto-generată (GPS + date Bolt) — dificil + ❓INCERT legal, validează cu consultant
